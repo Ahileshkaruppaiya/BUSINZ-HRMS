@@ -1,0 +1,15 @@
+from .hr import (  # noqa: F401
+    AttendanceRecord,
+    Department,
+    Designation,
+    Employee,
+    LeaveRequest,
+    PayrollRecord,
+    PayrollSettings,
+    Permission,
+    Role,
+    SalaryStructureOverride,
+    Shift,
+    ShiftAssignment,
+    User,
+)

@@ -1,0 +1,51 @@
+{
+  "name": "businz-hrms-backend",
+  "version": "1.0.0",
+  "description": "Businz Enterprise HRMS Production Payroll & Salary Backend Service",
+  "main": "dist/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "tsx scripts/verifySystem.ts",
+    "sync:db": "node scripts/syncDatabase.mjs",
+    "seed:db": "node scripts/seedDatabase.mjs"
+  },
+  "dependencies": {
+    "@google/genai": "^2.24.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "@types/pg": "^8.23.1",
+    "bcrypt": "^5.1.1",
+    "compression": "^1.8.2",
+    "cors": "^2.8.5",
+    "decimal.js": "^10.5.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^10.0.10",
+    "pg": "^8.23.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/autocannon": "^7.12.7",
+    "@types/bcrypt": "^5.0.2",
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.13.9",
+    "@types/nodemailer": "^8.0.2",
+    "autocannon": "^8.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7"
+  },
+  "overrides": {
+    "tar": "^7.5.22"
+  }
+}

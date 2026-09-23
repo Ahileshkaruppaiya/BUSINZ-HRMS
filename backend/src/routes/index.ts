@@ -1,0 +1,34 @@
+import { Router } from 'express';
+import { healthRouter } from './healthRoutes.js';
+import { authRouter } from './authRoutes.js';
+import { employeeRouter } from './employeeRoutes.js';
+import { attendanceRouter } from './attendanceRoutes.js';
+import { leaveRouter } from './leaveRoutes.js';
+import { shiftRouter } from './shiftRoutes.js';
+import { trackingRouter } from './trackingRoutes.js';
+import { settingsRouter } from './settingsRoutes.js';
+import { payrollRouter } from './payrollRoutes.js';
+import { salaryStructureRouter } from './salaryStructureRoutes.js';
+import { overtimeRouter } from './overtimeRoutes.js';
+import { rbacRouter } from './rbacRoutes.js';
+import { aiRouter } from './aiRoutes.js';
+
+export const apiRouter = Router();
+
+// Health check available at /health and /api/v1/health
+apiRouter.use(healthRouter);
+
+// Domain Routes
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/', salaryStructureRouter); // specific sub-routes for /employees/:id/salary-structure
+apiRouter.use('/employees', employeeRouter);
+apiRouter.use('/attendance', attendanceRouter);
+apiRouter.use('/leaves', leaveRouter);
+apiRouter.use('/shifts', shiftRouter);
+apiRouter.use('/tracking', trackingRouter);
+apiRouter.use('/settings', settingsRouter);
+apiRouter.use('/payroll', payrollRouter);
+apiRouter.use('/rbac', rbacRouter);
+apiRouter.use('/settings/roles-permissions', rbacRouter);
+apiRouter.use('/ai', aiRouter);
+apiRouter.use('/', overtimeRouter);
