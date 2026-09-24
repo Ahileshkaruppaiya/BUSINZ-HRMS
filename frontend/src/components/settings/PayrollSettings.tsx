@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { 
-  SalaryComponentConfig, 
-  IncrementPolicyConfig, 
-  IncrementSlab 
+  SalaryComponentConfig 
 } from '../../types/settings';
 import { validateFormula, evaluateFormula } from '../../services/policyEngine';
 import { payrollApi } from '../../services/payrollApi';
@@ -23,7 +21,6 @@ import {
   ToggleLeft,
   ToggleRight,
   Trash2,
-  TrendingUp,
   Info,
   RotateCcw,
   X
@@ -38,47 +35,7 @@ export const PayrollSettings: React.FC = () => {
   } = useHRMS();
 
   const isPrivileged = currentUser.role !== 'Employee';
-  const [activeTab, setActiveTab] = useState<'components' | 'increment' | 'formula_tester'>('components');
-
-  // Increment Policy State
-  const defaultIncrementPolicy: IncrementPolicyConfig = {
-    active: false,
-    cycle: '',
-    effectiveMonth: 'April',
-    standardBaseIncrement: 0,
-    allowManagerRecommendation: false,
-    slabs: []
-  };
-
-  const [incrementConfig, setIncrementConfig] = useState<IncrementPolicyConfig>(() => {
-    const policy = payrollSettingsConfig.incrementPolicy;
-    if (policy?.slabs?.some((s: any) => typeof s.id === 'string' && s.id.startsWith('inc-'))) {
-      return defaultIncrementPolicy;
-    }
-    return policy || defaultIncrementPolicy;
-  });
-  const [incrementSaved, setIncrementSaved] = useState(false);
-
-  // Increment Slab Modal State
-  const [isSlabModalOpen, setIsSlabModalOpen] = useState(false);
-  const [editingSlab, setEditingSlab] = useState<IncrementSlab | null>(null);
-  const [slabForm, setSlabForm] = useState<{
-    name: string;
-    ratingMin: number;
-    ratingMax: number;
-    incrementPercentage: number;
-    applicableCadre: string;
-    effectiveCycle: string;
-    status: 'Active' | 'Inactive';
-  }>({
-    name: '',
-    ratingMin: 4.0,
-    ratingMax: 5.0,
-    incrementPercentage: 10,
-    applicableCadre: 'All Confirmed Staff',
-    effectiveCycle: 'April Annual Appraisal',
-    status: 'Active'
-  });
+  const [activeTab, setActiveTab] = useState<'components' | 'formula_tester'>('components');
 
   // Formula Sandbox Tester State
   const [sandboxFormula, setSandboxFormula] = useState('');
@@ -128,19 +85,6 @@ export const PayrollSettings: React.FC = () => {
     isConfidential: false,
     description: ''
   });
-
-  const handleClearIncrementPolicy = () => {
-    const cleared: IncrementPolicyConfig = {
-      active: false,
-      cycle: '',
-      effectiveMonth: 'April',
-      standardBaseIncrement: 0,
-      allowManagerRecommendation: false,
-      slabs: []
-    };
-    setIncrementConfig(cleared);
-    updatePayrollSettingsConfig({ incrementPolicy: cleared });
-  };
 
   const runSandboxCalculation = () => {
     const valid = validateFormula(sandboxFormula);
@@ -242,91 +186,6 @@ export const PayrollSettings: React.FC = () => {
     }
   };
 
-  // Increment Policy Handlers
-  const handleSaveIncrementPolicy = (e: React.FormEvent) => {
-    e.preventDefault();
-    updatePayrollSettingsConfig({ incrementPolicy: incrementConfig });
-    setIncrementSaved(true);
-    setTimeout(() => setIncrementSaved(false), 2500);
-  };
-
-  const openAddSlabModal = () => {
-    setEditingSlab(null);
-    setSlabForm({
-      name: '',
-      ratingMin: 4.0,
-      ratingMax: 5.0,
-      incrementPercentage: 10,
-      applicableCadre: 'All Confirmed Staff',
-      effectiveCycle: incrementConfig.cycle,
-      status: 'Active'
-    });
-    setIsSlabModalOpen(true);
-  };
-
-  const openEditSlabModal = (slab: IncrementSlab) => {
-    setEditingSlab(slab);
-    setSlabForm({
-      name: slab.name,
-      ratingMin: slab.ratingMin,
-      ratingMax: slab.ratingMax,
-      incrementPercentage: slab.incrementPercentage,
-      applicableCadre: slab.applicableCadre,
-      effectiveCycle: slab.effectiveCycle,
-      status: slab.status
-    });
-    setIsSlabModalOpen(true);
-  };
-
-  const handleDeleteSlab = (slabId: string, slabName: string) => {
-    if (window.confirm(`Are you sure you want to delete the increment slab "${slabName}"?`)) {
-      const updatedSlabs = incrementConfig.slabs.filter(s => s.id !== slabId);
-      const newConfig = { ...incrementConfig, slabs: updatedSlabs };
-      setIncrementConfig(newConfig);
-      updatePayrollSettingsConfig({ incrementPolicy: newConfig });
-    }
-  };
-
-  const handleSaveSlab = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!slabForm.name.trim()) return;
-
-    let updatedSlabs: IncrementSlab[];
-    if (editingSlab) {
-      updatedSlabs = incrementConfig.slabs.map(s => {
-        if (s.id === editingSlab.id) {
-          return {
-            ...s,
-            name: slabForm.name,
-            ratingMin: Number(slabForm.ratingMin),
-            ratingMax: Number(slabForm.ratingMax),
-            incrementPercentage: Number(slabForm.incrementPercentage),
-            applicableCadre: slabForm.applicableCadre,
-            effectiveCycle: slabForm.effectiveCycle,
-            status: slabForm.status
-          };
-        }
-        return s;
-      });
-    } else {
-      const newSlab: IncrementSlab = {
-        id: `inc-${Date.now()}`,
-        name: slabForm.name,
-        ratingMin: Number(slabForm.ratingMin),
-        ratingMax: Number(slabForm.ratingMax),
-        incrementPercentage: Number(slabForm.incrementPercentage),
-        applicableCadre: slabForm.applicableCadre,
-        effectiveCycle: slabForm.effectiveCycle,
-        status: slabForm.status
-      };
-      updatedSlabs = [...incrementConfig.slabs, newSlab];
-    }
-    const newConfig = { ...incrementConfig, slabs: updatedSlabs };
-    setIncrementConfig(newConfig);
-    updatePayrollSettingsConfig({ incrementPolicy: newConfig });
-    setIsSlabModalOpen(false);
-  };
-
   // Official company earnings (Basic 40%, DA 20%, HRA 35%, Conveyance 5% = 100% CTC)
   const earnings = payrollSettingsConfig.components.filter(c => c.type === 'EARNING');
   const deductions = payrollSettingsConfig.components.filter(c => c.type === 'DEDUCTION');
@@ -386,39 +245,6 @@ export const PayrollSettings: React.FC = () => {
               fontWeight: 700
             }}>
               {earnings.length + deductions.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('increment')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: activeTab === 'increment' ? '#FFFFFF' : 'transparent',
-              color: activeTab === 'increment' ? '#0E7490' : '#64748B',
-              boxShadow: activeTab === 'increment' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-              fontWeight: activeTab === 'increment' ? 750 : 600,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <TrendingUp size={15} />
-            <span>Increment Policies</span>
-            <span style={{
-              fontSize: '0.7rem',
-              padding: '1px 6px',
-              borderRadius: '999px',
-              backgroundColor: activeTab === 'increment' ? '#ECFEFF' : '#E2E8F0',
-              color: activeTab === 'increment' ? '#0E7490' : '#64748B',
-              fontWeight: 700
-            }}>
-              {incrementConfig.slabs.length}
             </span>
           </button>
 
@@ -659,190 +485,7 @@ export const PayrollSettings: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: INCREMENT POLICIES & SLABS */}
-      {activeTab === 'increment' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Policy Overview Card */}
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7ECF3', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <TrendingUp size={22} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0F172A' }}>
-                    Annual & Performance Increment Rules
-                  </h3>
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748B' }}>
-                    Standard company increment cycle, appraisal rating-based salary hike slabs, and managerial recommendation flow
-                  </p>
-                </div>
-              </div>
-              <span className={`status-pill ${incrementConfig.active ? 'approved' : 'overdue'}`}>
-                {incrementConfig.active ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-
-            <form onSubmit={handleSaveIncrementPolicy} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-                <div>
-                  <label className="form-label">Increment Appraisal Cycle</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={incrementConfig.cycle}
-                    onChange={e => setIncrementConfig({ ...incrementConfig, cycle: e.target.value })}
-                    placeholder="e.g. Annual Appraisal Cycle (April)"
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label">Effective Appraisal Month</label>
-                  <select
-                    className="form-control"
-                    value={incrementConfig.effectiveMonth}
-                    onChange={e => setIncrementConfig({ ...incrementConfig, effectiveMonth: e.target.value })}
-                  >
-                    <option value="January">January</option>
-                    <option value="April">April (Financial Year)</option>
-                    <option value="July">July</option>
-                    <option value="October">October</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="form-label">Standard Base Increment (%)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    className="form-control"
-                    value={incrementConfig.standardBaseIncrement}
-                    onChange={e => setIncrementConfig({ ...incrementConfig, standardBaseIncrement: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.84rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={incrementConfig.active}
-                    onChange={e => setIncrementConfig({ ...incrementConfig, active: e.target.checked })}
-                  />
-                  Enable Annual / Performance Increment Policy
-                </label>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {incrementSaved && (
-                    <span style={{ color: '#16A34A', fontSize: '0.82rem', fontWeight: 600 }}>
-                      ✓ Increment policy settings saved!
-                    </span>
-                  )}
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleClearIncrementPolicy}>
-                    Clear
-                  </button>
-                  <button type="submit" className="btn btn-primary btn-sm">
-                    Save Policy Settings
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-
-          {/* Performance Appraisal Increment Slabs Table */}
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7ECF3', padding: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>
-                  Appraisal Rating Increment Slabs ({incrementConfig.slabs.length})
-                </h3>
-                <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748B' }}>
-                  Configured salary increment percentage linked directly to employee annual appraisal ratings (1.0 to 5.0)
-                </p>
-              </div>
-
-              {isPrivileged && (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={openAddSlabModal}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <Plus size={15} /> Add Increment Slab
-                </button>
-              )}
-            </div>
-
-            <table className="hrms-table">
-              <thead>
-                <tr>
-                  <th>Slab Name</th>
-                  <th>Performance Rating</th>
-                  <th>Increment %</th>
-                  <th>Applicable Staff</th>
-                  <th>Effective Cycle</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {incrementConfig.slabs.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748B' }}>
-                      No increment slabs configured yet. Click "+ Add Increment Slab" to manually add appraisal slabs.
-                    </td>
-                  </tr>
-                ) : (
-                  incrementConfig.slabs.map(slab => (
-                  <tr key={slab.id}>
-                    <td><strong>{slab.name}</strong></td>
-                    <td>
-                      <span className="status-pill eta">
-                        ★ {slab.ratingMin} - {slab.ratingMax}
-                      </span>
-                    </td>
-                    <td>
-                      <strong style={{ color: '#0E7490', fontSize: '0.95rem' }}>
-                        +{slab.incrementPercentage}%
-                      </strong>
-                    </td>
-                    <td>{slab.applicableCadre}</td>
-                    <td><span style={{ fontSize: '0.8rem', color: '#64748B' }}>{slab.effectiveCycle}</span></td>
-                    <td>
-                      <span className={`status-pill ${slab.status === 'Active' ? 'approved' : 'overdue'}`}>
-                        {slab.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '4px 8px' }}
-                          onClick={() => openEditSlabModal(slab)}
-                        >
-                          <Edit3 size={13} /> Edit
-                        </button>
-                        {isPrivileged && (
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            style={{ padding: '4px 8px', color: '#DC2626', borderColor: '#FECACA' }}
-                            onClick={() => handleDeleteSlab(slab.id, slab.name)}
-                            title="Delete Slab"
-                          >
-                            <Trash2 size={13} /> Delete
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: FORMULA BUILDER & TESTER */}
+      {/* TAB 2: FORMULA BUILDER & TESTER */}
       {activeTab === 'formula_tester' && (
         <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7ECF3', padding: '24px' }}>
           <div style={{ marginBottom: '18px' }}>
@@ -1149,160 +792,6 @@ export const PayrollSettings: React.FC = () => {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   {editingComp ? 'Update Component' : 'Create Component'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Increment Slab Modal */}
-      {isSlabModalOpen && (
-        <div className="modal-overlay" style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '16px'
-        }}>
-          <div className="modal-content" style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '18px',
-            width: '100%',
-            maxWidth: '520px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-            overflow: 'hidden'
-          }}>
-            <div className="modal-header" style={{
-              padding: '18px 24px',
-              borderBottom: '1px solid #E2E8F0',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0F172A' }}>
-                {editingSlab ? 'Edit Increment Slab' : 'Add Increment Slab'}
-              </h3>
-              <button
-                type="button"
-                className="close-btn"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
-                onClick={() => setIsSlabModalOpen(false)}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveSlab}>
-              <div className="modal-body" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div>
-                  <label className="form-label">Slab Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. Outstanding Performer"
-                    value={slabForm.name}
-                    onChange={e => setSlabForm({ ...slabForm, name: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label className="form-label">Min Rating (★)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="5"
-                      className="form-control"
-                      value={slabForm.ratingMin}
-                      onChange={e => setSlabForm({ ...slabForm, ratingMin: parseFloat(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Max Rating (★)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="5"
-                      className="form-control"
-                      value={slabForm.ratingMax}
-                      onChange={e => setSlabForm({ ...slabForm, ratingMax: parseFloat(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label className="form-label">Increment Percentage (%)</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      className="form-control"
-                      value={slabForm.incrementPercentage}
-                      onChange={e => setSlabForm({ ...slabForm, incrementPercentage: parseFloat(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Status</label>
-                    <select
-                      className="form-control"
-                      value={slabForm.status}
-                      onChange={e => setSlabForm({ ...slabForm, status: e.target.value as any })}
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="form-label">Applicable Staff Cadre</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={slabForm.applicableCadre}
-                    onChange={e => setSlabForm({ ...slabForm, applicableCadre: e.target.value })}
-                    placeholder="e.g. All Confirmed Staff"
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label">Effective Cycle</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={slabForm.effectiveCycle}
-                    onChange={e => setSlabForm({ ...slabForm, effectiveCycle: e.target.value })}
-                    placeholder="e.g. April Annual Appraisal"
-                  />
-                </div>
-              </div>
-
-              <div className="modal-footer" style={{
-                padding: '16px 24px',
-                borderTop: '1px solid #E2E8F0',
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '10px'
-              }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsSlabModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingSlab ? 'Update Slab' : 'Create Slab'}
                 </button>
               </div>
             </form>
