@@ -451,7 +451,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   }}
                   onClick={() => setIsFormReady(true)}
                   required
-                  placeholder="Enter your password or temporary code"
                   style={{
                     width: '100%',
                     padding: '12px 38px 12px 38px',
