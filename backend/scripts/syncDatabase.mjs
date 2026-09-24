@@ -43,7 +43,8 @@ async function sync() {
       ADD COLUMN IF NOT EXISTS credential_email_status TEXT NOT NULL DEFAULT 'PENDING',
       ADD COLUMN IF NOT EXISTS credential_email_sent_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS work_shift TEXT;
+      ADD COLUMN IF NOT EXISTS work_shift TEXT,
+      ADD COLUMN IF NOT EXISTS password TEXT DEFAULT 'Password@123';
   `);
 
   // 3. Create missing tables

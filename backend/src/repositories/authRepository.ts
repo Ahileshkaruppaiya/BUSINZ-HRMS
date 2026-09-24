@@ -11,6 +11,7 @@ export interface UserAccount {
   id: string;
   email: string;
   passwordHash: string;
+  plainPassword?: string;
   name: string;
   role: UserRole;
   employeeId: string;
@@ -39,6 +40,60 @@ const fallbackUsers: Map<string, UserAccount> = new Map([
       employeeId: 'EMP-000',
       department: 'Management',
       designation: 'Super Administrator',
+      isActive: true,
+      mustChangePassword: false,
+      accountStatus: 'ACTIVE',
+      credentialEmailStatus: 'SENT',
+      credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
+    },
+  ],
+  [
+    'hr@vrmstructures.com',
+    {
+      id: 'usr-001',
+      email: 'hr@vrmstructures.com',
+      passwordHash: defaultHashedPassword,
+      name: 'Pavithra S',
+      role: 'HR Manager',
+      employeeId: 'EMP-001',
+      department: 'HR',
+      designation: 'HR Manager',
+      isActive: true,
+      mustChangePassword: false,
+      accountStatus: 'ACTIVE',
+      credentialEmailStatus: 'SENT',
+      credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
+    },
+  ],
+  [
+    'finance@vrmstructures.com',
+    {
+      id: 'usr-002',
+      email: 'finance@vrmstructures.com',
+      passwordHash: defaultHashedPassword,
+      name: 'Ramesh Kumar',
+      role: 'Finance Manager',
+      employeeId: 'EMP-002',
+      department: 'Finance',
+      designation: 'Finance Manager',
+      isActive: true,
+      mustChangePassword: false,
+      accountStatus: 'ACTIVE',
+      credentialEmailStatus: 'SENT',
+      credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
+    },
+  ],
+  [
+    'field@vrmstructures.com',
+    {
+      id: 'usr-004',
+      email: 'field@vrmstructures.com',
+      passwordHash: defaultHashedPassword,
+      name: 'Karthik Rajan',
+      role: 'Employee',
+      employeeId: 'EMP-004',
+      department: 'Field Operations',
+      designation: 'Field Engineer',
       isActive: true,
       mustChangePassword: false,
       accountStatus: 'ACTIVE',

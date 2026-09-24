@@ -101,8 +101,14 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
     }
   }[category];
 
-  // Resolve Category Items dynamically
-  const categoryItems: CategoryItem[] = employees.map(emp => {
+  // Resolve Category Items dynamically (exclude system administrator Businz Admin)
+  const workforceEmployees = employees.filter(emp => 
+    emp.employeeId !== 'EMP-000' && 
+    emp.email?.toLowerCase() !== 'admin@businz.com' &&
+    emp.designation !== 'Super Administrator'
+  );
+
+  const categoryItems: CategoryItem[] = workforceEmployees.map(emp => {
     const att = attendanceRecords.find(a => 
       a.employeeId === emp.employeeId || 
       `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
@@ -186,7 +192,7 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
   });
 
   // Departments list for dropdown
-  const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
+  const departments = Array.from(new Set(workforceEmployees.map(e => e.department).filter(Boolean)));
 
   // Apply user search & department filtering
   const displayedItems = filteredByCategory.filter(item => {

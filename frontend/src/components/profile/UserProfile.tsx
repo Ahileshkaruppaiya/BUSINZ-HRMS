@@ -20,7 +20,13 @@ import {
   FileText, 
   AlertTriangle,
   RefreshCw,
-  LogOut
+  LogOut,
+  Lock,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  KeyRound
 } from 'lucide-react';
 
 export type ProfileTab = 
@@ -38,11 +44,28 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
     currentUser, 
     updateCurrentUser, 
     switchRole, 
-    businessSettings 
+    businessSettings,
+    employees,
+    changeEmployeePassword
   } = useHRMS();
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('profile');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showPortalPassword, setShowPortalPassword] = useState(false);
+  const [copiedPass, setCopiedPass] = useState(false);
+
+  const matchingEmp = employees.find(
+    e => e.id === currentUser.id || 
+         e.employeeId === currentUser.employeeId || 
+         (e.email && currentUser.email && e.email.toLowerCase() === currentUser.email.toLowerCase())
+  );
+  const userPassword = matchingEmp?.password || (currentUser as any).password || 'Password@123';
+
+  const handleCopyPassword = () => {
+    navigator.clipboard.writeText(userPassword);
+    setCopiedPass(true);
+    setTimeout(() => setCopiedPass(false), 2000);
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -432,6 +455,125 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                     onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
                     style={{ ...inputStyle, resize: 'vertical' }}
                   />
+                </div>
+
+                {/* Portal Login Credentials & Password Section */}
+                <div style={{
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '18px 20px',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <KeyRound size={18} color="#0E7490" />
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0F172A' }}>
+                          Portal Login Credentials
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                          Your official login credentials for Businz Enterprise HRMS
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{
+                      backgroundColor: '#DCFCE7',
+                      color: '#15803D',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #BBF7D0'
+                    }}>
+                      Account Active
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label style={labelStyle}>Portal Login User ID / Code</label>
+                      <div style={{
+                        ...inputStyle,
+                        backgroundColor: '#FFFFFF',
+                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                        fontWeight: 700,
+                        color: '#0E7490',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}>
+                        {profileForm.employeeId || currentUser.employeeId || 'EMP-000'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={labelStyle}>Portal Login Password</label>
+                      <div style={{
+                        ...inputStyle,
+                        backgroundColor: '#FFFFFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px'
+                      }}>
+                        <span style={{
+                          fontFamily: showPortalPassword ? "'JetBrains Mono', 'Fira Code', monospace" : 'inherit',
+                          fontWeight: 700,
+                          fontSize: '0.86rem',
+                          color: '#0F172A',
+                          letterSpacing: showPortalPassword ? '0.04em' : '0.15em'
+                        }}>
+                          {showPortalPassword ? userPassword : '••••••••••••'}
+                        </span>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowPortalPassword(!showPortalPassword)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 7px',
+                              borderRadius: '6px',
+                              border: '1px solid #E2E8F0',
+                              backgroundColor: '#F8FAFC',
+                              color: '#475569',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                            title={showPortalPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showPortalPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                            <span>{showPortalPassword ? 'Hide' : 'Show'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleCopyPassword}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 7px',
+                              borderRadius: '6px',
+                              border: '1px solid #A5F3FC',
+                              backgroundColor: copiedPass ? '#DCFCE7' : '#ECFEFF',
+                              color: copiedPass ? '#15803D' : '#0E7490',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                            title="Copy Password"
+                          >
+                            {copiedPass ? <Check size={13} /> : <Copy size={13} />}
+                            <span>{copiedPass ? 'Copied!' : 'Copy'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

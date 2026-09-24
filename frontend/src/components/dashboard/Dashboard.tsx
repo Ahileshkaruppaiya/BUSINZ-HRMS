@@ -242,8 +242,15 @@ export const Dashboard: React.FC = () => {
     filterReports.employmentTypes.length + 
     filterReports.modesOfWork.length;
 
-  // Filtered workforce
+  // Filtered workforce (exclude Super Admin / Businz Admin)
   const filteredEmployees = employees.filter(emp => {
+    if (
+      emp.employeeId === 'EMP-000' || 
+      emp.email?.toLowerCase() === 'admin@businz.com' ||
+      emp.designation === 'Super Administrator'
+    ) {
+      return false;
+    }
     if (selectedBranchDepts.length > 0) {
       const match = selectedBranchDepts.some(({ dept }) => 
         emp.department.toLowerCase().includes(dept.toLowerCase()) || 

@@ -152,6 +152,7 @@ import {
   INITIAL_ATTENDANCE_POLICY_CONFIG
 } from '../data/attendanceEnterpriseInitialData';
 import {
+  isSystemAdmin,
   INITIAL_EMPLOYEES,
   INITIAL_ATTENDANCE,
   INITIAL_FACE_LOGS,
@@ -1274,7 +1275,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return url;
   };
 
-  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
+  const [employees, setEmployees] = useState<Employee[]>(() => 
+    INITIAL_EMPLOYEES.filter(e => !isSystemAdmin(e))
+  );
 
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
   const [attendanceAuditLogs, setAttendanceAuditLogs] = useState<AttendanceAuditLog[]>(INITIAL_ATTENDANCE_AUDIT_LOGS);

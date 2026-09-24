@@ -24,44 +24,18 @@ import {
 } from '../types/hrms';
 
 // ----------------------------------------------------------------------------
-// 1. EMPLOYEES ROSTER (Master Super Admin CEO Account)
+// 1. EMPLOYEES ROSTER (Clean Workforce Directory - Master Super Admin excluded)
 // ----------------------------------------------------------------------------
-export const INITIAL_EMPLOYEES: Employee[] = [
-  {
-    id: 'EMP-000',
-    employeeId: 'EMP-000',
-    firstName: 'Businz',
-    lastName: 'Admin',
-    email: 'admin@businz.com',
-    phone: '+91 98765 43210',
-    dob: '1985-01-01',
-    gender: 'Male',
-    address: 'Businz Towers, Tech Corridor, OMR, Chennai',
-    department: 'Management',
-    designation: 'Super Administrator',
-    reportingManagerId: '',
-    reportingManagerName: 'Board of Directors',
-    joiningDate: '2020-01-01',
-    employmentType: 'Full-Time',
-    status: 'Active',
-    avatar: '',
-    basicSalary: 250000,
-    allowances: { hra: 60000, transport: 15000, medical: 10000, special: 25000 },
-    bankDetails: { bankName: 'HDFC Bank', accountNumber: '****1001', ifscCode: 'HDFC0001234', branch: 'Chennai HQ' },
-    attendanceMethod: 'Exempt',
-    gpsAllowed: false,
-    faceRegistered: false,
-    workShift: 'Shift 1 (09:00 AM - 06:00 PM)',
-    documents: [],
-    authUserId: 'usr-businz-admin',
-    password: 'Password@123',
-    mustChangePassword: false,
-    accountStatus: 'ACTIVE',
-    credentialEmailStatus: 'SENT',
-    credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
-    lastLoginAt: '16 Sep 2026, 08:50 AM'
-  }
-];
+export const isSystemAdmin = (emp?: { employeeId?: string; email?: string; designation?: string; role?: string } | null): boolean => {
+  if (!emp) return false;
+  return (
+    emp.employeeId === 'EMP-000' ||
+    emp.email?.toLowerCase() === 'admin@businz.com' ||
+    emp.designation === 'Super Administrator'
+  );
+};
+
+export const INITIAL_EMPLOYEES: Employee[] = [];
 
 // ----------------------------------------------------------------------------
 // 2. SHIFTS & ASSIGNMENTS (Master Standard Company Shifts)

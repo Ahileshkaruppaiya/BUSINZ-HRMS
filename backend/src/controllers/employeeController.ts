@@ -127,8 +127,8 @@ export const createEmployee = async (req: Request, res: Response, next: NextFunc
       }
     }
 
-    // STEP 3 & 4: Generate a secure temporary password (format e.g. Vrm@482971A)
-    const temporaryPassword = generateTemporaryPassword();
+    // STEP 3 & 4: Generate or accept provided temporary password
+    const temporaryPassword = ((req.body.password || (validated as any).password) as string)?.trim() || generateTemporaryPassword();
 
     // Determine Employee Code
     const allEmps = await employeeRepository.getAllEmployees();
@@ -169,6 +169,7 @@ export const createEmployee = async (req: Request, res: Response, next: NextFunc
       mustChangePassword: true,
       accountStatus: 'ACTIVE',
       status: 'Active',
+      password: temporaryPassword,
     });
 
     // Audit log: employee login created
@@ -204,6 +205,8 @@ export const createEmployee = async (req: Request, res: Response, next: NextFunc
 
     const isEmailOk = emailResult.status === 'SENT';
 
+    const { password: _password, ...employeePayload } = newEmp;
+
     res.status(201).json({
       success: true,
       status: isEmailOk ? 'CREATED' : 'EMAIL_FAILED',
@@ -211,7 +214,7 @@ export const createEmployee = async (req: Request, res: Response, next: NextFunc
         ? 'Employee onboarded and login account credentials sent successfully.'
         : 'Employee created successfully, but login credential email could not be delivered.',
       data: {
-        ...newEmp,
+        ...employeePayload,
         authUserId: authUser.id,
         accountStatus: 'ACTIVE',
         mustChangePassword: true,

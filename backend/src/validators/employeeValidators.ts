@@ -12,6 +12,7 @@ export const createEmployeeSchema = z.object({
   accountNumber: z.string().optional(),
   ifscCode: z.string().optional(),
   employeeId: z.string().optional(),
+  password: z.string().optional(),
 });
 
 export const updateEmployeeSchema = z.object({
@@ -26,4 +27,5 @@ export const updateEmployeeSchema = z.object({
   accountNumber: z.string().optional(),
   ifscCode: z.string().optional(),
   employeeId: z.string().optional(),
+  password: z.string().optional(),
 });

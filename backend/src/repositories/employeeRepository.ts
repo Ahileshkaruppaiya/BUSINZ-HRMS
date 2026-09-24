@@ -34,6 +34,7 @@ export interface EmployeeRecord {
   attendanceMethod?: string;
   workShift?: string;
   shiftId?: string;
+  password?: string;
 }
 
 export interface EmployeeSalaryStructureRecord extends SalaryStructureInput {
@@ -45,26 +46,123 @@ export interface EmployeeSalaryStructureRecord extends SalaryStructureInput {
   withPf?: boolean;
 }
 
-// Initial seed employees aligned exactly with frontend HRMS employee master
+// Initial seed employees for local/test mode. System Super Admin EMP-000 is
+// intentionally auth-only and excluded from the workforce directory.
 const fallbackEmployees: EmployeeRecord[] = [
   {
-    id: 'e01a1111-0000-0000-0000-000000000000',
-    employeeId: 'EMP-000',
-    firstName: 'Businz',
-    lastName: 'Admin',
-    email: 'admin@businz.com',
-    department: 'Management',
-    designation: 'Super Administrator',
-    basicSalary: 100000,
-    grossSalary: 250000,
+    id: 'e01a1111-0000-0000-0000-000000000001',
+    employeeId: 'EMP-001',
+    firstName: 'Pavithra',
+    lastName: 'S',
+    email: 'hr@vrmstructures.com',
+    department: 'HR',
+    designation: 'HR Manager',
+    basicSalary: 15000,
+    grossSalary: 15000,
     bankName: 'HDFC Bank',
     accountNumber: '****1001',
     ifscCode: 'HDFC0001234',
-    authUserId: 'usr-businz-admin',
+    authUserId: 'usr-001',
     accountStatus: 'ACTIVE',
     mustChangePassword: false,
     credentialEmailStatus: 'SENT',
     credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
+    status: 'Active',
+    attendanceMethod: 'Face Scan',
+    workShift: 'SH-01',
+    password: 'Password@123',
+  },
+  {
+    id: 'e01a1111-0000-0000-0000-000000000002',
+    employeeId: 'EMP-002',
+    firstName: 'Ramesh',
+    lastName: 'Kumar',
+    email: 'finance@vrmstructures.com',
+    department: 'Finance',
+    designation: 'Finance Manager',
+    basicSalary: 18000,
+    grossSalary: 45000,
+    bankName: 'ICICI Bank',
+    accountNumber: '****1002',
+    ifscCode: 'ICIC0001234',
+    authUserId: 'usr-002',
+    accountStatus: 'ACTIVE',
+    mustChangePassword: false,
+    credentialEmailStatus: 'SENT',
+    credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
+    status: 'Active',
+    attendanceMethod: 'Face Scan',
+    workShift: 'SH-01',
+    password: 'Password@123',
+  },
+  {
+    id: 'e01a1111-0000-0000-0000-000000000003',
+    employeeId: 'EMP-003',
+    firstName: 'Meena',
+    lastName: 'Ravi',
+    email: 'meena@vrmstructures.com',
+    department: 'Operations',
+    designation: 'Operations Executive',
+    basicSalary: 14000,
+    grossSalary: 28000,
+    bankName: 'Axis Bank',
+    accountNumber: '****1003',
+    ifscCode: 'UTIB0001234',
+    authUserId: 'usr-003',
+    accountStatus: 'ACTIVE',
+    mustChangePassword: false,
+    credentialEmailStatus: 'SENT',
+    credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
+    status: 'Active',
+    attendanceMethod: 'Face Scan',
+    workShift: 'SH-01',
+    password: 'Password@123',
+  },
+  {
+    id: 'e01a1111-0000-0000-0000-000000000004',
+    employeeId: 'EMP-004',
+    firstName: 'Karthik',
+    lastName: 'Rajan',
+    email: 'field@vrmstructures.com',
+    department: 'Field Operations',
+    designation: 'Field Engineer',
+    basicSalary: 16000,
+    grossSalary: 36000,
+    bankName: 'State Bank of India',
+    accountNumber: '****1004',
+    ifscCode: 'SBIN0001234',
+    authUserId: 'usr-004',
+    accountStatus: 'ACTIVE',
+    mustChangePassword: false,
+    credentialEmailStatus: 'SENT',
+    credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
+    status: 'Active',
+    attendanceMethod: 'GPS Location',
+    workShift: 'SH-01',
+    password: 'Password@123',
+  },
+  {
+    id: 'e01a1111-0000-0000-0000-000000000009',
+    employeeId: 'EMP-009',
+    firstName: 'Suresh',
+    lastName: 'Kumar',
+    email: 'suresh@vrmstructures.com',
+    department: 'Installation',
+    designation: 'Solar Technician',
+    basicSalary: 15000,
+    grossSalary: 30000,
+    bankName: 'Canara Bank',
+    accountNumber: '****1009',
+    ifscCode: 'CNRB0001234',
+    authUserId: 'usr-009',
+    accountStatus: 'ACTIVE',
+    mustChangePassword: false,
+    credentialEmailStatus: 'SENT',
+    credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
+    status: 'Active',
+    attendanceMethod: 'Face Scan',
+    workShift: 'SH-01',
+    password: 'Password@123',
   },
 ];
 
@@ -140,6 +238,12 @@ export class EmployeeRepository {
             bankName: data.bank_name,
             accountNumber: data.account_number,
             ifscCode: data.ifsc_code,
+            password: data.password || 'Password@123',
+            mustChangePassword: data.must_change_password,
+            accountStatus: data.account_status,
+            credentialEmailStatus: data.credential_email_status,
+            credentialEmailSentAt: data.credential_email_sent_at,
+            lastLoginAt: data.last_login_at,
           };
           memoryCache.set(cacheKey, emp, 30000);
           return emp;
@@ -177,6 +281,7 @@ export class EmployeeRepository {
             accountNumber: data.account_number,
             ifscCode: data.ifsc_code,
             authUserId: data.auth_id,
+            password: data.password || 'Password@123',
             mustChangePassword: data.must_change_password,
             accountStatus: data.account_status,
             credentialEmailStatus: data.credential_email_status,
@@ -217,6 +322,7 @@ export class EmployeeRepository {
             accountNumber: data.account_number,
             ifscCode: data.ifsc_code,
             authUserId: data.auth_id,
+            password: data.password || 'Password@123',
             mustChangePassword: data.must_change_password,
             accountStatus: data.account_status,
             credentialEmailStatus: data.credential_email_status,
@@ -243,7 +349,9 @@ export class EmployeeRepository {
         const supabase = getSupabaseAdmin();
         const { data, error } = await supabase.from('employees').select('*').eq('status', 'Active');
         if (data && !error && data.length > 0) {
-          const list = data.map(d => ({
+          const list = data
+            .filter(d => d.employee_id !== 'EMP-000' && d.email?.toLowerCase() !== 'admin@businz.com')
+            .map(d => ({
             id: d.id,
             employeeId: d.employee_id,
             firstName: d.first_name,
@@ -256,6 +364,12 @@ export class EmployeeRepository {
             bankName: d.bank_name,
             accountNumber: d.account_number,
             ifscCode: d.ifsc_code,
+            password: d.password || 'Password@123',
+            mustChangePassword: d.must_change_password,
+            accountStatus: d.account_status,
+            credentialEmailStatus: d.credential_email_status,
+            credentialEmailSentAt: d.credential_email_sent_at,
+            lastLoginAt: d.last_login_at,
           }));
           memoryCache.set(cacheKey, list, 30000);
           return list;
@@ -438,6 +552,7 @@ export class EmployeeRepository {
       branch: data.branch,
       joiningDate: data.joiningDate,
       attendanceMethod: data.attendanceMethod || 'Face Scan',
+      password: data.password || 'Password@123',
     };
 
     fallbackEmployees.push(newEmp);
@@ -472,6 +587,7 @@ export class EmployeeRepository {
           must_change_password: newEmp.mustChangePassword,
           account_status: newEmp.accountStatus,
           credential_email_status: newEmp.credentialEmailStatus,
+          password: newEmp.password || 'Password@123',
         }).select('id').single();
 
         if (insertRes.data?.id) {
@@ -496,14 +612,18 @@ export class EmployeeRepository {
     if (isRealSupabaseConfigured()) {
       try {
         const supabase = getSupabaseAdmin();
+        const payload: any = {
+          first_name: emp.firstName,
+          last_name: emp.lastName,
+          email: emp.email,
+          basic_salary: emp.basicSalary,
+        };
+        if (emp.password) {
+          payload.password = emp.password;
+        }
         await supabase
           .from('employees')
-          .update({
-            first_name: emp.firstName,
-            last_name: emp.lastName,
-            email: emp.email,
-            basic_salary: emp.basicSalary,
-          })
+          .update(payload)
           .eq('employee_id', emp.employeeId);
       } catch (err) {
         console.warn('Could not update employee in Supabase:', err);
@@ -526,4 +646,3 @@ export class EmployeeRepository {
 }
 
 export const employeeRepository = new EmployeeRepository();
-

@@ -87,12 +87,18 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
     currentUser.designation === 'CEO' || 
     currentUser.employeeId === 'EMP-000';
 
-  // Role-based scoping of employee records
-  const roleScopedEmployees = isEmployeeRole
-    ? employees.filter(e => e.employeeId === (currentUser.employeeId || 'EMP-001') || e.email === currentUser.email)
-    : isManagerRole
-    ? employees.filter(e => e.department === currentUser.department)
-    : employees;
+  // Role-based scoping of employee records (exclude system administrator Businz Admin)
+  const roleScopedEmployees = (
+    isEmployeeRole
+      ? employees.filter(e => e.employeeId === (currentUser.employeeId || 'EMP-001') || e.email === currentUser.email)
+      : isManagerRole
+      ? employees.filter(e => e.department === currentUser.department)
+      : employees
+  ).filter(e => 
+    e.employeeId !== 'EMP-000' && 
+    e.email?.toLowerCase() !== 'admin@businz.com' && 
+    e.designation !== 'Super Administrator'
+  );
 
   // Sync quick add trigger from layout header
   React.useEffect(() => {

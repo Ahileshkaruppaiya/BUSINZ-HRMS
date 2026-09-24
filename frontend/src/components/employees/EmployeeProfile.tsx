@@ -112,6 +112,30 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     hasPermission('employees', 'edit')
   );
 
+  const isSuperAdminOrCEO = Boolean(
+    currentUser?.role === 'CEO' || 
+    currentUser?.designation === 'CEO' ||
+    currentUser?.role === 'Super Admin' ||
+    currentUser?.role === 'ERP Administrator'
+  );
+
+  const isHR = Boolean(
+    currentUser?.role === 'HR Admin' || 
+    currentUser?.role === 'HR Manager' || 
+    currentUser?.designation?.toLowerCase().includes('hr') ||
+    currentUser?.department?.toLowerCase() === 'hr' ||
+    currentUser?.department?.toLowerCase() === 'human resources'
+  );
+
+  const isSelf = Boolean(
+    (currentUser?.id && (currentUser.id === currentEmp.id || currentUser.id === (currentEmp as any).authUserId)) ||
+    (currentUser?.employeeId && (currentUser.employeeId === currentEmp.employeeId || currentUser.employeeId === currentEmp.id)) ||
+    (currentUser?.email && currentEmp.email && currentUser.email.toLowerCase() === currentEmp.email.toLowerCase())
+  );
+
+  // Super Admin, CEO, and HR can see all passwords; employees can see their own password
+  const canViewPassword = isSuperAdminOrCEO || isHR || isCEOorHR || isSelf;
+
   // Sync internal state if prop employee updates
   useEffect(() => {
     setCurrentEmp(employee);
@@ -224,7 +248,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     officialUsername: (emp as any).officialUsername || emp.employeeId || emp.id,
     role: (emp.systemAccess?.role || emp.role || 'Employee') as Role,
     accountStatus: ((emp.accountStatus as any) || (emp.status === 'Terminated' ? 'DISABLED' : 'ACTIVE')) as 'ACTIVE' | 'DISABLED',
-    password: (emp as any).password || 'Vrm@2026#Emp',
+    password: (emp as any).password || emp.password || 'Password@123',
     mustChangePassword: Boolean(emp.mustChangePassword ?? false),
     credentialEmailStatus: emp.credentialEmailStatus || 'SENT',
     credentialEmailSentAt: emp.credentialEmailSentAt || '14 Sep 2026, 09:15 AM'
@@ -591,7 +615,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           credentialEmailStatus: 'SENT',
           credentialEmailSentAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today'
         }));
-        setSaveNotice(`Login credentials reset successfully. User ID: ${currentEmp.employeeId || currentEmp.id}, Temporary password dispatched to ${destEmail}.`);
+        setSaveNotice(`Login credentials reset successfully. User ID: ${currentEmp.employeeId || currentEmp.id} | Password: ${tempPass} (Dispatched to ${destEmail})`);
       }
     } catch (err) {
       console.error(err);
@@ -2746,21 +2770,163 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             </div>
           </div>
 
-          {/* Password (Admin Rule: HR/CEO/Admin cannot see employee passwords) */}
+          {/* Password (Visible to Super Admin, CEO, HR, and Employee Self) */}
           <div>
-            <label style={labelStyle}>Portal Password Security</label>
-            <div style={{ ...viewValueStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '8px 12px', borderRadius: '10px' }}>
-              <span style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '7px' }}>
-                <ShieldCheck size={16} color="#0E7490" />
-                <span>•••••••••••• (Encrypted & Protected)</span>
-              </span>
-              <span style={{ fontSize: '0.70rem', backgroundColor: '#DCFCE7', color: '#15803D', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                Argon2 / Bcrypt Secured
-              </span>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '4px' }}>
-              Protected by security policy: HR & Administrators cannot view employee passwords. Use "Reset & Dispatch Credentials" to send a secure reset invitation.
-            </div>
+            <label style={labelStyle}>Portal Login Password</label>
+            {canViewPassword ? (
+              isEditing ? (
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input 
+                    type={showPassword ? 'text' : 'password'} 
+                    value={formData.password || ''} 
+                    onChange={(e) => handleChange('password', e.target.value)} 
+                    style={{
+                      ...inputStyle,
+                      paddingRight: '42px',
+                      fontFamily: showPassword ? "'JetBrains Mono', 'Fira Code', monospace" : 'inherit',
+                      letterSpacing: showPassword ? '0.04em' : 'normal',
+                      fontWeight: 600
+                    }} 
+                    placeholder="Enter employee portal password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      background: 'none',
+                      border: 'none',
+                      color: '#64748B',
+                      cursor: 'pointer',
+                      padding: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '6px'
+                    }}
+                    title={showPassword ? 'Hide Password' : 'Show Password'}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{
+                    ...viewValueStyle,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                      <Lock size={15} color="#0E7490" style={{ flexShrink: 0 }} />
+                      <span style={{
+                        color: '#0F172A',
+                        fontWeight: 700,
+                        fontSize: '0.86rem',
+                        fontFamily: showPassword ? "'JetBrains Mono', 'Fira Code', monospace" : 'inherit',
+                        letterSpacing: showPassword ? '0.04em' : '0.15em'
+                      }}>
+                        {showPassword ? (formData.password || currentEmp.password || 'Password@123') : '••••••••••••'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                      {/* Toggle Visibility */}
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #E2E8F0',
+                          backgroundColor: '#FFFFFF',
+                          color: '#475569',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title={showPassword ? 'Hide password' : 'View password'}
+                      >
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                        <span>{showPassword ? 'Hide' : 'Show'}</span>
+                      </button>
+
+                      {/* Copy Password */}
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(formData.password || currentEmp.password || 'Password@123', 'portalPassword')}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #A5F3FC',
+                          backgroundColor: copiedField === 'portalPassword' ? '#DCFCE7' : '#ECFEFF',
+                          color: copiedField === 'portalPassword' ? '#15803D' : '#0E7490',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title="Copy Password"
+                      >
+                        {copiedField === 'portalPassword' ? <Check size={14} /> : <Copy size={14} />}
+                        <span>{copiedField === 'portalPassword' ? 'Copied!' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{
+                      fontSize: '0.68rem',
+                      backgroundColor: '#ECFEFF',
+                      color: '#0E7490',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      fontWeight: 700,
+                      border: '1px solid #CFFAFE'
+                    }}>
+                      {isSuperAdminOrCEO ? 'Super Admin / CEO Access' : isHR ? 'HR Manager Access' : 'Your Password'}
+                    </span>
+                    <span>Visible to Super Admin, CEO, HR, and the employee.</span>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div>
+                <div style={{
+                  ...viewValueStyle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  padding: '8px 12px',
+                  borderRadius: '10px'
+                }}>
+                  <span style={{ color: '#64748B', fontWeight: 600, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                    <Lock size={15} color="#94A3B8" />
+                    <span>•••••••••••• (Protected)</span>
+                  </span>
+                  <span style={{ fontSize: '0.70rem', backgroundColor: '#F1F5F9', color: '#64748B', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                    Restricted
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '4px' }}>
+                  Password is only viewable by Super Admin, CEO, HR, and this employee.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Must Change Password */}

@@ -152,16 +152,18 @@ export const AttendanceList: React.FC<AttendanceListProps> = ({ onBackToInsights
     return r.includes(t) || t.includes(r);
   };
 
-  const roleScopedAttendance = isEmployeeRole
-    ? attendanceRecords.filter(a => a.employeeId === (currentUser.employeeId || 'EMP-001'))
-    : isManagerRole
-    ? attendanceRecords.filter(a => isDepartmentMatch(a.department, currentUser.department))
-    : attendanceRecords;
+  const roleScopedAttendance = (
+    isEmployeeRole
+      ? attendanceRecords.filter(a => a.employeeId === (currentUser.employeeId || 'EMP-001'))
+      : isManagerRole
+      ? attendanceRecords.filter(a => isDepartmentMatch(a.department, currentUser.department))
+      : attendanceRecords
+  ).filter(a => a.employeeId !== 'EMP-000');
 
   const todayStr = new Date().toISOString().split('T')[0];
   const targetDateRecords = roleScopedAttendance.filter(a => !selectedDate || a.date === selectedDate);
 
-  const countTotal = employees.length;
+  const countTotal = employees.filter(e => e.employeeId !== 'EMP-000' && e.email?.toLowerCase() !== 'admin@businz.com' && e.designation !== 'Super Administrator').length;
   const countPresent = targetDateRecords.filter(a => a.status === 'Present' || a.status === 'Late').length;
   const countLate = targetDateRecords.filter(a => a.status === 'Late').length;
   const countAbsent = targetDateRecords.filter(a => a.status === 'Absent').length;
