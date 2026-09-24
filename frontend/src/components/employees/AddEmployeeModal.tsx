@@ -1251,7 +1251,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
       {/* Scrollable Wizard Form Body */}
       <main className="onboarding-body">
-        <form autoComplete="off" onSubmit={e => e.preventDefault()} style={{ width: '100%' }}>
+        <form autoComplete="off" onSubmit={e => e.preventDefault()} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div className="onboarding-content-container">
           {validationError && (
             <div style={{
@@ -3186,115 +3186,117 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
       {/* Bottom Sticky Action Footer */}
       <footer className="onboarding-footer">
-        <button 
-          type="button" 
-          className="btn btn-secondary" 
-          onClick={resetAndClose}
-          style={{ padding: '9px 18px', fontSize: '0.88rem' }}
-        >
-          Cancel & Exit
-        </button>
+        <div className="onboarding-footer-inner">
+          <button 
+            type="button" 
+            className="btn btn-secondary" 
+            onClick={resetAndClose}
+            style={{ padding: '9px 18px', fontSize: '0.88rem' }}
+          >
+            Cancel & Exit
+          </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>
-            Step <span style={{ color: '#0E7490', fontWeight: 700 }}>{step}</span> of 9 • {Math.round((step / 9) * 100)}% Completed
-          </div>
-          {validationError && (
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '6px', 
-              color: '#DC2626', 
-              fontSize: '0.78rem', 
-              fontWeight: 600,
-              backgroundColor: '#FEF2F2',
-              padding: '4px 10px',
-              borderRadius: '6px',
-              border: '1px solid #FECACA',
-              maxWidth: '380px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }} title={validationError}>
-              <AlertCircle size={14} style={{ flexShrink: 0 }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{validationError}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>
+              Step <span style={{ color: '#0E7490', fontWeight: 700 }}>{step}</span> of 9 • {Math.round((step / 9) * 100)}% Completed
             </div>
-          )}
-        </div>
+            {validationError && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                color: '#DC2626', 
+                fontSize: '0.78rem', 
+                fontWeight: 600,
+                backgroundColor: '#FEF2F2',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: '1px solid #FECACA',
+                maxWidth: '380px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }} title={validationError}>
+                <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{validationError}</span>
+              </div>
+            )}
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {step > 1 && (
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
-              onClick={() => {
-                setValidationError(null);
-                setStep(prev => prev - 1);
-                const scrollTarget = document.querySelector('.onboarding-body');
-                if (scrollTarget) {
-                  scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', fontSize: '0.88rem' }}
-            >
-              <ArrowLeft size={16} /> Back
-            </button>
-          )}
-
-          {step < 9 ? (
-            <button 
-              type="button" 
-              className="btn btn-primary" 
-              onClick={() => {
-                const err = validateCurrentStep(step);
-                if (err) {
-                  setValidationError(err);
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {step > 1 && (
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => {
+                  setValidationError(null);
+                  setStep(prev => prev - 1);
                   const scrollTarget = document.querySelector('.onboarding-body');
                   if (scrollTarget) {
                     scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
                   }
-                  return;
-                }
-                setValidationError(null);
-                setStep(prev => prev + 1);
-                const scrollTarget = document.querySelector('.onboarding-body');
-                if (scrollTarget) {
-                  scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 20px', fontSize: '0.88rem', background: '#0E7490', borderColor: '#0E7490', boxShadow: '0 2px 8px rgba(14, 116, 144, 0.25)' }}
-            >
-              Next Step <ArrowRight size={16} />
-            </button>
-          ) : (
-            <button 
-              type="button" 
-              className="btn btn-primary" 
-              disabled={isSubmitting}
-              onClick={handleSubmit}
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                backgroundColor: isSubmitting ? '#94A3B8' : '#10B981', 
-                borderColor: isSubmitting ? '#94A3B8' : '#10B981', 
-                padding: '9px 22px', 
-                fontSize: '0.88rem', 
-                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
-                cursor: isSubmitting ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {isSubmitting ? (
-                <>
-                  <RefreshCw size={17} className="animate-spin" /> Provisioning Login Account...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={18} /> Confirm & Onboard Employee
-                </>
-              )}
-            </button>
-          )}
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', fontSize: '0.88rem' }}
+              >
+                <ArrowLeft size={16} /> Back
+              </button>
+            )}
+
+            {step < 9 ? (
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={() => {
+                  const err = validateCurrentStep(step);
+                  if (err) {
+                    setValidationError(err);
+                    const scrollTarget = document.querySelector('.onboarding-body');
+                    if (scrollTarget) {
+                      scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                    return;
+                  }
+                  setValidationError(null);
+                  setStep(prev => prev + 1);
+                  const scrollTarget = document.querySelector('.onboarding-body');
+                  if (scrollTarget) {
+                    scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 20px', fontSize: '0.88rem', background: '#0E7490', borderColor: '#0E7490', boxShadow: '0 2px 8px rgba(14, 116, 144, 0.25)' }}
+              >
+                Next Step <ArrowRight size={16} />
+              </button>
+            ) : (
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                disabled={isSubmitting}
+                onClick={handleSubmit}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  backgroundColor: isSubmitting ? '#94A3B8' : '#10B981', 
+                  borderColor: isSubmitting ? '#94A3B8' : '#10B981', 
+                  padding: '9px 22px', 
+                  fontSize: '0.88rem', 
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw size={17} className="animate-spin" /> Provisioning Login Account...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={18} /> Confirm & Onboard Employee
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </footer>
     </div>

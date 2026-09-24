@@ -3211,8 +3211,10 @@ input:-webkit-autofill:active {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
@@ -3319,7 +3321,8 @@ input:-webkit-autofill:active {
 
 .onboarding-content-container {
   width: 100%;
-  max-width: 1040px;
+  max-width: 1080px;
+  margin: 0 auto;
   padding: 28px 24px 48px;
   box-sizing: border-box;
 }
@@ -3352,10 +3355,19 @@ input:-webkit-autofill:active {
   border-top: 1px solid #E2E8F0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.02);
   z-index: 20;
+}
+
+.onboarding-footer-inner {
+  width: 100%;
+  max-width: 1080px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
 }
 
 .document-upload-card {
