@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { 
   SalaryComponentConfig, 
-  PFPolicyConfig, 
-  ESICPolicyConfig, 
   IncrementPolicyConfig, 
   IncrementSlab 
 } from '../../types/settings';
@@ -18,7 +16,6 @@ import {
   Calculator, 
   CheckCircle2, 
   Sliders, 
-  ShieldCheck, 
   FileText, 
   Layers, 
   Play, 
@@ -41,25 +38,7 @@ export const PayrollSettings: React.FC = () => {
   } = useHRMS();
 
   const isPrivileged = currentUser.role !== 'Employee';
-  const [activeTab, setActiveTab] = useState<'components' | 'statutory' | 'increment' | 'formula_tester'>('components');
-
-  // PF State
-  const [pfConfig, setPfConfig] = useState<PFPolicyConfig>(() => {
-    if (payrollSettingsConfig.pfPolicy?.formula === '(BASIC + DA + CONV) * 12 / 100') {
-      return INITIAL_PAYROLL_CONFIG.pfPolicy;
-    }
-    return payrollSettingsConfig.pfPolicy;
-  });
-  const [pfSaved, setPfSaved] = useState(false);
-
-  // ESIC State
-  const [esicConfig, setEsicConfig] = useState<ESICPolicyConfig>(() => {
-    if (payrollSettingsConfig.esicPolicy?.formula === 'GROSS * 0.75 / 100') {
-      return INITIAL_PAYROLL_CONFIG.esicPolicy;
-    }
-    return payrollSettingsConfig.esicPolicy;
-  });
-  const [esicSaved, setEsicSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<'components' | 'increment' | 'formula_tester'>('components');
 
   // Increment Policy State
   const defaultIncrementPolicy: IncrementPolicyConfig = {
@@ -149,65 +128,6 @@ export const PayrollSettings: React.FC = () => {
     isConfidential: false,
     description: ''
   });
-
-  const handleSavePf = (e: React.FormEvent) => {
-    e.preventDefault();
-    updatePayrollSettingsConfig({ pfPolicy: pfConfig });
-    payrollApi.updatePayrollSettings({
-      pfEnabled: pfConfig.active,
-      pfRate: pfConfig.percentage,
-    }).catch(err => console.warn('[Payroll] Failed to sync PF settings to backend:', err));
-    setPfSaved(true);
-    setTimeout(() => setPfSaved(false), 2500);
-  };
-
-  const handleSaveEsic = (e: React.FormEvent) => {
-    e.preventDefault();
-    updatePayrollSettingsConfig({ esicPolicy: esicConfig });
-    payrollApi.updatePayrollSettings({
-      esicEnabled: esicConfig.active,
-      esicRate: esicConfig.percentage,
-      esicSalaryThreshold: esicConfig.grossSalaryLimit,
-    }).catch(err => console.warn('[Payroll] Failed to sync ESIC settings to backend:', err));
-    setEsicSaved(true);
-    setTimeout(() => setEsicSaved(false), 2500);
-  };
-
-  const handleClearPf = () => {
-    const cleared: PFPolicyConfig = {
-      active: false,
-      calculationType: 'PERCENTAGE',
-      percentage: 0,
-      calculationBase: 'BASIC',
-      formula: '',
-      effectiveDate: '',
-      version: 1
-    };
-    setPfConfig(cleared);
-    updatePayrollSettingsConfig({ pfPolicy: cleared });
-    payrollApi.updatePayrollSettings({
-      pfEnabled: false,
-      pfRate: 0,
-    }).catch(err => console.warn('[Payroll] Failed to sync PF settings to backend:', err));
-  };
-
-  const handleClearEsic = () => {
-    const cleared: ESICPolicyConfig = {
-      active: false,
-      percentage: 0,
-      grossSalaryLimit: 0,
-      formula: '',
-      effectiveDate: '',
-      version: 1
-    };
-    setEsicConfig(cleared);
-    updatePayrollSettingsConfig({ esicPolicy: cleared });
-    payrollApi.updatePayrollSettings({
-      esicEnabled: false,
-      esicRate: 0,
-      esicSalaryThreshold: 0,
-    }).catch(err => console.warn('[Payroll] Failed to sync ESIC settings to backend:', err));
-  };
 
   const handleClearIncrementPolicy = () => {
     const cleared: IncrementPolicyConfig = {
@@ -467,29 +387,6 @@ export const PayrollSettings: React.FC = () => {
             }}>
               {earnings.length + deductions.length}
             </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('statutory')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: activeTab === 'statutory' ? '#FFFFFF' : 'transparent',
-              color: activeTab === 'statutory' ? '#0E7490' : '#64748B',
-              boxShadow: activeTab === 'statutory' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-              fontWeight: activeTab === 'statutory' ? 750 : 600,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <ShieldCheck size={15} />
-            <span>Statutory Policies (PF & ESIC)</span>
           </button>
 
           <button
@@ -758,196 +655,6 @@ export const PayrollSettings: React.FC = () => {
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: STATUTORY POLICIES (PF & ESIC) */}
-      {activeTab === 'statutory' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-          {/* PF Policy Card */}
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7ECF3', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ShieldCheck size={20} />
-                </div>
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-                  Provident Fund (EPF) Policy
-                </h3>
-              </div>
-              <span className={`status-pill ${pfConfig.active ? 'approved' : 'overdue'}`}>
-                {pfConfig.active ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-
-            <p style={{ fontSize: '0.82rem', color: '#64748B', marginBottom: '16px' }}>
-              Governs employee and employer contributions calculated automatically during monthly payroll batch execution.
-            </p>
-
-            <form onSubmit={handleSavePf} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label className="form-label">Calculation Type</label>
-                <select
-                  className="form-control"
-                  value={pfConfig.calculationType}
-                  onChange={e => setPfConfig({ ...pfConfig, calculationType: e.target.value as any })}
-                >
-                  <option value="PERCENTAGE">Percentage Base (Standard)</option>
-                  <option value="FORMULA">Custom Formula</option>
-                  <option value="FIXED_AMOUNT">Fixed Monthly Amount</option>
-                </select>
-              </div>
-
-              {pfConfig.calculationType === 'PERCENTAGE' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label className="form-label">PF Percentage (%)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      className="form-control"
-                      placeholder="e.g. 12"
-                      value={pfConfig.percentage ? pfConfig.percentage : ''}
-                      onChange={e => setPfConfig({ ...pfConfig, percentage: parseFloat(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Calculation Base</label>
-                    <select
-                      className="form-control"
-                      value={pfConfig.calculationBase}
-                      onChange={e => setPfConfig({ ...pfConfig, calculationBase: e.target.value as any })}
-                    >
-                      <option value="CUSTOM">PF Base (Basic + DA + Conveyance)</option>
-                      <option value="BASIC">Basic Salary</option>
-                      <option value="GROSS">Gross Salary</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="form-label">Live Calculation Formula</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. (BASIC + DA + CONV) * 12 / 100"
-                  value={pfConfig.formula || ''}
-                  onChange={e => setPfConfig({ ...pfConfig, formula: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                  <input
-                    type="checkbox"
-                    checked={pfConfig.active}
-                    onChange={e => setPfConfig({ ...pfConfig, active: e.target.checked })}
-                  />
-                  Enable PF Deduction
-                </label>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleClearPf}>
-                    Clear
-                  </button>
-                  <button type="submit" className="btn btn-primary btn-sm">
-                    Save PF Policy
-                  </button>
-                </div>
-              </div>
-
-              {pfSaved && (
-                <div style={{ color: '#16A34A', fontSize: '0.8rem', fontWeight: 600, textAlign: 'right' }}>
-                  ✓ PF Policy saved and updated for future payroll runs!
-                </div>
-              )}
-            </form>
-          </div>
-
-          {/* ESIC Policy Card */}
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7ECF3', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#ECFEFF', color: '#0E7490', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ShieldCheck size={20} />
-                </div>
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-                  ESIC Contribution Policy
-                </h3>
-              </div>
-              <span className={`status-pill ${esicConfig.active ? 'approved' : 'overdue'}`}>
-                {esicConfig.active ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-
-            <p style={{ fontSize: '0.82rem', color: '#64748B', marginBottom: '16px' }}>
-              State insurance scheme applied to workers with monthly Gross Salary up to the statutory wage threshold limit.
-            </p>
-
-            <form onSubmit={handleSaveEsic} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label className="form-label">Employee Rate (%)</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    className="form-control"
-                    placeholder="e.g. 0.75"
-                    value={esicConfig.percentage ? esicConfig.percentage : ''}
-                    onChange={e => setEsicConfig({ ...esicConfig, percentage: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Gross Ceiling (₹)</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    placeholder="e.g. 21000"
-                    value={esicConfig.grossSalaryLimit ? esicConfig.grossSalaryLimit : ''}
-                    onChange={e => setEsicConfig({ ...esicConfig, grossSalaryLimit: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label">Calculation Formula</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. GROSS * 0.75 / 100"
-                  value={esicConfig.formula || ''}
-                  onChange={e => setEsicConfig({ ...esicConfig, formula: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                  <input
-                    type="checkbox"
-                    checked={esicConfig.active}
-                    onChange={e => setEsicConfig({ ...esicConfig, active: e.target.checked })}
-                  />
-                  Enable ESIC Deduction
-                </label>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleClearEsic}>
-                    Clear
-                  </button>
-                  <button type="submit" className="btn btn-primary btn-sm">
-                    Save ESIC Policy
-                  </button>
-                </div>
-              </div>
-
-              {esicSaved && (
-                <div style={{ color: '#16A34A', fontSize: '0.8rem', fontWeight: 600, textAlign: 'right' }}>
-                  ✓ ESIC Policy saved and updated for future payroll runs!
-                </div>
-              )}
-            </form>
           </div>
         </div>
       )}
