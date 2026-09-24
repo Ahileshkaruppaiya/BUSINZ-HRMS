@@ -124,6 +124,7 @@ import { DEFAULT_LOAN_POLICIES, INITIAL_LOAN_RECORDS } from '../data/loanInitial
 import { calculateEmployeePayroll } from '../services/policyEngine';
 import { payrollApi } from '../services/payrollApi';
 import { API_BASE_URL } from '../config/api';
+import { supabaseDirect } from '../services/supabaseDirectService';
 import {
   INITIAL_ENHANCED_TASKS,
   INITIAL_MOM_MEETINGS,
@@ -1312,17 +1313,34 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (!token) return;
 
+      let rawData: any[] = [];
       try {
         const res = await fetch(`${API_BASE_URL}/employees`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-        if (!res.ok) return;
+        if (res.ok) {
+          const body = await res.json();
+          if (body.success && Array.isArray(body.data)) {
+            rawData = body.data;
+          }
+        }
+      } catch (err) {
+        // Fallback to direct Supabase REST
+      }
 
-        const body = await res.json();
-        if (body.success && Array.isArray(body.data) && body.data.length > 0 && !isCancelled) {
-          const mappedFromDb: Employee[] = body.data.map((d: any) => ({
+      // If backend was 404 or empty, fetch directly from Supabase Cloud Database
+      if (rawData.length === 0) {
+        try {
+          rawData = await supabaseDirect.getEmployees();
+        } catch (sbErr) {
+          console.warn('Direct Supabase fetch notice:', sbErr);
+        }
+      }
+
+      if (rawData.length > 0 && !isCancelled) {
+        const mappedFromDb: Employee[] = rawData.map((d: any) => ({
             id: d.id,
             employeeId: d.employeeId || d.employee_id,
             firstName: d.firstName || d.first_name || '',
@@ -1380,9 +1398,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return [...mappedFromDb, ...retainedLocals];
           });
         }
-      } catch (err) {
-        // Silent fallback for offline or development modes
-      }
     };
 
     syncEmployeesFromDatabase();

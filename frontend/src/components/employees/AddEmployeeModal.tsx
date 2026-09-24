@@ -3,6 +3,7 @@ import { useHRMS } from '../../context/HRMSContext';
 import { Employee, Role } from '../../types/hrms';
 import { SalaryComponentConfig } from '../../types/settings';
 import { API_BASE_URL } from '../../config/api';
+import { supabaseDirect } from '../../services/supabaseDirectService';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { 
   X, 
@@ -908,14 +909,44 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         })
       });
 
-      if (apiRes.ok) {
+      if (apiRes && apiRes.ok) {
         const body = await apiRes.json();
         if (body.status === 'EMAIL_FAILED') {
           emailStatus = 'FAILED';
         }
+      } else {
+        // Fallback: insert directly into Supabase Cloud Database via REST
+        await supabaseDirect.insertEmployee({
+          employee_id: cleanEmpCode,
+          first_name: newEmp.firstName,
+          last_name: newEmp.lastName,
+          email: primaryEmail,
+          password: targetPassword,
+          designation: newEmp.designation,
+          basic_salary: newEmp.basicSalary,
+          phone: newEmp.phone,
+          status: newEmp.status,
+          attendance_method: newEmp.attendanceMethod,
+        });
       }
     } catch {
-      // Standalone client mode handled above
+      // Standalone/offline mode: insert directly into Supabase Cloud Database
+      try {
+        await supabaseDirect.insertEmployee({
+          employee_id: cleanEmpCode,
+          first_name: newEmp.firstName,
+          last_name: newEmp.lastName,
+          email: primaryEmail,
+          password: targetPassword,
+          designation: newEmp.designation,
+          basic_salary: newEmp.basicSalary,
+          phone: newEmp.phone,
+          status: newEmp.status,
+          attendance_method: newEmp.attendanceMethod,
+        });
+      } catch (sbErr) {
+        console.warn('Direct Supabase insertion notice:', sbErr);
+      }
     }
 
     setEmailDeliveryStatus(emailStatus);

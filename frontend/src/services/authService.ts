@@ -1,5 +1,6 @@
 import type { Role, User } from '../types/hrms';
 import { API_BASE_URL } from '../config/api';
+import { supabaseDirect } from './supabaseDirectService';
 
 const API_BASE = API_BASE_URL;
 const TOKEN_KEY = 'vrm_auth_token';
@@ -140,6 +141,29 @@ export const authService = {
       sessionStorage.setItem(TOKEN_KEY, dummyToken);
       localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(fallbackAdmin)));
       return { user: fallbackAdmin, accessToken: dummyToken };
+    }
+
+    // Direct Supabase Cloud Database Query fallback
+    try {
+      const dbUser = await supabaseDirect.verifyLogin(cleanId, password);
+      if (dbUser) {
+        const empUser: AuthUser = {
+          id: dbUser.id || dbUser.employee_id,
+          name: `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim() || 'Businz Staff',
+          email: dbUser.email,
+          role: dbUser.role || (dbUser.designation === 'HR Manager' ? 'HR Manager' : 'Employee'),
+          employeeId: dbUser.employee_id,
+          department: dbUser.department || 'General',
+          designation: dbUser.designation || 'Staff',
+          mustChangePassword: dbUser.must_change_password ?? false,
+        };
+        const token = 'vrm_fallback_jwt_' + Date.now();
+        sessionStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(empUser)));
+        return { user: empUser, accessToken: token };
+      }
+    } catch (e) {
+      console.warn('Direct Supabase login fallback notice:', e);
     }
 
     // Check if there are local stored employees
