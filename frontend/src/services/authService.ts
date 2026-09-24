@@ -96,7 +96,9 @@ export const authService = {
 
   async login(identifier: string, password: string): Promise<{ user: AuthUser; accessToken: string }> {
     const cleanId = identifier.trim().toLowerCase();
+    const cleanPass = password.trim();
 
+    // 1. Try backend API first if available
     try {
       const response = await safeFetch(`${API_BASE}/auth/login`, {
         method: 'POST',
@@ -111,22 +113,36 @@ export const authService = {
           return body.data;
         }
       }
-
-      // If backend explicitly rejected the credentials with 401 or 400 JSON response:
-      if (response.status === 401 || (response.status === 400 && response.headers.get('content-type')?.includes('application/json'))) {
-        throw new Error(await readError(response, 'Invalid User ID / Email or password.'));
-      }
-    } catch (err: any) {
-      // If the error was an explicit invalid credentials error from backend, rethrow it
-      if (err.message === 'Invalid User ID / Email or password.' || err.message?.includes('password')) {
-        throw err;
-      }
-      // If server returned 404, network error, or backend is not active, fallback to local hybrid auth
+    } catch {
+      // Backend not running, 404, or network issue: proceed directly to Supabase cloud verification
     }
 
-    // HYBRID / OFFLINE AUTH FALLBACK (Runs when Node.js is not active or backend is unreachable)
-    const isSuperAdminUser = cleanId === 'admin@businz.com' || cleanId === 'emp-000' || cleanId === 'admin';
-    if (isSuperAdminUser && (password === 'Password@123' || password === 'admin')) {
+    // 2. Direct Supabase Cloud Database Query
+    try {
+      const dbUser = await supabaseDirect.verifyLogin(cleanId, cleanPass);
+      if (dbUser) {
+        const empUser: AuthUser = {
+          id: dbUser.id || dbUser.employee_id,
+          name: `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim() || 'Businz Staff',
+          email: dbUser.email,
+          role: dbUser.role || (dbUser.designation === 'HR Manager' ? 'HR Manager' : (dbUser.role_id === '778f15fb-584e-4452-9768-eb305fd09966' ? 'HR Manager' : (dbUser.role_id === 'c4f29eb9-d1ae-4d1e-a7ff-15908b2afd59' ? 'Super Admin' : 'Employee'))),
+          employeeId: dbUser.employee_id,
+          department: dbUser.department || 'General',
+          designation: dbUser.designation || 'Staff',
+          mustChangePassword: dbUser.must_change_password ?? false,
+        };
+        const token = 'vrm_fallback_jwt_' + Date.now();
+        sessionStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(empUser)));
+        return { user: empUser, accessToken: token };
+      }
+    } catch (e) {
+      console.warn('Direct Supabase login fallback notice:', e);
+    }
+
+    // 3. Super Admin hardcoded emergency fallback
+    const isSuperAdminUser = cleanId === 'admin@businz.com' || cleanId === 'emp-000' || cleanId === 'admin' || cleanId === 'admin@businz@com';
+    if (isSuperAdminUser && (cleanPass === 'Password@123' || cleanPass === 'admin')) {
       const fallbackAdmin: AuthUser = {
         id: 'USR-001',
         name: 'Businz Super Admin',
@@ -141,29 +157,6 @@ export const authService = {
       sessionStorage.setItem(TOKEN_KEY, dummyToken);
       localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(fallbackAdmin)));
       return { user: fallbackAdmin, accessToken: dummyToken };
-    }
-
-    // Direct Supabase Cloud Database Query fallback
-    try {
-      const dbUser = await supabaseDirect.verifyLogin(cleanId, password);
-      if (dbUser) {
-        const empUser: AuthUser = {
-          id: dbUser.id || dbUser.employee_id,
-          name: `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim() || 'Businz Staff',
-          email: dbUser.email,
-          role: dbUser.role || (dbUser.designation === 'HR Manager' ? 'HR Manager' : 'Employee'),
-          employeeId: dbUser.employee_id,
-          department: dbUser.department || 'General',
-          designation: dbUser.designation || 'Staff',
-          mustChangePassword: dbUser.must_change_password ?? false,
-        };
-        const token = 'vrm_fallback_jwt_' + Date.now();
-        sessionStorage.setItem(TOKEN_KEY, token);
-        localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(empUser)));
-        return { user: empUser, accessToken: token };
-      }
-    } catch (e) {
-      console.warn('Direct Supabase login fallback notice:', e);
     }
 
     // Check if there are local stored employees

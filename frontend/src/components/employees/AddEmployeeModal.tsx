@@ -345,7 +345,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         lastName: '',
         phone: '',
         personalEmail: '',
-        password: '',
+        password: 'Password@123',
         currentLine1: '',
         currentLine2: '',
         currentCity: '',
@@ -719,12 +719,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       return;
     }
 
-    // STEP 3 & 4: Generate or use user-provided password
-    const digits = Math.floor(100000 + Math.random() * 900000).toString();
-    const upperChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const suffixChar = upperChars[Math.floor(Math.random() * upperChars.length)];
-    const generatedTempPassword = formData.password.trim() || `Vrm@${digits}${suffixChar}`;
-    const targetPassword = formData.password.trim() || generatedTempPassword;
+    // STEP 3 & 4: Set employee initial portal login password (defaults to Password@123)
+    const targetPassword = formData.password.trim() || 'Password@123';
     const targetEmail = (formData.personalEmail.trim() || formData.companyEmail.trim() || primaryEmail).toLowerCase();
 
     const newEmp: Employee = {
@@ -952,6 +948,12 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     setEmailDeliveryStatus(emailStatus);
     newEmp.credentialEmailStatus = emailStatus;
     newEmp.password = targetPassword;
+
+    // Cache to localStorage for instant fallback login access
+    try {
+      const stored = JSON.parse(localStorage.getItem('vrm_hrms_employees') || '[]');
+      localStorage.setItem('vrm_hrms_employees', JSON.stringify([newEmp, ...stored.filter((e: any) => e.employeeId !== newEmp.employeeId && e.id !== newEmp.id)]));
+    } catch {}
 
     addEmployee(newEmp);
     setCreatedEmployee(newEmp);

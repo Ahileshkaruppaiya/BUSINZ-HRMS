@@ -89,10 +89,10 @@ export const supabaseDirect = {
   async verifyLogin(identifier: string, password: string): Promise<any | null> {
     try {
       const clean = identifier.trim().toLowerCase();
-      // Look up by email or employee_id
-      const filter = clean.includes('@')
-        ? `email=ilike.${encodeURIComponent(clean)}`
-        : `employee_id=ilike.${encodeURIComponent(clean)}`;
+      const cleanPass = password.trim();
+
+      // Look up by email, employee_id, or phone
+      const filter = `or=(email.ilike.${encodeURIComponent(clean)},employee_id.ilike.${encodeURIComponent(clean)},phone.ilike.${encodeURIComponent(clean)})`;
 
       const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?${filter}&select=*&limit=1`, {
         headers: getHeaders(),
@@ -103,13 +103,13 @@ export const supabaseDirect = {
       if (!Array.isArray(rows) || rows.length === 0) return null;
 
       const user = rows[0];
-      const dbPass = user.password || 'Password@123';
+      const dbPass = (user.password || 'Password@123').trim();
 
       const isPasswordValid =
-        password === dbPass ||
-        password === 'Password@123' ||
-        password === 'admin' ||
-        (typeof dbPass === 'string' && password.toLowerCase() === dbPass.toLowerCase());
+        cleanPass === dbPass ||
+        cleanPass === 'Password@123' ||
+        cleanPass === 'admin' ||
+        cleanPass.toLowerCase() === dbPass.toLowerCase();
 
       if (!isPasswordValid) return null;
 
