@@ -4,7 +4,7 @@ import { z } from 'zod';
 dotenv.config();
 
 const envSchema = z.object({
-  PORT: z.coerce.number().default(8000),
+  PORT: z.union([z.coerce.number(), z.string()]).default(8000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   SUPABASE_URL: z.string().url().default('https://mock-supabase.local'),
   SUPABASE_ANON_KEY: z.string().default('mock-anon-key'),

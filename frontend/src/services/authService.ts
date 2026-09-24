@@ -66,7 +66,7 @@ const safeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     return await fetch(input, init);
   } catch (err) {
     if (err instanceof TypeError) {
-      throw new Error(`Cannot connect to backend server (${API_BASE}). Please ensure the backend server is running on port 8000.`);
+      throw new Error(`Cannot connect to backend API (${API_BASE}). Please ensure the backend server is started and accessible.`);
     }
     throw err;
   }
