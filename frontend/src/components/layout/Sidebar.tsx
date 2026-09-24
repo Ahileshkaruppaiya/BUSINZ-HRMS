@@ -225,17 +225,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return null;
   };
 
-  const isCEO = currentUser.role === 'CEO' || currentUser.designation === 'CEO' || currentUser.employeeId === 'EMP-000';
+  const isCEO = 
+    currentUser.role === 'CEO' || 
+    currentUser.role === 'Super Admin' || 
+    currentUser.designation === 'CEO' || 
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) || 
+    currentUser.employeeId === 'EMP-000';
 
   // Filter menu items by search query and RBAC permissions
   const filteredItems = menuStructure.filter(item => {
-    // Hide Employee directory and Attendance Management modules for Employee role
-    if (currentUser.role === 'Employee' && (item.id === 'employees' || item.id === 'attendance')) {
-      return false;
+    // CEO and Super Admin have unrestricted access to all modules except the employee face punching station
+    if (isCEO) {
+      if (item.id === 'face_attendance') return false;
+      if (!searchFilter.trim()) return true;
+      const query = searchFilter.toLowerCase().trim();
+      return item.label.toLowerCase().includes(query) || item.section.toLowerCase().includes(query);
     }
 
-    // Hide Live Face Attendance for CEO (CEO is exempt from attendance)
-    if (isCEO && item.id === 'face_attendance') {
+    // Hide Employee directory and Attendance Management modules for standard Employee role
+    if (currentUser.role === 'Employee' && (item.id === 'employees' || item.id === 'attendance')) {
       return false;
     }
 

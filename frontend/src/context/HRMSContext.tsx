@@ -235,7 +235,7 @@ const DEFAULT_PERMISSIONS: PermissionMatrix = {
   'CEO': {
     dashboard: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
     employees: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
-    face_attendance: [],
+    face_attendance: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
     attendance: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
     gps_geofence: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
     leaves: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
@@ -1211,6 +1211,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.id && parsed.email && parsed.name && parsed.role && parsed.employeeId) {
+          if (parsed.designation === 'CEO' || (parsed.designation && parsed.designation.toLowerCase().includes('ceo')) || parsed.role === 'CEO') {
+            parsed.role = 'CEO';
+          }
           return parsed;
         }
       } catch (e) {
@@ -1374,8 +1377,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               ifscCode: d.ifscCode || d.ifsc_code || 'HDFC0001234',
               branch: d.branch || 'Main Branch',
             },
-            attendanceMethod: (d.attendanceMethod || d.attendance_method || 'Face Scan') as any,
-            gpsAllowed: d.gpsAllowed ?? true,
+            attendanceMethod: (d.attendanceMethod || d.attendance_method || (d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) ? 'Exempt' : 'Face Scan')) as any,
+            gpsAllowed: d.gpsAllowed ?? (d.designation === 'CEO' ? false : true),
             faceRegistered: d.faceRegistered ?? false,
             facePhotoUrl: d.facePhotoUrl || d.face_photo_url || '',
             workShift: d.workShift || d.work_shift || 'SH-01',
@@ -1383,7 +1386,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             departmentId: d.departmentId || d.department_id,
             designationId: d.designationId || d.designation_id,
             branchId: d.branchId || d.branch_id,
-            role: d.role || (d.designation === 'HR Manager' ? 'HR Manager' : 'Employee'),
+            role: (d.role === 'CEO' || d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) || d.role_id === '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6')
+              ? 'CEO'
+              : (d.role || (d.designation === 'HR Manager' ? 'HR Manager' : 'Employee')),
             mustChangePassword: d.mustChangePassword ?? d.must_change_password ?? false,
             accountStatus: d.accountStatus || d.account_status || 'ACTIVE',
             credentialEmailStatus: d.credentialEmailStatus || d.credential_email_status || 'SENT',
@@ -4474,6 +4479,17 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // RBAC Permission Check
   const hasPermission = (module: ModuleName, action: PermissionAction): boolean => {
+    // Unrestricted Master Authority for Super Admin and CEO across all modules & actions
+    if (
+      currentUser.role === 'Super Admin' ||
+      currentUser.role === 'CEO' ||
+      currentUser.designation === 'CEO' ||
+      (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) ||
+      currentUser.employeeId === 'EMP-000'
+    ) {
+      return true;
+    }
+
     if (module === 'profile') return true;
     if (module === 'settings' && action === 'view') return true;
     if (module === 'tracking') return true;

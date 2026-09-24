@@ -102,8 +102,19 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
       case 'employees':
         return <EmployeeList openAddModal={quickAddModal === 'employee'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'face_attendance': {
-        const isCEO = currentUser.role === 'CEO' || currentUser.designation === 'CEO' || currentUser.employeeId === 'EMP-000';
-        return isCEO ? <Dashboard /> : <FaceAttendance />;
+        const isCEO = 
+          currentUser.role === 'CEO' || 
+          currentUser.designation === 'CEO' || 
+          (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) || 
+          currentUser.employeeId === 'EMP-000';
+        return isCEO ? (
+          <AttendanceReportsView 
+            title="Attendance Management" 
+            subtitle="Executive attendance logs, muster roll verification, and departmental reports." 
+          />
+        ) : (
+          <FaceAttendance />
+        );
       }
       case 'attendance':
         return <AttendanceReportsView title="Attendance Management" subtitle="Real-time attendance logs, muster roll verification, and departmental reports." />;

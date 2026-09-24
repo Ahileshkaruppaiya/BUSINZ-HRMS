@@ -46,8 +46,13 @@ export const Dashboard: React.FC = () => {
   } = useHRMS();
 
   const canApproveLeave = hasPermission('leaves', 'approve');
-  const isCEO = currentUser.role === 'CEO' || currentUser.role === 'Super Admin' || currentUser.designation === 'CEO' || currentUser.employeeId === 'EMP-000';
-  const isEmployee = currentUser.role === 'Employee';
+  const isCEO = 
+    currentUser.role === 'CEO' || 
+    currentUser.role === 'Super Admin' || 
+    currentUser.designation === 'CEO' || 
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) || 
+    currentUser.employeeId === 'EMP-000';
+  const isEmployee = currentUser.role === 'Employee' && !isCEO;
   const [profileModalEmployee, setProfileModalEmployee] = useState<Employee | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<AttendanceCategoryType | null>(null);
 

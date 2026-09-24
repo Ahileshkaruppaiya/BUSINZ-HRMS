@@ -56,10 +56,12 @@ export const supabaseDirect = {
         basic_salary: Number(emp.basic_salary) || 15000,
         phone: emp.phone || null,
         status: emp.status || 'Active',
-        role_id: emp.role_id || '965e3410-4ab8-4930-9740-89aa34216ac3',
+        role_id: emp.role_id || (emp.designation === 'CEO' || (emp.designation && emp.designation.toLowerCase().includes('ceo'))
+          ? '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6'
+          : '965e3410-4ab8-4930-9740-89aa34216ac3'),
         must_change_password: emp.must_change_password ?? false,
         account_status: emp.account_status || 'ACTIVE',
-        attendance_method: emp.attendance_method || 'Face Scan',
+        attendance_method: emp.attendance_method || (emp.designation === 'CEO' || (emp.designation && emp.designation.toLowerCase().includes('ceo')) ? 'Exempt' : 'Face Scan'),
       };
 
       const res = await fetch(`${SUPABASE_URL}/rest/v1/employees`, {
@@ -112,6 +114,15 @@ export const supabaseDirect = {
         cleanPass.toLowerCase() === dbPass.toLowerCase();
 
       if (!isPasswordValid) return null;
+
+      if (
+        user.role_id === '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6' ||
+        user.designation === 'CEO' ||
+        (user.designation && user.designation.toLowerCase().includes('ceo'))
+      ) {
+        user.role = 'CEO';
+        user.attendance_method = 'Exempt';
+      }
 
       return user;
     } catch (err) {

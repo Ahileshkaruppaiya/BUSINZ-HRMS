@@ -46,6 +46,37 @@ const normalizeRole = (role?: string): Role => {
   }
 };
 
+export const resolveEmployeeRole = (row: any): Role => {
+  if (!row) return 'Employee';
+  const r = (row.role || '').trim();
+  const d = (row.designation || '').trim().toLowerCase();
+  const roleId = row.role_id || '';
+
+  if (
+    r === 'CEO' || 
+    d === 'ceo' || 
+    d.includes('chief executive') || 
+    d.includes('managing director') || 
+    roleId === '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6'
+  ) {
+    return 'CEO';
+  }
+  if (r === 'Super Admin' || d.includes('super admin') || roleId === 'c4f29eb9-d1ae-4d1e-a7ff-15908b2afd59') {
+    return 'Super Admin';
+  }
+  if (r === 'HR Manager' || r === 'HR Admin' || d.includes('hr manager') || d.includes('hr admin') || roleId === '778f15fb-584e-4452-9768-eb305fd09966') {
+    return 'HR Manager';
+  }
+  if (r === 'Finance Manager' || d.includes('finance') || d.includes('accounts') || roleId === 'd89d1984-d3ff-4d30-9f0e-3cda85b32e0a') {
+    return 'Finance Manager';
+  }
+  if (r === 'Department Manager' || r === 'Department Head' || roleId === 'eba38dd1-c2c8-4ca9-9cb4-e64292100d09') {
+    return 'Department Manager';
+  }
+  if (r) return normalizeRole(r);
+  return 'Employee';
+};
+
 export const toAppUser = (user: AuthUser): User => ({
   id: user.id,
   name: user.name,
@@ -125,7 +156,7 @@ export const authService = {
           id: dbUser.id || dbUser.employee_id,
           name: `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim() || 'Businz Staff',
           email: dbUser.email,
-          role: dbUser.role || (dbUser.designation === 'HR Manager' ? 'HR Manager' : (dbUser.role_id === '778f15fb-584e-4452-9768-eb305fd09966' ? 'HR Manager' : (dbUser.role_id === 'c4f29eb9-d1ae-4d1e-a7ff-15908b2afd59' ? 'Super Admin' : 'Employee'))),
+          role: resolveEmployeeRole(dbUser),
           employeeId: dbUser.employee_id,
           department: dbUser.department || 'General',
           designation: dbUser.designation || 'Staff',
@@ -188,7 +219,7 @@ export const authService = {
             id: match.id || match.employeeId,
             name: `${match.firstName || ''} ${match.lastName || ''}`.trim() || 'Businz Employee',
             email: match.email || match.personalEmail || cleanId,
-            role: match.role || (match.designation === 'HR Manager' ? 'HR Manager' : 'Employee'),
+            role: resolveEmployeeRole(match),
             employeeId: match.employeeId,
             department: match.department || 'General',
             designation: match.designation || 'Staff',

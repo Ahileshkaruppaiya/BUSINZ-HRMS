@@ -739,6 +739,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       address: `${formData.currentLine1}, ${formData.currentCity}, ${formData.currentState} - ${formData.currentPincode}`,
       department: formData.department,
       designation: formData.designation,
+      role: formData.role,
       reportingManagerId: formData.reportingManagerId,
       reportingManagerName: formData.reportingManagerName,
       joiningDate: formData.joiningDate,
@@ -762,10 +763,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         ifscCode: formData.ifscCode,
         branch: formData.branch
       },
-      attendanceMethod: formData.attendanceMethod,
-      gpsAllowed: formData.gpsAllowed,
-      faceRegistered: formData.attendanceMethod === 'Face Scan',
-      workShift: formData.shift,
+      attendanceMethod: formData.role === 'CEO' ? 'Exempt' : formData.attendanceMethod,
+      gpsAllowed: formData.role === 'CEO' ? false : formData.gpsAllowed,
+      faceRegistered: formData.role === 'CEO' ? false : (formData.attendanceMethod === 'Face Scan'),
+      workShift: formData.role === 'CEO' ? 'Executive (Exempt)' : formData.shift,
       documents: documents.map(d => ({
         name: d.name,
         type: d.type,
@@ -912,6 +913,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         }
       } else {
         // Fallback: insert directly into Supabase Cloud Database via REST
+        const assignedRoleId = 
+          newEmp.role === 'CEO' 
+            ? '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6' 
+            : (newEmp.role === 'Super Admin' ? 'c4f29eb9-d1ae-4d1e-a7ff-15908b2afd59' : undefined);
+
         await supabaseDirect.insertEmployee({
           employee_id: cleanEmpCode,
           first_name: newEmp.firstName,
@@ -919,6 +925,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           email: primaryEmail,
           password: targetPassword,
           designation: newEmp.designation,
+          role_id: assignedRoleId,
           basic_salary: newEmp.basicSalary,
           phone: newEmp.phone,
           status: newEmp.status,
@@ -928,6 +935,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     } catch {
       // Standalone/offline mode: insert directly into Supabase Cloud Database
       try {
+        const assignedRoleId = 
+          newEmp.role === 'CEO' 
+            ? '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6' 
+            : (newEmp.role === 'Super Admin' ? 'c4f29eb9-d1ae-4d1e-a7ff-15908b2afd59' : undefined);
+
         await supabaseDirect.insertEmployee({
           employee_id: cleanEmpCode,
           first_name: newEmp.firstName,
@@ -935,6 +947,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           email: primaryEmail,
           password: targetPassword,
           designation: newEmp.designation,
+          role_id: assignedRoleId,
           basic_salary: newEmp.basicSalary,
           phone: newEmp.phone,
           status: newEmp.status,
