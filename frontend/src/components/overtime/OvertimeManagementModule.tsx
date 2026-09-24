@@ -509,26 +509,28 @@ export const OvertimeManagementModule: React.FC<OvertimeManagementModuleProps> =
             </button>
           )}
 
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setIsRequestModalOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              borderRadius: '12px',
-              padding: '9px 18px',
-              fontSize: '0.84rem',
-              fontWeight: 700,
-              backgroundColor: '#0E7490',
-              borderColor: '#0E7490',
-              boxShadow: '0 2px 8px rgba(14, 116, 144, 0.2)'
-            }}
-          >
-            <Plus size={16} strokeWidth={2.5} />
-            <span>Request Overtime</span>
-          </button>
+          {!isEmployee && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setIsRequestModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '12px',
+                padding: '9px 18px',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                backgroundColor: '#0E7490',
+                borderColor: '#0E7490',
+                boxShadow: '0 2px 8px rgba(14, 116, 144, 0.2)'
+              }}
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              <span>Request Overtime</span>
+            </button>
+          )}
         </div>
       </div>
 

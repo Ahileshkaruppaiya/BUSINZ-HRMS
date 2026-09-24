@@ -155,9 +155,9 @@ export const Header: React.FC<HeaderProps> = ({
                 position: 'absolute',
                 top: 'calc(100% + 8px)',
                 right: 0,
-                width: '240px',
+                width: '215px',
                 maxWidth: 'calc(100vw - 32px)',
-                padding: '8px 6px',
+                padding: '6px',
                 zIndex: 50,
                 boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.04)',
                 backgroundColor: '#ffffff',
@@ -167,25 +167,6 @@ export const Header: React.FC<HeaderProps> = ({
                 flexDirection: 'column',
                 gap: '2px'
               }}>
-                <div style={{
-                  padding: '6px 10px',
-                  fontSize: '0.68rem',
-                  fontWeight: 800,
-                  color: '#94A3B8',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  borderBottom: '1px solid #F1F5F9',
-                  marginBottom: '4px'
-                }}>
-                  <span>Quick Actions</span>
-                  <span style={{ fontSize: '0.66rem', color: '#0E7490', fontWeight: 700, background: '#ECFEFF', padding: '1px 6px', borderRadius: '4px' }}>
-                    {isAdminOrHR ? 'HR & Admin' : isManager ? 'Manager' : 'Employee'}
-                  </span>
-                </div>
-
                 {/* 1. ADMIN & HR ACTIONS (CEO, Super Admin, HR Manager, HR Admin) */}
                 {isAdminOrHR && (
                   <>
@@ -232,66 +213,6 @@ export const Header: React.FC<HeaderProps> = ({
                         <CheckSquare size={14} />
                       </span>
                       <span>Assign Task</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="dropdown-menu-item"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        onOpenQuickAdd('leave'); 
-                        setShowQuickAddMenu(false); 
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', flexShrink: 0 }}>
-                        <CalendarPlus size={14} />
-                      </span>
-                      <span>Apply / Assign Leave</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="dropdown-menu-item"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        onOpenQuickAdd('overtime'); 
-                        setShowQuickAddMenu(false); 
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EEF2FF', color: '#4F46E5', flexShrink: 0 }}>
-                        <Clock size={14} />
-                      </span>
-                      <span>Request Overtime</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="dropdown-menu-item"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        onOpenQuickAdd('advance_salary'); 
-                        setShowQuickAddMenu(false); 
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#F0FDF4', color: '#16A34A', flexShrink: 0 }}>
-                        <Banknote size={14} />
-                      </span>
-                      <span>Advance Salary / Loan</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="dropdown-menu-item"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        onOpenQuickAdd('expense'); 
-                        setShowQuickAddMenu(false); 
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#FAF5FF', color: '#9333EA', flexShrink: 0 }}>
-                        <Receipt size={14} />
-                      </span>
-                      <span>Submit Expense</span>
                     </button>
                   </>
                 )}
@@ -342,21 +263,6 @@ export const Header: React.FC<HeaderProps> = ({
                         <CalendarPlus size={14} />
                       </span>
                       <span>Apply Leave</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="dropdown-menu-item"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        onOpenQuickAdd('overtime'); 
-                        setShowQuickAddMenu(false); 
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EEF2FF', color: '#4F46E5', flexShrink: 0 }}>
-                        <Clock size={14} />
-                      </span>
-                      <span>Request Overtime</span>
                     </button>
 
                     <button
@@ -422,21 +328,6 @@ export const Header: React.FC<HeaderProps> = ({
                         <Clock size={14} />
                       </span>
                       <span>Request Shift Swap</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="dropdown-menu-item"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        onOpenQuickAdd('overtime'); 
-                        setShowQuickAddMenu(false); 
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EEF2FF', color: '#4F46E5', flexShrink: 0 }}>
-                        <Clock size={14} />
-                      </span>
-                      <span>Request Overtime</span>
                     </button>
 
                     <button
