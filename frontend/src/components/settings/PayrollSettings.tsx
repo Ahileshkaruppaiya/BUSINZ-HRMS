@@ -3,7 +3,6 @@ import { useHRMS } from '../../context/HRMSContext';
 import { 
   SalaryComponentConfig 
 } from '../../types/settings';
-import { validateFormula, evaluateFormula } from '../../services/policyEngine';
 import { payrollApi } from '../../services/payrollApi';
 import { INITIAL_PAYROLL_CONFIG } from '../../data/settingsInitialData';
 import { formatCurrency } from '../../utils/numbers';
@@ -11,12 +10,10 @@ import {
   CreditCard, 
   Plus, 
   Edit3, 
-  Calculator, 
   CheckCircle2, 
   Sliders, 
   FileText, 
   Layers, 
-  Play, 
   AlertCircle,
   ToggleLeft,
   ToggleRight,
@@ -35,29 +32,6 @@ export const PayrollSettings: React.FC = () => {
   } = useHRMS();
 
   const isPrivileged = currentUser.role !== 'Employee';
-  const [activeTab, setActiveTab] = useState<'components' | 'formula_tester'>('components');
-
-  // Formula Sandbox Tester State
-  const [sandboxFormula, setSandboxFormula] = useState('');
-  const [sandboxInputs, setSandboxInputs] = useState({
-    BASIC: 0,
-    HRA: 0,
-    GROSS: 0,
-    CTC: 0,
-    DAILY_SALARY: 0,
-    WORKING_DAYS: 26,
-    PAID_DAYS: 26,
-    UNPAID_DAYS: 0,
-    LATE_COUNT: 0,
-    LEAVE_DAYS: 0,
-    INCENTIVE: 0,
-    BONUS: 0,
-    REWARD: 0
-  });
-  const [sandboxResult, setSandboxResult] = useState<number | null>(null);
-  const [sandboxValidation, setSandboxValidation] = useState<{ isValid: boolean; error?: string }>({ isValid: true });
-
-
 
   // Component Edit Modal
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
@@ -85,17 +59,6 @@ export const PayrollSettings: React.FC = () => {
     isConfidential: false,
     description: ''
   });
-
-  const runSandboxCalculation = () => {
-    const valid = validateFormula(sandboxFormula);
-    setSandboxValidation(valid);
-    if (valid.isValid) {
-      const res = evaluateFormula(sandboxFormula, sandboxInputs);
-      setSandboxResult(res);
-    } else {
-      setSandboxResult(null);
-    }
-  };
 
   const openAddCompModal = () => {
     openAddCompModalWithType('EARNING');
@@ -205,102 +168,60 @@ export const PayrollSettings: React.FC = () => {
         border: '1px solid #E2E8F0',
         boxShadow: '0 1px 3px rgba(15, 23, 42, 0.02)'
       }}>
-        {/* Navigation Tabs (Segmented Pills) */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          backgroundColor: '#F1F5F9',
-          padding: '4px',
-          borderRadius: '10px',
-          flexWrap: 'wrap'
-        }}>
-          <button
-            type="button"
-            onClick={() => setActiveTab('components')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: activeTab === 'components' ? '#FFFFFF' : 'transparent',
-              color: activeTab === 'components' ? '#0E7490' : '#64748B',
-              boxShadow: activeTab === 'components' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-              fontWeight: activeTab === 'components' ? 750 : 600,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Layers size={15} />
+        {/* Left: Section Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '7px 14px',
+            borderRadius: '8px',
+            backgroundColor: '#ECFEFF',
+            color: '#0E7490',
+            fontWeight: 750,
+            fontSize: '0.84rem'
+          }}>
+            <Layers size={16} />
             <span>Salary Components</span>
             <span style={{
               fontSize: '0.7rem',
               padding: '1px 6px',
               borderRadius: '999px',
-              backgroundColor: activeTab === 'components' ? '#ECFEFF' : '#E2E8F0',
-              color: activeTab === 'components' ? '#0E7490' : '#64748B',
+              backgroundColor: '#FFFFFF',
+              color: '#0E7490',
               fontWeight: 700
             }}>
               {earnings.length + deductions.length}
             </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('formula_tester')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: activeTab === 'formula_tester' ? '#FFFFFF' : 'transparent',
-              color: activeTab === 'formula_tester' ? '#0E7490' : '#64748B',
-              boxShadow: activeTab === 'formula_tester' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-              fontWeight: activeTab === 'formula_tester' ? 750 : 600,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Calculator size={15} />
-            <span>Safe Formula Builder</span>
-          </button>
+          </div>
         </div>
 
-        {/* Top Add Component Button */}
-        {activeTab === 'components' && (
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => openAddCompModal()}
-            style={{ 
-              display: 'inline-flex', 
-              alignItems: 'center', 
-              gap: '6px', 
-              borderRadius: '10px', 
-              fontWeight: 750,
-              backgroundColor: '#0E7490',
-              color: '#FFFFFF',
-              border: 'none',
-              padding: '8px 16px',
-              fontSize: '0.84rem',
-              cursor: 'pointer',
-              boxShadow: '0 2px 5px rgba(14, 116, 144, 0.25)'
-            }}
-          >
-            <Plus size={16} /> Add Salary Component
-          </button>
-        )}
+        {/* Right: Add Component Button */}
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={() => openAddCompModal()}
+          style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: '6px', 
+            borderRadius: '10px', 
+            fontWeight: 750,
+            backgroundColor: '#0E7490',
+            color: '#FFFFFF',
+            border: 'none',
+            padding: '8px 16px',
+            fontSize: '0.84rem',
+            cursor: 'pointer',
+            boxShadow: '0 2px 5px rgba(14, 116, 144, 0.25)'
+          }}
+        >
+          <Plus size={16} /> Add Salary Component
+        </button>
       </div>
 
-      {/* TAB 1: SALARY COMPONENTS */}
-      {activeTab === 'components' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* SALARY COMPONENTS TABLES */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Earnings Table */}
           <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7ECF3', padding: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '14px' }}>
@@ -483,166 +404,6 @@ export const PayrollSettings: React.FC = () => {
             </table>
           </div>
         </div>
-      )}
-
-      {/* TAB 2: FORMULA BUILDER & TESTER */}
-      {activeTab === 'formula_tester' && (
-        <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7ECF3', padding: '24px' }}>
-          <div style={{ marginBottom: '18px' }}>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-              Safe Formula Builder & Mathematical Sandbox
-            </h3>
-            <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: '#64748B' }}>
-              Test formulas in real-time with sample payroll, attendance, and leave variables before saving into master policies.
-            </p>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px' }}>
-            <div>
-              <label className="form-label" style={{ fontWeight: 700 }}>Expression Formula</label>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                <input
-                  type="text"
-                  className="form-control"
-                  style={{ fontFamily: 'monospace', fontSize: '0.95rem' }}
-                  value={sandboxFormula}
-                  onChange={e => setSandboxFormula(e.target.value)}
-                  placeholder="e.g. BASIC * 12 / 100 or DAILY_SALARY * UNPAID_DAYS"
-                />
-                <button className="btn btn-primary" onClick={runSandboxCalculation} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Play size={15} /> Evaluate
-                </button>
-              </div>
-
-              {sandboxValidation.isValid ? (
-                <div style={{
-                  padding: '16px',
-                  backgroundColor: '#ECFEFF',
-                  border: '1px solid #A5F3FC',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <span style={{ fontSize: '0.78rem', color: '#0E7490', fontWeight: 700, textTransform: 'uppercase' }}>
-                      Calculated Output Result
-                    </span>
-                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0E7490' }}>
-                      {sandboxResult !== null ? formatCurrency(sandboxResult) : '—'}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 600 }}>
-                    ✓ Valid Syntax & Precedence
-                  </span>
-                </div>
-              ) : (
-                <div style={{ padding: '12px', backgroundColor: '#FEE2E2', border: '1px solid #FECACA', borderRadius: '12px', color: '#DC2626', fontSize: '0.85rem', fontWeight: 600 }}>
-                  ⚠ Formula Error: {sandboxValidation.error}
-                </div>
-              )}
-
-              {/* Supported Variables Legend */}
-              <div style={{ marginTop: '18px' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                  Available Engine Variables
-                </span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
-                  {['BASIC', 'HRA', 'GROSS', 'CTC', 'DAILY_SALARY', 'WORKING_DAYS', 'PAID_DAYS', 'UNPAID_DAYS', 'LATE_COUNT', 'LEAVE_DAYS', 'INCENTIVE', 'BONUS', 'REWARD'].map(v => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setSandboxFormula(prev => prev ? `${prev} + ${v}` : v)}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#F8FAFC',
-                        fontSize: '0.74rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        fontFamily: 'monospace'
-                      }}
-                      title={`Insert ${v}`}
-                    >
-                      +{v}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Mock Inputs Simulator */}
-            <div style={{ backgroundColor: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                Test Input Variables
-              </span>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '10px' }}>
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: '#64748B' }}>BASIC (₹)</label>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    value={sandboxInputs.BASIC}
-                    onChange={e => setSandboxInputs({ ...sandboxInputs, BASIC: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: '#64748B' }}>GROSS (₹)</label>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    value={sandboxInputs.GROSS}
-                    onChange={e => setSandboxInputs({ ...sandboxInputs, GROSS: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: '#64748B' }}>DAILY_SALARY (₹)</label>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    value={sandboxInputs.DAILY_SALARY}
-                    onChange={e => setSandboxInputs({ ...sandboxInputs, DAILY_SALARY: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: '#64748B' }}>UNPAID_DAYS</label>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    value={sandboxInputs.UNPAID_DAYS}
-                    onChange={e => setSandboxInputs({ ...sandboxInputs, UNPAID_DAYS: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: '#64748B' }}>LATE_COUNT</label>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    value={sandboxInputs.LATE_COUNT}
-                    onChange={e => setSandboxInputs({ ...sandboxInputs, LATE_COUNT: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: '#64748B' }}>REWARD (₹)</label>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    value={sandboxInputs.REWARD}
-                    onChange={e => setSandboxInputs({ ...sandboxInputs, REWARD: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* COMPONENT CREATE / EDIT MODAL */}
       {isCompModalOpen && (
