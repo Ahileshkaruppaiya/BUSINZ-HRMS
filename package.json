@@ -2,12 +2,14 @@
   "name": "hrms",
   "version": "1.0.0",
   "private": true,
+  "main": "server.js",
+  "type": "module",
   "scripts": {
+    "start": "node server.js",
     "dev": "concurrently -n \"backend,frontend\" -c \"cyan,magenta\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "dev:all": "concurrently -n \"backend,frontend\" -c \"cyan,magenta\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run dev",
-    "start": "npm --prefix backend run start",
     "build": "npm --prefix backend run build && npm --prefix frontend run build",
     "build:backend": "npm --prefix backend run build",
     "build:frontend": "npm --prefix frontend run build",
@@ -15,7 +17,24 @@
     "db:sync": "npm --prefix backend run sync:db",
     "db:seed": "npm --prefix backend run seed:db"
   },
+  "dependencies": {
+    "@google/genai": "^2.24.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "bcrypt": "^5.1.1",
+    "compression": "^1.8.2",
+    "cors": "^2.8.5",
+    "decimal.js": "^10.5.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^10.0.10",
+    "pg": "^8.23.0",
+    "zod": "^3.24.2"
+  },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "concurrently": "^10.0.5"
   }
 }

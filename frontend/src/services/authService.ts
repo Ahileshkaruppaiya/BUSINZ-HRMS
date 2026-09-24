@@ -57,6 +57,16 @@ export const toAppUser = (user: AuthUser): User => ({
 });
 
 const readError = async (response: Response, fallback: string): Promise<string> => {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    if (response.status === 404) {
+      return `Backend API endpoint not found (HTTP 404). Please ensure the Node.js backend is running on the server.`;
+    }
+    if (response.status >= 500) {
+      return `Backend server error (HTTP ${response.status}). Please check server logs.`;
+    }
+    return `Server responded with HTTP ${response.status}. Please check backend connection.`;
+  }
   const body = (await response.json().catch(() => ({}))) as ApiResponse<unknown>;
   return body.error?.message || fallback;
 };
