@@ -882,7 +882,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     }
 
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('hrms_auth_token');
+      const token = 
+        sessionStorage.getItem('vrm_auth_token') || 
+        localStorage.getItem('vrm_auth_token') || 
+        localStorage.getItem('token') || 
+        localStorage.getItem('hrms_auth_token');
       const apiRes = await fetch(`${API_BASE_URL}/employees`, {
         method: 'POST',
         headers: {

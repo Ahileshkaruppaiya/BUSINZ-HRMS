@@ -123,6 +123,7 @@ import {
 import { DEFAULT_LOAN_POLICIES, INITIAL_LOAN_RECORDS } from '../data/loanInitialData';
 import { calculateEmployeePayroll } from '../services/policyEngine';
 import { payrollApi } from '../services/payrollApi';
+import { API_BASE_URL } from '../config/api';
 import {
   INITIAL_ENHANCED_TASKS,
   INITIAL_MOM_MEETINGS,
@@ -1275,9 +1276,118 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return url;
   };
 
-  const [employees, setEmployees] = useState<Employee[]>(() => 
-    INITIAL_EMPLOYEES.filter(e => !isSystemAdmin(e))
-  );
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_employees');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading employees from localStorage:', e);
+    }
+    return INITIAL_EMPLOYEES.filter(e => !isSystemAdmin(e));
+  });
+
+  // LocalStorage persistence for employees
+  useEffect(() => {
+    try {
+      localStorage.setItem('vrm_hrms_employees', JSON.stringify(employees));
+    } catch (e) {
+      console.warn('Error persisting employees to localStorage:', e);
+    }
+  }, [employees]);
+
+  // Live Supabase Database synchronization for employees
+  useEffect(() => {
+    let isCancelled = false;
+    const syncEmployeesFromDatabase = async () => {
+      const token = 
+        sessionStorage.getItem('vrm_auth_token') || 
+        localStorage.getItem('vrm_auth_token') || 
+        localStorage.getItem('token') || 
+        localStorage.getItem('hrms_auth_token');
+
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/employees`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!res.ok) return;
+
+        const body = await res.json();
+        if (body.success && Array.isArray(body.data) && body.data.length > 0 && !isCancelled) {
+          const mappedFromDb: Employee[] = body.data.map((d: any) => ({
+            id: d.id,
+            employeeId: d.employeeId || d.employee_id,
+            firstName: d.firstName || d.first_name || '',
+            lastName: d.lastName || d.last_name || '',
+            email: d.email || '',
+            phone: d.phone || '+91 98765 43210',
+            dob: d.dob || '1995-01-01',
+            gender: (d.gender as any) || 'Male',
+            address: d.address || 'Chennai, Tamil Nadu',
+            department: d.department || 'General',
+            designation: d.designation || 'Staff',
+            reportingManagerId: d.reportingManagerId || d.reporting_manager_id || '',
+            reportingManagerName: d.reportingManagerName || d.reporting_manager_name || '',
+            joiningDate: d.joiningDate || d.created_at?.split('T')[0] || '2026-01-01',
+            employmentType: (d.employmentType || d.employment_type || 'Full-Time') as any,
+            status: (d.status === 'Active' || d.status === 'Terminated' || d.status === 'On Leave') ? d.status : 'Active',
+            avatar: d.avatar || d.avatar_url || '',
+            basicSalary: Number(d.basicSalary || d.basic_salary) || 15000,
+            allowances: {
+              hra: Number(d.hra || d.allowances_hra) || 0,
+              transport: Number(d.conveyance || d.allowances_transport) || 0,
+              medical: Number(d.allowances_medical) || 0,
+              special: Number(d.allowances_special) || 0,
+              da: Number(d.da) || 0,
+              conveyance: Number(d.conveyance) || 0,
+            },
+            withPf: d.withPf ?? true,
+            bankDetails: {
+              bankName: d.bankName || d.bank_name || 'HDFC Bank',
+              accountNumber: d.accountNumber || d.account_number || '****1001',
+              ifscCode: d.ifscCode || d.ifsc_code || 'HDFC0001234',
+              branch: d.branch || 'Main Branch',
+            },
+            attendanceMethod: (d.attendanceMethod || d.attendance_method || 'Face Scan') as any,
+            gpsAllowed: d.gpsAllowed ?? true,
+            faceRegistered: d.faceRegistered ?? false,
+            facePhotoUrl: d.facePhotoUrl || d.face_photo_url || '',
+            workShift: d.workShift || d.work_shift || 'SH-01',
+            documents: Array.isArray(d.documents) ? d.documents : [],
+            departmentId: d.departmentId || d.department_id,
+            designationId: d.designationId || d.designation_id,
+            branchId: d.branchId || d.branch_id,
+            role: d.role || (d.designation === 'HR Manager' ? 'HR Manager' : 'Employee'),
+            mustChangePassword: d.mustChangePassword ?? d.must_change_password ?? false,
+            accountStatus: d.accountStatus || d.account_status || 'ACTIVE',
+            credentialEmailStatus: d.credentialEmailStatus || d.credential_email_status || 'SENT',
+            credentialEmailSentAt: d.credentialEmailSentAt || d.credential_email_sent_at || '',
+            authUserId: d.authUserId || d.auth_id || d.id,
+            password: d.password,
+          }));
+
+          setEmployees(prev => {
+            const dbEmpIds = new Set(mappedFromDb.map(e => e.employeeId));
+            const retainedLocals = prev.filter(e => !dbEmpIds.has(e.employeeId));
+            return [...mappedFromDb, ...retainedLocals];
+          });
+        }
+      } catch (err) {
+        // Silent fallback for offline or development modes
+      }
+    };
+
+    syncEmployeesFromDatabase();
+    return () => { isCancelled = true; };
+  }, []);
 
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
   const [attendanceAuditLogs, setAttendanceAuditLogs] = useState<AttendanceAuditLog[]>(INITIAL_ATTENDANCE_AUDIT_LOGS);
