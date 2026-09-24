@@ -412,7 +412,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   }}
                   onClick={() => setIsFormReady(true)}
                   required
-                  placeholder="e.g. admin@businz.com or EMP-000"
                   style={{
                     width: '100%',
                     padding: '12px 14px 12px 38px',
