@@ -43,7 +43,15 @@ import { downloadElementAsPDF, downloadCSV, downloadExcel, downloadPDF, ExportCo
 import { ExportDropdown } from '../common/ExportDropdown';
 import { StandardTablePagination } from '../common/StandardTablePagination';
 
-export const AdvanceSalaryManagement: React.FC = () => {
+interface AdvanceSalaryManagementProps {
+  openAddModal?: boolean;
+  onCloseQuickAdd?: () => void;
+}
+
+export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = ({
+  openAddModal = false,
+  onCloseQuickAdd
+}) => {
   const { 
     currentUser, 
     employees, 
@@ -126,6 +134,13 @@ export const AdvanceSalaryManagement: React.FC = () => {
   const [disbursementModalRecord, setDisbursementModalRecord] = useState<LoanRecord | null>(null);
   const [manualRepaymentModalRecord, setManualRepaymentModalRecord] = useState<LoanRecord | null>(null);
   const [scheduleModalRecord, setScheduleModalRecord] = useState<LoanRecord | null>(null);
+
+  // Sync quick add modal trigger from header
+  useEffect(() => {
+    if (openAddModal) {
+      openRequestModal();
+    }
+  }, [openAddModal]);
 
   // Request Form State
   const [requestFormData, setRequestFormData] = useState<{
@@ -371,6 +386,7 @@ export const AdvanceSalaryManagement: React.FC = () => {
     if (res.success) {
       showFeedback('success', `Loan Request submitted successfully for ${targetEmp.firstName} (Ref: ${res.loanId})!`);
       setIsRequestModalOpen(false);
+      if (onCloseQuickAdd) onCloseQuickAdd();
     } else {
       showFeedback('error', res.message);
     }
@@ -1389,7 +1405,10 @@ export const AdvanceSalaryManagement: React.FC = () => {
                 </div>
                 <button 
                   type="button" 
-                  onClick={() => setIsRequestModalOpen(false)}
+                  onClick={() => {
+                    setIsRequestModalOpen(false);
+                    if (onCloseQuickAdd) onCloseQuickAdd();
+                  }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', padding: 0 }}
                   aria-label="Close modal"
                 >
@@ -1607,7 +1626,10 @@ export const AdvanceSalaryManagement: React.FC = () => {
                 <button 
                   type="button" 
                   className="btn btn-secondary"
-                  onClick={() => setIsRequestModalOpen(false)}
+                  onClick={() => {
+                    setIsRequestModalOpen(false);
+                    if (onCloseQuickAdd) onCloseQuickAdd();
+                  }}
                   style={{ borderRadius: '10px', padding: '9px 18px', fontWeight: 600, fontSize: '0.85rem' }}
                 >
                   Cancel

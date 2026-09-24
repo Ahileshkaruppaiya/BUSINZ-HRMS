@@ -71,7 +71,7 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
     }
   };
 
-  const [showModal, setShowModal] = useState<boolean>((openApplyModal && isEmployeeRole) || false);
+  const [showModal, setShowModal] = useState<boolean>(openApplyModal || false);
   const [inspectLeave, setInspectLeave] = useState<LeaveRequest | null>(null);
   const [overrideLeave, setOverrideLeave] = useState<LeaveRequest | null>(null);
 
@@ -172,8 +172,8 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
   });
 
   React.useEffect(() => {
-    if (openApplyModal && isEmployeeRole) setShowModal(true);
-  }, [openApplyModal, isEmployeeRole]);
+    if (openApplyModal) setShowModal(true);
+  }, [openApplyModal]);
 
   React.useEffect(() => {
     if (currentUser.employeeId) {
@@ -705,7 +705,10 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
                 </p>
               </div>
               <button 
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  if (onCloseQuickAdd) onCloseQuickAdd();
+                }}
                 style={{
                   width: '30px',
                   height: '30px',
@@ -840,7 +843,10 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
                 <button 
                   type="button" 
                   className="btn btn-secondary btn-sm" 
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    if (onCloseQuickAdd) onCloseQuickAdd();
+                  }}
                   style={{ borderRadius: '10px', padding: '10px 20px' }}
                 >
                   Cancel

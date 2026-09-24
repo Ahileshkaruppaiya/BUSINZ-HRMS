@@ -47,7 +47,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
   const isHrOrCeo = currentUser?.role === 'Super Admin' || currentUser?.role === 'HR Admin' || currentUser?.role === 'Management' || currentUser?.role?.toLowerCase() === 'ceo';
 
   // Quick Add modal states
-  const [quickAddModal, setQuickAddModal] = useState<'employee' | 'leave' | 'task' | 'expense' | 'overtime' | null>(null);
+  const [quickAddModal, setQuickAddModal] = useState<'employee' | 'leave' | 'task' | 'expense' | 'overtime' | 'shift' | 'advance_salary' | null>(null);
 
   // Monitor viewport resize for responsive mobile detection
   useEffect(() => {
@@ -123,7 +123,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
       case 'leaves':
         return <LeaveManagement openApplyModal={quickAddModal === 'leave'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'shifts':
-        return <ShiftManagement />;
+        return <ShiftManagement openAddModal={quickAddModal === 'shift'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'overtime':
         return <OvertimeManagementModule openRequestModal={quickAddModal === 'overtime'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'performance':
@@ -137,7 +137,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
       case 'payroll':
         return <PayrollManagement />;
       case 'advance_salary':
-        return <AdvanceSalaryManagement />;
+        return <AdvanceSalaryManagement openAddModal={quickAddModal === 'advance_salary'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'reports':
         return <AttendanceReportsView />;
       case 'organization':
@@ -186,8 +186,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
           onOpenQuickAdd={(type) => {
             if (type === 'employee') handleSelectModule('employees');
             if (type === 'leave') handleSelectModule('leaves');
+            if (type === 'shift') handleSelectModule('shifts');
             if (type === 'task') handleSelectModule('tasks');
             if (type === 'expense') handleSelectModule('finance');
+            if (type === 'overtime') handleSelectModule('overtime');
+            if (type === 'advance_salary') handleSelectModule('advance_salary');
             setQuickAddModal(type);
           }}
         />

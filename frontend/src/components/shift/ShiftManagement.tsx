@@ -17,7 +17,15 @@ import {
 } from 'lucide-react';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
-export const ShiftManagement: React.FC = () => {
+interface ShiftManagementProps {
+  openAddModal?: boolean;
+  onCloseQuickAdd?: () => void;
+}
+
+export const ShiftManagement: React.FC<ShiftManagementProps> = ({
+  openAddModal = false,
+  onCloseQuickAdd
+}) => {
   const { 
     shifts, 
     addShift, 
@@ -62,6 +70,17 @@ export const ShiftManagement: React.FC = () => {
   const [rejectModal, setRejectModal] = useState<{ requestId: string; employeeName: string } | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Sync quick add modal trigger from header
+  React.useEffect(() => {
+    if (openAddModal) {
+      if (canManageShifts) {
+        setShowAddShiftModal(true);
+      } else {
+        setShowSwapModal(true);
+      }
+    }
+  }, [openAddModal, canManageShifts]);
 
   // Identify current employee record
   const currentEmp = employees.find(e => 
@@ -161,6 +180,7 @@ export const ShiftManagement: React.FC = () => {
     });
 
     setShowAddShiftModal(false);
+    if (onCloseQuickAdd) onCloseQuickAdd();
     setShiftForm({
       shiftName: '',
       startTime: '09:00',
@@ -232,6 +252,7 @@ export const ShiftManagement: React.FC = () => {
       reason: swapForm.reason
     });
     setShowSwapModal(false);
+    if (onCloseQuickAdd) onCloseQuickAdd();
     triggerToast('Shift change swap request submitted successfully! Pending HR / CEO approval.');
   };
 
@@ -649,7 +670,7 @@ export const ShiftManagement: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: '520px' }}>
             <div className="modal-header">
               <h2>Add New Shift Schedule</h2>
-              <button onClick={() => setShowAddShiftModal(false)}>✕</button>
+              <button onClick={() => { setShowAddShiftModal(false); if (onCloseQuickAdd) onCloseQuickAdd(); }}>✕</button>
             </div>
             <form onSubmit={handleAddShift}>
               <div className="modal-body">
@@ -695,7 +716,7 @@ export const ShiftManagement: React.FC = () => {
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowAddShiftModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowAddShiftModal(false); if (onCloseQuickAdd) onCloseQuickAdd(); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary btn-sm">Create Shift</button>
               </div>
             </form>
@@ -774,7 +795,7 @@ export const ShiftManagement: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: '480px' }}>
             <div className="modal-header">
               <h2>Request Shift Swap / Change</h2>
-              <button onClick={() => setShowSwapModal(false)}>✕</button>
+              <button onClick={() => { setShowSwapModal(false); if (onCloseQuickAdd) onCloseQuickAdd(); }}>✕</button>
             </div>
             <form onSubmit={handleRequestSwap}>
               <div className="modal-body">
@@ -798,7 +819,7 @@ export const ShiftManagement: React.FC = () => {
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowSwapModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowSwapModal(false); if (onCloseQuickAdd) onCloseQuickAdd(); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary btn-sm">Submit Request</button>
               </div>
             </form>

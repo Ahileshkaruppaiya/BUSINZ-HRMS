@@ -93,10 +93,10 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
   React.useEffect(() => {
-    if (openAddModal && isEmployeeRole) {
+    if (openAddModal) {
       setShowModal(true);
     }
-  }, [openAddModal, isEmployeeRole]);
+  }, [openAddModal]);
 
   React.useEffect(() => {
     if (currentUser.employeeId) {
@@ -1158,7 +1158,10 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
               </div>
               <button 
                 type="button" 
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  if (onCloseQuickAdd) onCloseQuickAdd();
+                }}
                 style={{ 
                   width: '32px', 
                   height: '32px', 
@@ -1467,7 +1470,10 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                 <button 
                   type="button" 
                   className="btn btn-secondary btn-sm" 
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    if (onCloseQuickAdd) onCloseQuickAdd();
+                  }}
                   style={{ borderRadius: '10px', padding: '8px 16px' }}
                 >
                   Cancel

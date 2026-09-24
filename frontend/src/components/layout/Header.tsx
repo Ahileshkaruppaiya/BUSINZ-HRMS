@@ -6,14 +6,22 @@ import {
   ChevronDown, 
   Menu, 
   LogOut, 
-  User
+  User,
+  UserPlus,
+  Clock,
+  CalendarPlus,
+  CheckSquare,
+  Receipt,
+  Banknote
 } from 'lucide-react';
+
+export type QuickAddType = 'employee' | 'leave' | 'task' | 'expense' | 'overtime' | 'shift' | 'advance_salary';
 
 interface HeaderProps {
   toggleSidebar: () => void;
   isSidebarCollapsed: boolean;
   onLogout?: () => void;
-  onOpenQuickAdd: (type: 'employee' | 'leave' | 'task' | 'expense') => void;
+  onOpenQuickAdd: (type: QuickAddType) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -37,6 +45,36 @@ export const Header: React.FC<HeaderProps> = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showQuickAddMenu, setShowQuickAddMenu] = useState(false);
+
+  // Role resolution for Quick Add options
+  const userRole = (currentUser?.role as string) || '';
+  const isSuperAdminOrCEO = 
+    userRole === 'Super Admin' || 
+    userRole === 'CEO' || 
+    userRole === 'Management' || 
+    userRole === 'ERP Administrator' ||
+    currentUser?.designation === 'CEO' || 
+    currentUser?.employeeId === 'EMP-000' ||
+    (currentUser?.designation && currentUser.designation.toLowerCase().includes('ceo')) || 
+    (currentUser?.designation && currentUser.designation.toLowerCase().includes('director'));
+
+  const isHR = 
+    userRole === 'HR Admin' || 
+    userRole === 'HR Manager' || 
+    userRole === 'HR' || 
+    (currentUser?.department && currentUser.department.toLowerCase().includes('hr')) ||
+    (currentUser?.designation && currentUser.designation.toLowerCase().includes('hr'));
+
+  const isManager = 
+    userRole === 'Manager' || 
+    userRole === 'Department Manager' || 
+    userRole === 'Department Head' || 
+    userRole === 'Team Lead' || 
+    userRole.toLowerCase().includes('manager') || 
+    userRole.toLowerCase().includes('lead');
+
+  const isAdminOrHR = isSuperAdminOrCEO || isHR;
+  const isGeneralEmployee = !isAdminOrHR && !isManager;
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -117,52 +155,335 @@ export const Header: React.FC<HeaderProps> = ({
                 position: 'absolute',
                 top: 'calc(100% + 8px)',
                 right: 0,
-                width: '190px',
+                width: '240px',
                 maxWidth: 'calc(100vw - 32px)',
-                padding: '6px',
+                padding: '8px 6px',
                 zIndex: 50,
-                boxShadow: 'var(--shadow-xl)',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.04)',
                 backgroundColor: '#ffffff',
-                borderRadius: '12px'
+                borderRadius: '14px',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px'
               }}>
-                {currentUser.role === 'Employee' && (
-                  <button
-                    type="button"
-                    className="dropdown-menu-item"
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      onOpenQuickAdd('leave'); 
-                      setShowQuickAddMenu(false); 
-                    }}
-                  >
-                    + Apply Leave
-                  </button>
+                <div style={{
+                  padding: '6px 10px',
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
+                  color: '#94A3B8',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderBottom: '1px solid #F1F5F9',
+                  marginBottom: '4px'
+                }}>
+                  <span>Quick Actions</span>
+                  <span style={{ fontSize: '0.66rem', color: '#0E7490', fontWeight: 700, background: '#ECFEFF', padding: '1px 6px', borderRadius: '4px' }}>
+                    {isAdminOrHR ? 'HR & Admin' : isManager ? 'Manager' : 'Employee'}
+                  </span>
+                </div>
+
+                {/* 1. ADMIN & HR ACTIONS (CEO, Super Admin, HR Manager, HR Admin) */}
+                {isAdminOrHR && (
+                  <>
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('employee'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', flexShrink: 0 }}>
+                        <UserPlus size={14} />
+                      </span>
+                      <span>Onboard Employee</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('shift'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#FEF3C7', color: '#D97706', flexShrink: 0 }}>
+                        <Clock size={14} />
+                      </span>
+                      <span>Add Shift Schedule</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('task'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', flexShrink: 0 }}>
+                        <CheckSquare size={14} />
+                      </span>
+                      <span>Assign Task</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('leave'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', flexShrink: 0 }}>
+                        <CalendarPlus size={14} />
+                      </span>
+                      <span>Apply / Assign Leave</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('overtime'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EEF2FF', color: '#4F46E5', flexShrink: 0 }}>
+                        <Clock size={14} />
+                      </span>
+                      <span>Request Overtime</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('advance_salary'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#F0FDF4', color: '#16A34A', flexShrink: 0 }}>
+                        <Banknote size={14} />
+                      </span>
+                      <span>Advance Salary / Loan</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('expense'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#FAF5FF', color: '#9333EA', flexShrink: 0 }}>
+                        <Receipt size={14} />
+                      </span>
+                      <span>Submit Expense</span>
+                    </button>
+                  </>
                 )}
-                {currentUser.role !== 'Employee' && (
-                  <button
-                    type="button"
-                    className="dropdown-menu-item"
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      onOpenQuickAdd('task'); 
-                      setShowQuickAddMenu(false); 
-                    }}
-                  >
-                    {currentUser.role === 'CEO' || currentUser.designation === 'CEO' || currentUser.employeeId === 'EMP-000' ? '+ Assign Task' : '+ Create Task'}
-                  </button>
+
+                {/* 2. MANAGER / TEAM LEAD ACTIONS */}
+                {isManager && !isAdminOrHR && (
+                  <>
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('task'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', flexShrink: 0 }}>
+                        <CheckSquare size={14} />
+                      </span>
+                      <span>Assign Team Task</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('shift'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#FEF3C7', color: '#D97706', flexShrink: 0 }}>
+                        <Clock size={14} />
+                      </span>
+                      <span>Manage Shift Roster</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('leave'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', flexShrink: 0 }}>
+                        <CalendarPlus size={14} />
+                      </span>
+                      <span>Apply Leave</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('overtime'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EEF2FF', color: '#4F46E5', flexShrink: 0 }}>
+                        <Clock size={14} />
+                      </span>
+                      <span>Request Overtime</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('advance_salary'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#F0FDF4', color: '#16A34A', flexShrink: 0 }}>
+                        <Banknote size={14} />
+                      </span>
+                      <span>Advance Salary / Loan</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('expense'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#FAF5FF', color: '#9333EA', flexShrink: 0 }}>
+                        <Receipt size={14} />
+                      </span>
+                      <span>Submit Expense Claim</span>
+                    </button>
+                  </>
                 )}
-                {currentUser.role === 'Employee' && (
-                  <button
-                    type="button"
-                    className="dropdown-menu-item"
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      onOpenQuickAdd('expense'); 
-                      setShowQuickAddMenu(false); 
-                    }}
-                  >
-                    + Submit Expense
-                  </button>
+
+                {/* 3. STANDARD EMPLOYEE ACTIONS */}
+                {isGeneralEmployee && (
+                  <>
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('leave'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#ECFDF5', color: '#059669', flexShrink: 0 }}>
+                        <CalendarPlus size={14} />
+                      </span>
+                      <span>Apply Leave</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('shift'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#FEF3C7', color: '#D97706', flexShrink: 0 }}>
+                        <Clock size={14} />
+                      </span>
+                      <span>Request Shift Swap</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('overtime'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EEF2FF', color: '#4F46E5', flexShrink: 0 }}>
+                        <Clock size={14} />
+                      </span>
+                      <span>Request Overtime</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('advance_salary'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#F0FDF4', color: '#16A34A', flexShrink: 0 }}>
+                        <Banknote size={14} />
+                      </span>
+                      <span>Request Advance Salary</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('expense'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#FAF5FF', color: '#9333EA', flexShrink: 0 }}>
+                        <Receipt size={14} />
+                      </span>
+                      <span>Submit Expense Claim</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dropdown-menu-item"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onOpenQuickAdd('task'); 
+                        setShowQuickAddMenu(false); 
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', flexShrink: 0 }}>
+                        <CheckSquare size={14} />
+                      </span>
+                      <span>Create Personal Task</span>
+                    </button>
+                  </>
                 )}
               </div>
             </>
