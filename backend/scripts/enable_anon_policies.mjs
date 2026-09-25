@@ -1,6 +1,10 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const client = new pg.Client({
   connectionString: process.env.DATABASE_URL,
@@ -25,6 +29,8 @@ async function main() {
     'permissions',
     'designations',
     'tasks',
+    'enterprise_tasks',
+    'company_settings',
     'performance_scores',
     'job_openings',
     'candidates',
@@ -32,7 +38,18 @@ async function main() {
     'notifications',
     'assets',
     'geofence_config',
-    'workflow_config'
+    'workflow_config',
+    'salary_structures',
+    'payroll_settings',
+    'field_duty_assignments',
+    'field_trip_sessions',
+    'field_location_points',
+    'field_tracking_alerts',
+    'mom_meetings',
+    'mom_action_items',
+    'expenses',
+    'notifications',
+    'assets'
   ];
 
   for (const table of tables) {

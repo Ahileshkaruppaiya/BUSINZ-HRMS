@@ -12,7 +12,8 @@ import {
   CalendarPlus,
   CheckSquare,
   Receipt,
-  Banknote
+  Banknote,
+  RefreshCw
 } from 'lucide-react';
 
 export type QuickAddType = 'employee' | 'leave' | 'task' | 'expense' | 'overtime' | 'shift' | 'advance_salary';
@@ -39,12 +40,27 @@ export const Header: React.FC<HeaderProps> = ({
     searchQuery, 
     setSearchQuery,
     setActiveModule,
-    setActiveSettingsTab
+    setActiveSettingsTab,
+    syncAllWithCloud
   } = useHRMS();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showQuickAddMenu, setShowQuickAddMenu] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      if (syncAllWithCloud) {
+        await syncAllWithCloud();
+      }
+    } catch (e) {
+      console.warn('Manual sync notice:', e);
+    } finally {
+      setTimeout(() => setIsSyncing(false), 600);
+    }
+  };
 
   // Role resolution for Quick Add options
   const userRole = (currentUser?.role as string) || '';
@@ -380,6 +396,34 @@ export const Header: React.FC<HeaderProps> = ({
             </>
           )}
         </div>
+
+        {/* Supabase Cloud Live Sync Button */}
+        <button 
+          className="header-action-circle-btn" 
+          onClick={handleManualSync}
+          title={isSyncing ? "Syncing with Supabase Cloud..." : "Supabase Cloud Database: 100% Live Sync across all systems. Click to refresh."}
+          style={{ 
+            position: 'relative', 
+            color: isSyncing ? '#0E7490' : 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: isSyncing ? '1.5px solid #0E7490' : '1px solid var(--border-light)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <RefreshCw size={17} strokeWidth={2.2} style={{ animation: isSyncing ? 'spin 0.8s linear infinite' : 'none' }} />
+          <span style={{
+            position: 'absolute',
+            bottom: '3px',
+            right: '3px',
+            width: '7px',
+            height: '7px',
+            borderRadius: '50%',
+            backgroundColor: '#10B981',
+            border: '1.5px solid #ffffff'
+          }} />
+        </button>
 
         {/* Notifications Circle Action Button (Matches Reference Bell Icon Button) */}
         <div style={{ position: 'relative' }}>

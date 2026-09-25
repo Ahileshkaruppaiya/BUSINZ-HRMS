@@ -291,6 +291,30 @@ export const supabaseDirect = {
   },
 
   /**
+   * Fetches all company settings from Supabase Cloud in a single batch request
+   */
+  async getAllCompanySettings(): Promise<Record<string, any>> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/company_settings?select=setting_key,setting_val`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return {};
+      const rows = await res.json();
+      if (!Array.isArray(rows)) return {};
+      const result: Record<string, any> = {};
+      for (const row of rows) {
+        if (row.setting_key) {
+          result[row.setting_key] = row.setting_val;
+        }
+      }
+      return result;
+    } catch (err) {
+      console.warn('[SupabaseDirect] getAllCompanySettings error:', err);
+      return {};
+    }
+  },
+
+  /**
    * Fetches all departments directly from Supabase table
    */
   async getDepartments(): Promise<any[]> {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import {
   Role,
   ModuleName,
@@ -771,6 +771,7 @@ interface HRMSContextType {
   deleteMultipleEmployees: (ids: string[]) => Promise<{ success: boolean; deletedCount: number; message?: string }>;
   refreshEmployees: () => Promise<void>;
   refreshSettings: () => Promise<void>;
+  syncAllWithCloud: () => Promise<void>;
   resetEmployeeLogin: (employeeId: string) => { success: boolean; message: string; temporaryPassword?: string };
   updateEmployeeLoginStatus: (employeeId: string, status: 'ACTIVE' | 'DISABLED') => { success: boolean; message: string };
   changeEmployeePassword: (identifier: string, newPassword: string) => { success: boolean; message: string };
@@ -1254,6 +1255,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsSubTab>('company_details');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [workflowFormat, setWorkflowFormat] = useState<ApprovalWorkflowFormat>('HR_ONLY');
+  const isCloudInitialized = useRef(false);
+  const isSyncingFromCloud = useRef(false);
 
   const [geofenceConfig, setGeofenceConfig] = useState<GeofenceConfig>(() => {
     try {
@@ -1268,6 +1271,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       localStorage.setItem('vrm_hrms_geofence_config', JSON.stringify(geofenceConfig));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('geofence_config', geofenceConfig);
+      }
     } catch (e) {
       console.error('Error saving geofenceConfig to storage', e);
     }
@@ -1309,385 +1315,83 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [employees]);
 
-  // Live Supabase Database synchronization for employees
+    // Supabase Database Employee Entity Mapper
+  const mapEmployeeFromDb = (d: any): Employee => ({
+    id: d.id,
+    employeeId: d.employeeId || d.employee_id,
+    firstName: d.firstName || d.first_name || '',
+    lastName: d.lastName || d.last_name || '',
+    email: d.email || '',
+    phone: d.phone || '+91 98765 43210',
+    dob: d.dob || '1995-01-01',
+    gender: (d.gender as any) || 'Male',
+    address: d.address || 'Chennai, Tamil Nadu',
+    department: d.department || (d.departments && d.departments.name) || 'General',
+    designation: d.designation || 'Staff',
+    reportingManagerId: d.reportingManagerId || d.reporting_manager_id || '',
+    reportingManagerName: d.reportingManagerName || d.reporting_manager_name || '',
+    joiningDate: d.joiningDate || d.created_at?.split('T')[0] || '2026-01-01',
+    employmentType: (d.employmentType || d.employment_type || 'Full-Time') as any,
+    status: (d.status === 'Active' || d.status === 'Terminated' || d.status === 'On Leave') ? d.status : 'Active',
+    avatar: d.avatar || d.avatar_url || '',
+    basicSalary: Number(d.basicSalary || d.basic_salary) || 15000,
+    allowances: {
+      hra: Number(d.hra || d.allowances_hra) || 0,
+      transport: Number(d.conveyance || d.allowances_transport) || 0,
+      medical: Number(d.allowances_medical) || 0,
+      special: Number(d.allowances_special) || 0,
+      da: Number(d.da) || 0,
+      conveyance: Number(d.conveyance) || 0,
+    },
+    withPf: d.withPf ?? true,
+    bankDetails: {
+      bankName: d.bankName || d.bank_name || 'HDFC Bank',
+      accountNumber: d.accountNumber || d.account_number || '****1001',
+      ifscCode: d.ifscCode || d.ifsc_code || 'HDFC0001234',
+      branch: d.branch || 'Main Branch',
+    },
+    attendanceMethod: (d.attendanceMethod || d.attendance_method || (d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) ? 'Exempt' : 'Face Scan')) as any,
+    gpsAllowed: d.gpsAllowed ?? (d.designation === 'CEO' ? false : true),
+    faceRegistered: d.faceRegistered ?? false,
+    facePhotoUrl: d.facePhotoUrl || d.face_photo_url || '',
+    workShift: d.workShift || d.work_shift || 'SH-01',
+    documents: Array.isArray(d.documents) ? d.documents : [],
+    departmentId: d.departmentId || d.department_id,
+    designationId: d.designationId || d.designation_id,
+    branchId: d.branchId || d.branch_id,
+    role: (d.role === 'CEO' || d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) || d.role_id === '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6')
+      ? 'CEO'
+      : (d.role || (d.designation === 'HR Manager' ? 'HR Manager' : 'Employee')),
+    mustChangePassword: d.mustChangePassword ?? d.must_change_password ?? false,
+    accountStatus: d.accountStatus || d.account_status || 'ACTIVE',
+    credentialEmailStatus: d.credentialEmailStatus || d.credential_email_status || 'SENT',
+    credentialEmailSentAt: d.credentialEmailSentAt || d.credential_email_sent_at || '',
+    authUserId: d.authUserId || d.auth_id || d.id,
+    password: d.password,
+  });
+
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_attendance_records');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_ATTENDANCE;
+  });
+
   useEffect(() => {
-    let isCancelled = false;
-    const syncEmployeesFromDatabase = async () => {
-      const token = 
-        sessionStorage.getItem('vrm_auth_token') || 
-        localStorage.getItem('vrm_auth_token') || 
-        localStorage.getItem('token') || 
-        localStorage.getItem('hrms_auth_token');
-
-      let rawData: any[] = [];
-      if (token) {
-        try {
-          const res = await fetch(`${API_BASE_URL}/employees`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          if (res.ok) {
-            const body = await res.json();
-            if (body.success && Array.isArray(body.data)) {
-              rawData = body.data;
-            }
-          }
-        } catch (err) {
-          // Fallback to direct Supabase REST
-        }
-      }
-
-      // Fetch directly from Supabase Cloud Database
-      if (rawData.length === 0) {
-        try {
-          rawData = await supabaseDirect.getEmployees();
-        } catch (sbErr) {
-          console.warn('Direct Supabase fetch notice:', sbErr);
-        }
-      }
-
-      if (rawData.length > 0 && !isCancelled) {
-        const mappedFromDb: Employee[] = rawData.map((d: any) => ({
-            id: d.id,
-            employeeId: d.employeeId || d.employee_id,
-            firstName: d.firstName || d.first_name || '',
-            lastName: d.lastName || d.last_name || '',
-            email: d.email || '',
-            phone: d.phone || '+91 98765 43210',
-            dob: d.dob || '1995-01-01',
-            gender: (d.gender as any) || 'Male',
-            address: d.address || 'Chennai, Tamil Nadu',
-            department: d.department || (d.departments && d.departments.name) || 'General',
-            designation: d.designation || 'Staff',
-            reportingManagerId: d.reportingManagerId || d.reporting_manager_id || '',
-            reportingManagerName: d.reportingManagerName || d.reporting_manager_name || '',
-            joiningDate: d.joiningDate || d.created_at?.split('T')[0] || '2026-01-01',
-            employmentType: (d.employmentType || d.employment_type || 'Full-Time') as any,
-            status: (d.status === 'Active' || d.status === 'Terminated' || d.status === 'On Leave') ? d.status : 'Active',
-            avatar: d.avatar || d.avatar_url || '',
-            basicSalary: Number(d.basicSalary || d.basic_salary) || 15000,
-            allowances: {
-              hra: Number(d.hra || d.allowances_hra) || 0,
-              transport: Number(d.conveyance || d.allowances_transport) || 0,
-              medical: Number(d.allowances_medical) || 0,
-              special: Number(d.allowances_special) || 0,
-              da: Number(d.da) || 0,
-              conveyance: Number(d.conveyance) || 0,
-            },
-            withPf: d.withPf ?? true,
-            bankDetails: {
-              bankName: d.bankName || d.bank_name || 'HDFC Bank',
-              accountNumber: d.accountNumber || d.account_number || '****1001',
-              ifscCode: d.ifscCode || d.ifsc_code || 'HDFC0001234',
-              branch: d.branch || 'Main Branch',
-            },
-            attendanceMethod: (d.attendanceMethod || d.attendance_method || (d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) ? 'Exempt' : 'Face Scan')) as any,
-            gpsAllowed: d.gpsAllowed ?? (d.designation === 'CEO' ? false : true),
-            faceRegistered: d.faceRegistered ?? false,
-            facePhotoUrl: d.facePhotoUrl || d.face_photo_url || '',
-            workShift: d.workShift || d.work_shift || 'SH-01',
-            documents: Array.isArray(d.documents) ? d.documents : [],
-            departmentId: d.departmentId || d.department_id,
-            designationId: d.designationId || d.designation_id,
-            branchId: d.branchId || d.branch_id,
-            role: (d.role === 'CEO' || d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) || d.role_id === '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6')
-              ? 'CEO'
-              : (d.role || (d.designation === 'HR Manager' ? 'HR Manager' : 'Employee')),
-            mustChangePassword: d.mustChangePassword ?? d.must_change_password ?? false,
-            accountStatus: d.accountStatus || d.account_status || 'ACTIVE',
-            credentialEmailStatus: d.credentialEmailStatus || d.credential_email_status || 'SENT',
-            credentialEmailSentAt: d.credentialEmailSentAt || d.credential_email_sent_at || '',
-            authUserId: d.authUserId || d.auth_id || d.id,
-            password: d.password,
-          }));
-
-        setEmployees(mappedFromDb);
-        try {
-          localStorage.setItem('vrm_hrms_employees', JSON.stringify(mappedFromDb));
-        } catch {}
-      }
-    };
-
-    syncEmployeesFromDatabase();
-
-    // Cloud synchronization for Organization Structure, Departments & Company Info
-    const syncSettingsFromDatabase = async () => {
-      try {
-        const [cloudOrg, cloudDepts, cloudInfo, cloudBranches] = await Promise.all([
-          supabaseDirect.getCompanySetting('org_structure'),
-          supabaseDirect.getDepartments(),
-          supabaseDirect.getCompanySetting('company_info'),
-          supabaseDirect.getCompanySetting('company_branches')
-        ]);
-
-        if (cloudOrg && typeof cloudOrg === 'object') {
-          const deptNames = Array.isArray(cloudOrg.departments) ? [...cloudOrg.departments] : [];
-          if (Array.isArray(cloudDepts)) {
-            cloudDepts.forEach((d: any) => {
-              if (d.name && !deptNames.includes(d.name)) {
-                deptNames.push(d.name);
-              }
-            });
-          }
-
-          const mergedOrg: OrganizationStructure = {
-            departments: deptNames,
-            designations: Array.isArray(cloudOrg.designations) ? cloudOrg.designations : [],
-            employmentTypes: Array.isArray(cloudOrg.employmentTypes) ? cloudOrg.employmentTypes : [],
-            workLocations: Array.isArray(cloudOrg.workLocations) ? cloudOrg.workLocations : [],
-            reportingManagers: Array.isArray(cloudOrg.reportingManagers) ? cloudOrg.reportingManagers : [],
-            teams: Array.isArray(cloudOrg.teams) ? cloudOrg.teams : []
-          };
-
-          setOrgStructure(mergedOrg);
-          try { localStorage.setItem('vrm_hrms_org_structure', JSON.stringify(mergedOrg)); } catch {}
-
-          setDepartments(mergedOrg.departments.map(name => ({
-            id: `dept-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-            name,
-            code: name.substring(0, 4).toUpperCase(),
-            headName: 'Unassigned',
-            headId: '',
-            employeeCount: 0,
-            budget: 0
-          })));
-        } else if (Array.isArray(cloudDepts) && cloudDepts.length > 0) {
-          const names = cloudDepts.map((d: any) => d.name);
-          setOrgStructure(prev => ({
-            ...prev,
-            departments: names
-          }));
-          setDepartments(cloudDepts.map((d: any) => ({
-            id: d.id,
-            name: d.name,
-            code: d.code,
-            headName: 'Unassigned',
-            headId: d.head_id || '',
-            employeeCount: 0,
-            budget: d.budget || 0
-          })));
-        }
-
-        if (cloudInfo && typeof cloudInfo === 'object' && cloudInfo.companyName) {
-          setCompanyInfo(cloudInfo);
-          try { localStorage.setItem('vrm_hrms_company_info', JSON.stringify(cloudInfo)); } catch {}
-        }
-
-        if (Array.isArray(cloudBranches) && cloudBranches.length > 0) {
-          setCompanyBranches(cloudBranches);
-          try { localStorage.setItem('vrm_hrms_company_branches', JSON.stringify(cloudBranches)); } catch {}
-        }
-      } catch (err) {
-        console.warn('Notice syncing settings from Supabase:', err);
-      }
-    };
-
-    syncSettingsFromDatabase();
-
-    // Cloud synchronization for Enterprise Tasks
-    const syncTasksFromDatabase = async () => {
-      try {
-        const cloudTasks = await supabaseDirect.getTasks();
-        if (Array.isArray(cloudTasks) && cloudTasks.length > 0) {
-          const sanitized = cloudTasks.map(sanitizeSelfAssignedTask);
-          setEnhancedTasks(sanitized);
-          try {
-            localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(sanitized));
-          } catch {}
-        } else {
-          // If Supabase has 0 tasks but localStorage has existing tasks, backup local tasks to cloud
-          const saved = localStorage.getItem('vrm_hrms_enhanced_tasks');
-          if (saved) {
-            try {
-              const parsed = JSON.parse(saved);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                for (const t of parsed) {
-                  await supabaseDirect.saveTask(t);
-                }
-              }
-            } catch {}
-          }
-        }
-      } catch (err) {
-        console.warn('Notice syncing tasks from Supabase:', err);
-      }
-    };
-
-    syncTasksFromDatabase();
-
-    // Periodic auto-sync for live tasks (every 15s) and on tab focus
-    const taskInterval = setInterval(() => {
-      syncTasksFromDatabase();
-    }, 15000);
-
-    const onFocusTab = () => {
-      syncTasksFromDatabase();
-    };
-    window.addEventListener('focus', onFocusTab);
-
-    return () => { 
-      isCancelled = true;
-      clearInterval(taskInterval);
-      window.removeEventListener('focus', onFocusTab);
-    };
-  }, []);
-
-  const refreshEmployees = async () => {
     try {
-      const rawData = await supabaseDirect.getEmployees();
-      if (Array.isArray(rawData) && rawData.length > 0) {
-        const mappedFromDb: Employee[] = rawData.map((d: any) => ({
-          id: d.id,
-          employeeId: d.employeeId || d.employee_id,
-          firstName: d.firstName || d.first_name || '',
-          lastName: d.lastName || d.last_name || '',
-          email: d.email || '',
-          phone: d.phone || '+91 98765 43210',
-          dob: d.dob || '1995-01-01',
-          gender: (d.gender as any) || 'Male',
-          address: d.address || 'Chennai, Tamil Nadu',
-          department: d.department || (d.departments && d.departments.name) || 'General',
-          designation: d.designation || 'Staff',
-          reportingManagerId: d.reportingManagerId || d.reporting_manager_id || '',
-          reportingManagerName: d.reportingManagerName || d.reporting_manager_name || '',
-          joiningDate: d.joiningDate || d.created_at?.split('T')[0] || '2026-01-01',
-          employmentType: (d.employmentType || d.employment_type || 'Full-Time') as any,
-          status: (d.status === 'Active' || d.status === 'Terminated' || d.status === 'On Leave') ? d.status : 'Active',
-          avatar: d.avatar || d.avatar_url || '',
-          basicSalary: Number(d.basicSalary || d.basic_salary) || 15000,
-          allowances: {
-            hra: Number(d.hra || d.allowances_hra) || 0,
-            transport: Number(d.conveyance || d.allowances_transport) || 0,
-            medical: Number(d.allowances_medical) || 0,
-            special: Number(d.allowances_special) || 0,
-            da: Number(d.da) || 0,
-            conveyance: Number(d.conveyance) || 0,
-          },
-          withPf: d.withPf ?? true,
-          bankDetails: {
-            bankName: d.bankName || d.bank_name || 'HDFC Bank',
-            accountNumber: d.accountNumber || d.account_number || '****1001',
-            ifscCode: d.ifscCode || d.ifsc_code || 'HDFC0001234',
-            branch: d.branch || 'Main Branch',
-          },
-          attendanceMethod: (d.attendanceMethod || d.attendance_method || (d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) ? 'Exempt' : 'Face Scan')) as any,
-          gpsAllowed: d.gpsAllowed ?? (d.designation === 'CEO' ? false : true),
-          faceRegistered: d.faceRegistered ?? false,
-          facePhotoUrl: d.facePhotoUrl || d.face_photo_url || '',
-          workShift: d.workShift || d.work_shift || 'SH-01',
-          documents: Array.isArray(d.documents) ? d.documents : [],
-          departmentId: d.departmentId || d.department_id,
-          designationId: d.designationId || d.designation_id,
-          branchId: d.branchId || d.branch_id,
-          role: (d.role === 'CEO' || d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) || d.role_id === '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6')
-            ? 'CEO'
-            : (d.role || (d.designation === 'HR Manager' ? 'HR Manager' : 'Employee')),
-          mustChangePassword: d.mustChangePassword ?? d.must_change_password ?? false,
-          accountStatus: d.accountStatus || d.account_status || 'ACTIVE',
-          credentialEmailStatus: d.credentialEmailStatus || d.credential_email_status || 'SENT',
-          credentialEmailSentAt: d.credentialEmailSentAt || d.credential_email_sent_at || '',
-          authUserId: d.authUserId || d.auth_id || d.id,
-          password: d.password,
-        }));
-
-        setEmployees(mappedFromDb);
-        try {
-          localStorage.setItem('vrm_hrms_employees', JSON.stringify(mappedFromDb));
-        } catch {}
+      localStorage.setItem('vrm_hrms_attendance_records', JSON.stringify(attendanceRecords));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('attendance_records_data', attendanceRecords);
       }
-    } catch (err) {
-      console.warn('refreshEmployees notice:', err);
+    } catch (e) {
+      console.error('Error saving attendanceRecords to storage', e);
     }
-  };
+  }, [attendanceRecords]);
 
-  const refreshSettings = async () => {
-    try {
-      const [cloudOrg, cloudDepts, cloudInfo, cloudBranches] = await Promise.all([
-        supabaseDirect.getCompanySetting('org_structure'),
-        supabaseDirect.getDepartments(),
-        supabaseDirect.getCompanySetting('company_info'),
-        supabaseDirect.getCompanySetting('company_branches')
-      ]);
-
-      if (cloudOrg && typeof cloudOrg === 'object') {
-        const deptNames = Array.isArray(cloudOrg.departments) ? [...cloudOrg.departments] : [];
-        if (Array.isArray(cloudDepts)) {
-          cloudDepts.forEach((d: any) => {
-            if (d.name && !deptNames.includes(d.name)) {
-              deptNames.push(d.name);
-            }
-          });
-        }
-
-        const mergedOrg: OrganizationStructure = {
-          departments: deptNames,
-          designations: Array.isArray(cloudOrg.designations) ? cloudOrg.designations : [],
-          employmentTypes: Array.isArray(cloudOrg.employmentTypes) ? cloudOrg.employmentTypes : [],
-          workLocations: Array.isArray(cloudOrg.workLocations) ? cloudOrg.workLocations : [],
-          reportingManagers: Array.isArray(cloudOrg.reportingManagers) ? cloudOrg.reportingManagers : [],
-          teams: Array.isArray(cloudOrg.teams) ? cloudOrg.teams : []
-        };
-
-        setOrgStructure(mergedOrg);
-        try { localStorage.setItem('vrm_hrms_org_structure', JSON.stringify(mergedOrg)); } catch {}
-
-        setDepartments(mergedOrg.departments.map(name => ({
-          id: `dept-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-          name,
-          code: name.substring(0, 4).toUpperCase(),
-          headName: 'Unassigned',
-          headId: '',
-          employeeCount: 0,
-          budget: 0
-        })));
-      } else if (Array.isArray(cloudDepts) && cloudDepts.length > 0) {
-        const names = cloudDepts.map((d: any) => d.name);
-        setOrgStructure(prev => ({
-          ...prev,
-          departments: names
-        }));
-        setDepartments(cloudDepts.map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          code: d.code,
-          headName: 'Unassigned',
-          headId: d.head_id || '',
-          employeeCount: 0,
-          budget: d.budget || 0
-        })));
-      }
-
-      if (cloudInfo && typeof cloudInfo === 'object' && cloudInfo.companyName) {
-        setCompanyInfo(cloudInfo);
-        try { localStorage.setItem('vrm_hrms_company_info', JSON.stringify(cloudInfo)); } catch {}
-      }
-
-      if (Array.isArray(cloudBranches) && cloudBranches.length > 0) {
-        setCompanyBranches(cloudBranches);
-        try { localStorage.setItem('vrm_hrms_company_branches', JSON.stringify(cloudBranches)); } catch {}
-      }
-    } catch (err) {
-      console.warn('Notice refreshing settings from Supabase:', err);
-    }
-  };
-
-  const refreshTasks = async () => {
-    try {
-      const cloudTasks = await supabaseDirect.getTasks();
-      if (Array.isArray(cloudTasks) && cloudTasks.length > 0) {
-        const sanitized = cloudTasks.map(sanitizeSelfAssignedTask);
-        setEnhancedTasks(sanitized);
-        try {
-          localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(sanitized));
-        } catch {}
-      }
-    } catch (err) {
-      console.warn('Notice refreshing tasks from Supabase:', err);
-    }
-  };
-
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
   const [attendanceAuditLogs, setAttendanceAuditLogs] = useState<AttendanceAuditLog[]>(INITIAL_ATTENDANCE_AUDIT_LOGS);
 
   const correctAttendanceRecord = (params: {
@@ -2816,7 +2520,27 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [faceLogs, setFaceLogs] = useState<FaceLog[]>(INITIAL_FACE_LOGS);
 
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(INITIAL_LEAVES);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_leave_requests');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_LEAVES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vrm_hrms_leave_requests', JSON.stringify(leaveRequests));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('leave_requests_data', leaveRequests);
+      }
+    } catch (e) {
+      console.error('Error saving leaveRequests to storage', e);
+    }
+  }, [leaveRequests]);
 
   const [shifts, setShifts] = useState<Shift[]>(() => {
     try {
@@ -2837,6 +2561,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       localStorage.setItem('vrm_hrms_shifts', JSON.stringify(shifts));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('shifts_data', shifts);
+      }
     } catch (e) {
       console.error('Error saving shifts to storage', e);
     }
@@ -2860,6 +2587,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       localStorage.setItem('vrm_hrms_holiday_policies', JSON.stringify(holidayPolicies));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('holiday_policies_data', holidayPolicies);
+      }
     } catch (e) {
       console.error('Error saving holiday policies to storage', e);
     }
@@ -2956,7 +2686,27 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [taskMasters, setTaskMasters] = useState<TaskMasterItem[]>(INITIAL_TASK_MASTERS);
 
-  const [momMeetings, setMomMeetings] = useState<MOMMeeting[]>(INITIAL_MOM_MEETINGS);
+  const [momMeetings, setMomMeetings] = useState<MOMMeeting[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_mom_meetings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_MOM_MEETINGS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vrm_hrms_mom_meetings', JSON.stringify(momMeetings));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('mom_meetings_data', momMeetings);
+      }
+    } catch (e) {
+      console.warn('Failed to save momMeetings to storage', e);
+    }
+  }, [momMeetings]);
 
   const [escalationRules, setEscalationRules] = useState<TaskEscalationRule[]>(INITIAL_ESCALATION_RULES);
 
@@ -2965,9 +2715,50 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [performanceScores, setPerformanceScores] = useState<PerformanceScore[]>(INITIAL_PERFORMANCE);
   const [jobOpenings, setJobOpenings] = useState<JobOpening[]>(INITIAL_JOBS);
   const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES);
-  const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
+  const [expenses, setExpenses] = useState<Expense[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_expenses');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_EXPENSES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vrm_hrms_expenses', JSON.stringify(expenses));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('expenses_data', expenses);
+      }
+    } catch (e) {
+      console.warn('Failed to save expenses to storage', e);
+    }
+  }, [expenses]);
+
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
-  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(INITIAL_PAYROLL);
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_payroll_records');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_PAYROLL;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vrm_hrms_payroll_records', JSON.stringify(payrollRecords));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('payroll_records_data', payrollRecords);
+      }
+    } catch (e) {
+      console.warn('Failed to save payrollRecords to storage', e);
+    }
+  }, [payrollRecords]);
 
   const [departments, setDepartments] = useState<DepartmentItem[]>(() => {
     try {
@@ -2987,7 +2778,27 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [branches, setBranches] = useState<BranchItem[]>(INITIAL_BRANCHES);
 
-  const [assets, setAssets] = useState<AssetItem[]>(INITIAL_ASSETS);
+  const [assets, setAssets] = useState<AssetItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_assets');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_ASSETS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vrm_hrms_assets', JSON.stringify(assets));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('assets_data', assets);
+      }
+    } catch (e) {
+      console.warn('Failed to save assets to storage', e);
+    }
+  }, [assets]);
 
   // ========================================================
   // 5 CORE SETTINGS MODULES & POLICY ENGINE STATE
@@ -3161,7 +2972,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [payrollSettingsConfig]);
 
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_loan_policies', JSON.stringify(loanPolicies)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_loan_policies', JSON.stringify(loanPolicies));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('loan_policies_data', loanPolicies);
+      }
+    } catch {}
   }, [loanPolicies]);
 
   const activeLoanPolicy = loanPolicies.find(p => p.status === 'Active') || loanPolicies[0];
@@ -3231,10 +3047,13 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return INITIAL_LOAN_RECORDS;
   });
 
-  // Sync loan records to localStorage whenever updated
+  // Sync loan records to localStorage and Supabase Cloud whenever updated
   useEffect(() => {
     try {
       localStorage.setItem('hrms_loan_records', JSON.stringify(loanRecords));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('loan_records_data', loanRecords);
+      }
     } catch (e) {
       console.warn('Failed to save loanRecords to localStorage', e);
     }
@@ -7260,6 +7079,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       localStorage.setItem('vrm_hrms_field_assignments', JSON.stringify(fieldAssignments));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('field_assignments_data', fieldAssignments);
+      }
     } catch (e) {
       console.warn('Failed to save field assignments', e);
     }
@@ -7268,6 +7090,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       localStorage.setItem('vrm_hrms_trip_sessions', JSON.stringify(tripSessions));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('trip_sessions_data', tripSessions);
+      }
     } catch (e) {
       console.warn('Failed to save trip sessions', e);
     }
@@ -7276,6 +7101,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       localStorage.setItem('vrm_hrms_tracking_alerts', JSON.stringify(trackingAlerts));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('tracking_alerts_data', trackingAlerts);
+      }
     } catch (e) {
       console.warn('Failed to save tracking alerts', e);
     }
@@ -7518,6 +7346,247 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
+
+  // ============================================================================
+  // MASTER SUPABASE CLOUD SYNCHRONIZATION ENGINE
+  // Connects and synchronizes all HRM modules across all devices and browsers
+  // ============================================================================
+  const syncAllModulesFromDatabase = async (isInitial = false) => {
+    if (isSyncingFromCloud.current) return;
+    try {
+      isSyncingFromCloud.current = true;
+
+      // Parallel batch fetch directly from Supabase Cloud
+      const [rawEmployees, rawTasks, cloudSettings, cloudDepts] = await Promise.all([
+        supabaseDirect.getEmployees().catch(() => []),
+        supabaseDirect.getTasks().catch(() => []),
+        supabaseDirect.getAllCompanySettings().catch(() => ({})),
+        supabaseDirect.getDepartments().catch(() => [])
+      ]);
+
+      // 1. Synchronize Employees
+      if (Array.isArray(rawEmployees) && rawEmployees.length > 0) {
+        const mapped = rawEmployees.map(mapEmployeeFromDb);
+        setEmployees(mapped);
+        try { localStorage.setItem('vrm_hrms_employees', JSON.stringify(mapped)); } catch {}
+      }
+
+      // 2. Synchronize Enterprise Tasks
+      if (Array.isArray(rawTasks) && rawTasks.length > 0) {
+        const sanitized = rawTasks.map(sanitizeSelfAssignedTask);
+        setEnhancedTasks(sanitized);
+        try { localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(sanitized)); } catch {}
+      }
+
+      // 3. Synchronize All Company Settings & Core Modules
+      const settings: Record<string, any> = (cloudSettings || {}) as Record<string, any>;
+      if (settings) {
+        // Organization Structure & Departments
+        const cloudOrg = settings.org_structure;
+        if (cloudOrg && typeof cloudOrg === 'object') {
+          const deptNames = Array.isArray(cloudOrg.departments) ? [...cloudOrg.departments] : [];
+          if (Array.isArray(cloudDepts)) {
+            cloudDepts.forEach((d: any) => {
+              if (d.name && !deptNames.includes(d.name)) deptNames.push(d.name);
+            });
+          }
+          const mergedOrg: OrganizationStructure = {
+            departments: deptNames,
+            designations: Array.isArray(cloudOrg.designations) ? cloudOrg.designations : [],
+            employmentTypes: Array.isArray(cloudOrg.employmentTypes) ? cloudOrg.employmentTypes : [],
+            workLocations: Array.isArray(cloudOrg.workLocations) ? cloudOrg.workLocations : [],
+            reportingManagers: Array.isArray(cloudOrg.reportingManagers) ? cloudOrg.reportingManagers : [],
+            teams: Array.isArray(cloudOrg.teams) ? cloudOrg.teams : []
+          };
+          setOrgStructure(mergedOrg);
+          try { localStorage.setItem('vrm_hrms_org_structure', JSON.stringify(mergedOrg)); } catch {}
+
+          setDepartments(mergedOrg.departments.map(name => ({
+            id: `dept-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+            name,
+            code: name.substring(0, 4).toUpperCase(),
+            headName: 'Unassigned',
+            headId: '',
+            employeeCount: 0,
+            budget: 0
+          })));
+        } else if (Array.isArray(cloudDepts) && cloudDepts.length > 0) {
+          setOrgStructure(prev => ({ ...prev, departments: cloudDepts.map(d => d.name) }));
+          setDepartments(cloudDepts.map(d => ({
+            id: d.id,
+            name: d.name,
+            code: d.code,
+            headName: 'Unassigned',
+            headId: d.head_id || '',
+            employeeCount: 0,
+            budget: d.budget || 0
+          })));
+        }
+
+        // Company Details & Branches
+        if (settings.company_info && typeof settings.company_info === 'object' && settings.company_info.companyName) {
+          setCompanyInfo(settings.company_info);
+          try { localStorage.setItem('vrm_hrms_company_info', JSON.stringify(settings.company_info)); } catch {}
+        }
+        if (Array.isArray(settings.company_branches) && settings.company_branches.length > 0) {
+          setCompanyBranches(settings.company_branches);
+          try { localStorage.setItem('vrm_hrms_company_branches', JSON.stringify(settings.company_branches)); } catch {}
+        }
+
+        // Shifts
+        if (Array.isArray(settings.shifts_data) && settings.shifts_data.length > 0) {
+          setShifts(settings.shifts_data);
+          try { localStorage.setItem('vrm_hrms_shifts', JSON.stringify(settings.shifts_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('shifts_data', shifts);
+        }
+
+        // Shift Requests
+        if (Array.isArray(settings.shift_requests_data)) {
+          setShiftRequests(settings.shift_requests_data);
+          try { localStorage.setItem('vrm_hrms_shift_requests', JSON.stringify(settings.shift_requests_data)); } catch {}
+        }
+
+        // Leave Requests
+        if (Array.isArray(settings.leave_requests_data) && settings.leave_requests_data.length > 0) {
+          setLeaveRequests(settings.leave_requests_data);
+          try { localStorage.setItem('vrm_hrms_leave_requests', JSON.stringify(settings.leave_requests_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('leave_requests_data', leaveRequests);
+        }
+
+        // Holiday Policies
+        if (Array.isArray(settings.holiday_policies_data) && settings.holiday_policies_data.length > 0) {
+          setHolidayPolicies(settings.holiday_policies_data);
+          try { localStorage.setItem('vrm_hrms_holiday_policies', JSON.stringify(settings.holiday_policies_data)); } catch {}
+        }
+
+        // Attendance Records
+        if (Array.isArray(settings.attendance_records_data) && settings.attendance_records_data.length > 0) {
+          setAttendanceRecords(settings.attendance_records_data);
+          try { localStorage.setItem('vrm_hrms_attendance_records', JSON.stringify(settings.attendance_records_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('attendance_records_data', attendanceRecords);
+        }
+
+        // Loan Policies
+        if (Array.isArray(settings.loan_policies_data) && settings.loan_policies_data.length > 0) {
+          setLoanPolicies(settings.loan_policies_data);
+          try { localStorage.setItem('vrm_hrms_loan_policies', JSON.stringify(settings.loan_policies_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('loan_policies_data', loanPolicies);
+        }
+
+        // Loan Records
+        if (Array.isArray(settings.loan_records_data) && settings.loan_records_data.length > 0) {
+          setLoanRecords(settings.loan_records_data);
+          try { localStorage.setItem('hrms_loan_records', JSON.stringify(settings.loan_records_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('loan_records_data', loanRecords);
+        }
+
+        // Assets
+        if (Array.isArray(settings.assets_data) && settings.assets_data.length > 0) {
+          setAssets(settings.assets_data);
+          try { localStorage.setItem('vrm_hrms_assets', JSON.stringify(settings.assets_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('assets_data', assets);
+        }
+
+        // Expenses
+        if (Array.isArray(settings.expenses_data) && settings.expenses_data.length > 0) {
+          setExpenses(settings.expenses_data);
+          try { localStorage.setItem('vrm_hrms_expenses', JSON.stringify(settings.expenses_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('expenses_data', expenses);
+        }
+
+        // MOM Meetings
+        if (Array.isArray(settings.mom_meetings_data) && settings.mom_meetings_data.length > 0) {
+          setMomMeetings(settings.mom_meetings_data);
+          try { localStorage.setItem('vrm_hrms_mom_meetings', JSON.stringify(settings.mom_meetings_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('mom_meetings_data', momMeetings);
+        }
+
+        // Payroll Records
+        if (Array.isArray(settings.payroll_records_data) && settings.payroll_records_data.length > 0) {
+          setPayrollRecords(settings.payroll_records_data);
+          try { localStorage.setItem('vrm_hrms_payroll_records', JSON.stringify(settings.payroll_records_data)); } catch {}
+        } else if (isInitial) {
+          supabaseDirect.saveCompanySetting('payroll_records_data', payrollRecords);
+        }
+
+        // Geofence Config
+        if (settings.geofence_config && typeof settings.geofence_config === 'object' && settings.geofence_config.officeName) {
+          setGeofenceConfig(settings.geofence_config);
+          try { localStorage.setItem('vrm_hrms_geofence_config', JSON.stringify(settings.geofence_config)); } catch {}
+        }
+
+        // Field Duty & Tracking
+        if (Array.isArray(settings.field_assignments_data) && settings.field_assignments_data.length > 0) {
+          setFieldAssignments(settings.field_assignments_data);
+          try { localStorage.setItem('vrm_hrms_field_assignments', JSON.stringify(settings.field_assignments_data)); } catch {}
+        }
+        if (Array.isArray(settings.trip_sessions_data) && settings.trip_sessions_data.length > 0) {
+          setTripSessions(settings.trip_sessions_data);
+          try { localStorage.setItem('vrm_hrms_trip_sessions', JSON.stringify(settings.trip_sessions_data)); } catch {}
+        }
+        if (Array.isArray(settings.tracking_alerts_data) && settings.tracking_alerts_data.length > 0) {
+          setTrackingAlerts(settings.tracking_alerts_data);
+          try { localStorage.setItem('vrm_hrms_tracking_alerts', JSON.stringify(settings.tracking_alerts_data)); } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('[HRMSContext] syncAllModulesFromDatabase notice:', err);
+    } finally {
+      isSyncingFromCloud.current = false;
+      isCloudInitialized.current = true;
+    }
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
+    syncAllModulesFromDatabase(true);
+
+    // Live Supabase auto-sync poll (every 15 seconds) across all devices
+    const syncInterval = setInterval(() => {
+      if (!isCancelled) {
+        syncAllModulesFromDatabase(false);
+      }
+    }, 15000);
+
+    // Sync immediately whenever user switches tabs or window receives focus
+    const onFocusWindow = () => {
+      if (!isCancelled) {
+        syncAllModulesFromDatabase(false);
+      }
+    };
+    window.addEventListener('focus', onFocusWindow);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(syncInterval);
+      window.removeEventListener('focus', onFocusWindow);
+    };
+  }, []);
+
+  const refreshEmployees = async () => {
+    await syncAllModulesFromDatabase(false);
+  };
+
+  const refreshSettings = async () => {
+    await syncAllModulesFromDatabase(false);
+  };
+
+  const refreshTasks = async () => {
+    await syncAllModulesFromDatabase(false);
+  };
+
+  const syncAllWithCloud = async () => {
+    await syncAllModulesFromDatabase(false);
+  };
+
   return (
     <HRMSContext.Provider value={{
       currentUser,
@@ -7533,6 +7602,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       deleteMultipleEmployees,
       refreshEmployees,
       refreshSettings,
+      syncAllWithCloud,
       resetEmployeeLogin,
       updateEmployeeLoginStatus,
       changeEmployeePassword,
