@@ -136,9 +136,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Breadcrumb Title */}
         <div className="header-breadcrumb">
-          <span className="header-brand-prefix">
-            {businessSettings?.businessName || 'Businz'} |
-          </span>
           <span className="header-module-title">
             {getModuleTitle(activeModule)}
           </span>
