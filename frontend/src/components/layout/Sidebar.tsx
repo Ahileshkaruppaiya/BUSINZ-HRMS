@@ -280,18 +280,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }} 
             title="Go to Dashboard"
           >
-            {businessSettings?.logoUrl ? (
-              <img 
-                src={businessSettings.logoUrl} 
-                alt={`${businessSettings.businessName || 'Businz'} Logo`} 
-                className="sidebar-logo-img" 
-                style={{ border: 'none', background: 'transparent', padding: 0 }}
-              />
-            ) : (
-              <div className="sidebar-logo-square">
-                <span>{brandInitial}</span>
-              </div>
-            )}
+            <img 
+              src={businessSettings?.logoUrl || "/logo.png"} 
+              alt={`${businessSettings?.businessName || 'Businz'} Logo`} 
+              className="sidebar-logo-img" 
+              style={{ width: '40px', height: '40px', objectFit: 'contain', border: 'none', background: 'transparent', padding: 0 }}
+            />
             <div className="sidebar-brand-details">
               <div className="sidebar-brand-title">
                 {businessSettings?.businessName || 'Businz'}
@@ -345,7 +339,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <img 
               src={businessSettings?.logoUrl || "/logo.png"} 
               alt="Logo" 
-              style={{ width: '42px', height: '42px', objectFit: 'contain', border: 'none' }} 
+              style={{ width: '40px', height: '40px', objectFit: 'contain', border: 'none', background: 'transparent' }} 
             />
           </div>
         </div>
