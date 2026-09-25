@@ -19,7 +19,8 @@ import {
   User, 
   Users, 
   Briefcase, 
-  X 
+  X,
+  RefreshCw 
 } from 'lucide-react';
 
 export const CompanyDetailsSettings: React.FC = () => {
@@ -43,7 +44,8 @@ export const CompanyDetailsSettings: React.FC = () => {
     loadCompanyPreset,
     policyAuditLogs,
     currentUser,
-    hasPermission
+    hasPermission,
+    refreshSettings
   } = useHRMS();
 
   const isPrivileged = currentUser.role !== 'Employee';
@@ -117,6 +119,20 @@ export const CompanyDetailsSettings: React.FC = () => {
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamDept, setNewTeamDept] = useState(orgStructure.departments[0] || 'Engineering');
   const [newTeamLead, setNewTeamLead] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [cloudSaveNotice, setCloudSaveNotice] = useState<string | null>(null);
+
+  const showCloudNotice = (msg: string) => {
+    setCloudSaveNotice(msg);
+    setTimeout(() => setCloudSaveNotice(null), 3000);
+  };
+
+  const handleSyncSettings = async () => {
+    setIsSyncing(true);
+    await refreshSettings();
+    showCloudNotice('Settings refreshed from cloud database!');
+    setTimeout(() => setIsSyncing(false), 500);
+  };
 
   const handleSaveInfo = (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,42 +251,54 @@ export const CompanyDetailsSettings: React.FC = () => {
 
   const handleAddDept = () => {
     if (!newDept.trim() || orgStructure.departments.includes(newDept.trim())) return;
-    updateOrgStructure({ departments: [...orgStructure.departments, newDept.trim()] });
+    const added = newDept.trim();
+    updateOrgStructure({ departments: [...orgStructure.departments, added] });
     setNewDept('');
+    showCloudNotice(`Department "${added}" saved to cloud database!`);
   };
 
   const handleAddDesig = () => {
     if (!newDesig.trim() || orgStructure.designations.includes(newDesig.trim())) return;
-    updateOrgStructure({ designations: [...orgStructure.designations, newDesig.trim()] });
+    const added = newDesig.trim();
+    updateOrgStructure({ designations: [...orgStructure.designations, added] });
     setNewDesig('');
+    showCloudNotice(`Designation "${added}" saved to cloud database!`);
   };
 
   const handleAddEmpType = () => {
     if (!newEmpType.trim() || orgStructure.employmentTypes.includes(newEmpType.trim())) return;
-    updateOrgStructure({ employmentTypes: [...orgStructure.employmentTypes, newEmpType.trim()] });
+    const added = newEmpType.trim();
+    updateOrgStructure({ employmentTypes: [...orgStructure.employmentTypes, added] });
     setNewEmpType('');
+    showCloudNotice(`Employment Type "${added}" saved to cloud database!`);
   };
 
   const handleAddLocation = () => {
     if (!newLocation.trim() || orgStructure.workLocations.includes(newLocation.trim())) return;
-    updateOrgStructure({ workLocations: [...orgStructure.workLocations, newLocation.trim()] });
+    const added = newLocation.trim();
+    updateOrgStructure({ workLocations: [...orgStructure.workLocations, added] });
     setNewLocation('');
+    showCloudNotice(`Work Location "${added}" saved to cloud database!`);
   };
 
   const handleRemoveLocation = (locToRemove: string) => {
     removeOrgWorkLocation(locToRemove);
+    showCloudNotice(`Location "${locToRemove}" removed.`);
   };
 
   const handleRemoveDept = (deptToRemove: string) => {
     removeOrgDepartment(deptToRemove);
+    showCloudNotice(`Department "${deptToRemove}" removed from cloud database.`);
   };
 
   const handleRemoveDesig = (desigToRemove: string) => {
     removeOrgDesignation(desigToRemove);
+    showCloudNotice(`Designation "${desigToRemove}" removed.`);
   };
 
   const handleRemoveEmpType = (typeToRemove: string) => {
     removeOrgEmploymentType(typeToRemove);
+    showCloudNotice(`Employment type "${typeToRemove}" removed.`);
   };
 
   const handleAddTeam = () => {
@@ -284,6 +312,7 @@ export const CompanyDetailsSettings: React.FC = () => {
     updateOrgStructure({ teams: [...orgStructure.teams, newTeam] });
     setNewTeamName('');
     setNewTeamLead('');
+    showCloudNotice(`Team "${newTeam.name}" saved to cloud database!`);
   };
 
   return (
@@ -775,6 +804,45 @@ export const CompanyDetailsSettings: React.FC = () => {
       {/* TAB 3: ORGANIZATION STRUCTURE */}
       {activeTab === 'org' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Cloud Synchronized Status Banner */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            backgroundColor: '#F0FDFA', 
+            border: '1px solid #CCFBF1', 
+            padding: '12px 18px', 
+            borderRadius: '12px',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0F766E', fontSize: '0.88rem', fontWeight: 600 }}>
+              <span style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block', boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)' }}></span>
+              <span>{cloudSaveNotice || 'Cloud Database Sync Active — Any changes are shared live across all users & devices'}</span>
+            </div>
+            <button 
+              type="button" 
+              onClick={handleSyncSettings}
+              disabled={isSyncing}
+              style={{
+                backgroundColor: '#0E7490',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '6px 14px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <RefreshCw size={13} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} />
+              {isSyncing ? 'Syncing...' : 'Sync Cloud Data'}
+            </button>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
             {/* Departments */}
             <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E7ECF3', padding: '20px' }}>

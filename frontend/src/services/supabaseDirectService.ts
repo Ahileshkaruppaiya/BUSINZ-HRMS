@@ -245,5 +245,148 @@ export const supabaseDirect = {
       return { success: false, error: err?.message || err };
     }
   },
+
+  /**
+   * Fetches a company setting JSON directly from Supabase Cloud
+   */
+  async getCompanySetting(key: string): Promise<any | null> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/company_settings?setting_key=eq.${encodeURIComponent(key)}&select=*&limit=1`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data[0].setting_val;
+      }
+      return null;
+    } catch (err) {
+      console.warn(`[SupabaseDirect] getCompanySetting('${key}') error:`, err);
+      return null;
+    }
+  },
+
+  /**
+   * Saves or merges a company setting JSON directly into Supabase Cloud
+   */
+  async saveCompanySetting(key: string, val: any): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/company_settings?on_conflict=setting_key`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          'Prefer': 'resolution=merge-duplicates,return=representation',
+        },
+        body: JSON.stringify({
+          setting_key: key,
+          setting_val: val,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn(`[SupabaseDirect] saveCompanySetting('${key}') error:`, err);
+      return false;
+    }
+  },
+
+  /**
+   * Fetches all departments directly from Supabase table
+   */
+  async getDepartments(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/departments?select=*&order=name.asc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getDepartments error:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Inserts a new department into Supabase table
+   */
+  async insertDepartment(name: string, code?: string): Promise<{ success: boolean; data?: any }> {
+    try {
+      const cleanName = name.trim();
+      const cleanCode = (code || cleanName.substring(0, 4)).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/departments`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify({
+          name: cleanName,
+          code: cleanCode || 'DEPT',
+        }),
+      });
+      if (!res.ok) {
+        // If conflict on code, generate a timestamped code
+        const fallbackCode = `${cleanCode.substring(0, 2)}${Math.floor(10 + Math.random() * 90)}`;
+        const retryRes = await fetch(`${SUPABASE_URL}/rest/v1/departments`, {
+          method: 'POST',
+          headers: {
+            ...getHeaders(),
+            'Prefer': 'return=representation',
+          },
+          body: JSON.stringify({
+            name: cleanName,
+            code: fallbackCode,
+          }),
+        });
+        if (!retryRes.ok) return { success: false };
+        const retryData = await retryRes.json();
+        return { success: true, data: Array.isArray(retryData) ? retryData[0] : retryData };
+      }
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err) {
+      console.warn('[SupabaseDirect] insertDepartment error:', err);
+      return { success: false };
+    }
+  },
+
+  /**
+   * Renames a department in Supabase table
+   */
+  async updateDepartment(oldName: string, newName: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/departments?name=eq.${encodeURIComponent(oldName.trim())}`, {
+        method: 'PATCH',
+        headers: {
+          ...getHeaders(),
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+          updated_at: new Date().toISOString(),
+        }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] updateDepartment error:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Removes a department from Supabase table
+   */
+  async deleteDepartment(name: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/departments?name=eq.${encodeURIComponent(name.trim())}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] deleteDepartment error:', err);
+      return false;
+    }
+  },
 };
 
