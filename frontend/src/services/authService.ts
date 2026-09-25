@@ -2,7 +2,7 @@ import type { Role, User } from '../types/hrms';
 import { API_BASE_URL } from '../config/api';
 import { supabaseDirect } from './supabaseDirectService';
 
-const API_BASE = API_BASE_URL;
+const getApiBase = () => `${API_BASE_URL}`;
 const TOKEN_KEY = 'vrm_auth_token';
 
 export interface AuthUser {
@@ -108,7 +108,7 @@ const safeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
     return await fetch(input, init);
   } catch (err) {
     if (err instanceof TypeError) {
-      throw new Error(`Cannot connect to backend API (${API_BASE}). Please ensure the backend server is started and accessible.`);
+      throw new Error(`Cannot connect to backend API (${getApiBase()}). Please ensure the backend server is started and accessible.`);
     }
     throw err;
   }
@@ -134,7 +134,7 @@ export const authService = {
 
     // 1. Authenticate with backend API
     try {
-      const response = await safeFetch(`${API_BASE}/auth/login`, {
+      const response = await safeFetch(`${getApiBase()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, password }),
@@ -148,12 +148,14 @@ export const authService = {
           localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(body.data.user)));
           return body.data;
         }
-      } else {
+      } else if (response.status === 400 || response.status === 401 || response.status === 403) {
         const errMessage = await readError(response, 'Invalid User ID / Email or password.');
         throw new Error(errMessage);
+      } else {
+        console.warn(`[Auth] Backend login unavailable (HTTP ${response.status}); trying direct Supabase login.`);
       }
     } catch (err: any) {
-      if (err.message && !err.message.includes('Cannot connect')) {
+      if (err.message && !err.message.includes('Cannot connect') && err.message.includes('Invalid')) {
         throw err;
       }
       // If backend network error / unreachable, fallback to direct Supabase cloud authentication
@@ -249,7 +251,7 @@ export const authService = {
 
     // 2. Real JWT token: query backend /auth/me
     try {
-      const response = await safeFetch(`${API_BASE}/auth/me`, {
+      const response = await safeFetch(`${getApiBase()}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -302,7 +304,7 @@ export const authService = {
     }
 
     try {
-      const response = await safeFetch(`${API_BASE}/auth/change-password`, {
+      const response = await safeFetch(`${getApiBase()}/auth/change-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -336,7 +338,7 @@ export const authService = {
     const cleanId = emailOrEmployeeId.trim();
 
     try {
-      const response = await safeFetch(`${API_BASE}/auth/forgot-password`, {
+      const response = await safeFetch(`${getApiBase()}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email_or_employee_id: cleanId }),
@@ -419,7 +421,7 @@ export const authService = {
     const cleanOtp = otp.trim();
 
     try {
-      const response = await safeFetch(`${API_BASE}/auth/verify-reset-otp`, {
+      const response = await safeFetch(`${getApiBase()}/auth/verify-reset-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -496,7 +498,7 @@ export const authService = {
     }
 
     try {
-      const response = await safeFetch(`${API_BASE}/auth/reset-password`, {
+      const response = await safeFetch(`${getApiBase()}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
