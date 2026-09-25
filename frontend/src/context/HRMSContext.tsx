@@ -1178,7 +1178,7 @@ const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
 export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Auto-purge legacy mock records from browser localStorage on clean slate transition
   if (typeof window !== 'undefined') {
-    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v19';
+    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v20';
     if (localStorage.getItem('vrm_hrms_data_version') !== STORAGE_VERSION) {
       localStorage.removeItem('vrm_hrms_employees');
       localStorage.removeItem('vrm_hrms_enhanced_tasks');
@@ -2553,14 +2553,17 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          // Exclude any default General Day Shift
-          return parsed.filter((s: Shift) => !s.shiftName?.toLowerCase().includes('general day shift'));
+          // Exclude any legacy mock shifts
+          return parsed.filter((s: Shift) => 
+            s && s.id !== 'SH-01' && s.id !== 'SH-02' && s.id !== 'SH-03' &&
+            !['morning standard', 'afternoon shift', 'night shift', 'general day shift'].includes((s.shiftName || '').toLowerCase().trim())
+          );
         }
       }
     } catch (e) {
       console.error('Error loading shifts from storage', e);
     }
-    return INITIAL_SHIFTS;
+    return [];
   });
 
   useEffect(() => {
@@ -7447,8 +7450,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         // Shifts
         if (Array.isArray(settings.shifts_data)) {
-          setShifts(settings.shifts_data);
-          try { localStorage.setItem('vrm_hrms_shifts', JSON.stringify(settings.shifts_data)); } catch {}
+          const cleanShifts = settings.shifts_data.filter((s: Shift) => 
+            s && s.id !== 'SH-01' && s.id !== 'SH-02' && s.id !== 'SH-03' &&
+            !['morning standard', 'afternoon shift', 'night shift', 'general day shift'].includes((s.shiftName || '').toLowerCase().trim())
+          );
+          setShifts(cleanShifts);
+          try { localStorage.setItem('vrm_hrms_shifts', JSON.stringify(cleanShifts)); } catch {}
         }
 
         // Shift Requests

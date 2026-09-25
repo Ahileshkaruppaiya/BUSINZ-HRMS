@@ -9,44 +9,7 @@ const pool = new Pool({
 });
 
 // Import mock data shapes from attendance & HRMS
-const INITIAL_SHIFTS = [
-  {
-    id: 'SH-01',
-    shiftName: 'Morning Standard',
-    startTime: '09:00',
-    endTime: '18:00',
-    breakDurationMins: 60,
-    workingHours: 8,
-    gracePeriodMins: 15,
-    color: '#0E7490',
-    description: 'Standard day shift with 1 hour lunch break',
-    assignments: []
-  },
-  {
-    id: 'SH-02',
-    shiftName: 'Afternoon Shift',
-    startTime: '13:00',
-    endTime: '22:00',
-    breakDurationMins: 60,
-    workingHours: 8,
-    gracePeriodMins: 15,
-    color: '#F59E0B',
-    description: 'Support and operations shift',
-    assignments: []
-  },
-  {
-    id: 'SH-03',
-    shiftName: 'Night Shift',
-    startTime: '21:00',
-    endTime: '06:00',
-    breakDurationMins: 60,
-    workingHours: 8,
-    gracePeriodMins: 15,
-    color: '#8B5CF6',
-    description: 'Infrastructure and overnight monitoring shift',
-    assignments: []
-  }
-];
+const INITIAL_SHIFTS = [];
 
 const INITIAL_LEAVES = [];
 const INITIAL_ATTENDANCE = [];
