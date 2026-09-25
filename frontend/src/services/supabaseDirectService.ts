@@ -388,5 +388,91 @@ export const supabaseDirect = {
       return false;
     }
   },
+
+  /**
+   * Fetches all enterprise tasks directly from Supabase Cloud
+   */
+  async getTasks(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/enterprise_tasks?select=*&order=created_at.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      const rows = await res.json();
+      if (!Array.isArray(rows)) return [];
+      return rows.map((r: any) => ({
+        ...r.task_data,
+        id: r.id || r.task_data?.id,
+        taskNumber: r.task_number || r.task_data?.taskNumber,
+        title: r.title || r.task_data?.title,
+        overallStatus: r.overall_status || r.task_data?.overallStatus || 'OPEN',
+        overallProgress: r.overall_progress ?? r.task_data?.overallProgress ?? 0,
+      }));
+    } catch (err) {
+      console.warn('[SupabaseDirect] getTasks error:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Upserts an enterprise task directly into Supabase Cloud
+   */
+  async saveTask(task: any): Promise<boolean> {
+    try {
+      if (!task || !task.id) return false;
+      const cleanTask = {
+        ...task,
+        attachments: (task.attachments || []).map((a: any) => ({
+          ...a,
+          fileUrl: (a.fileUrl && a.fileUrl.length > 50000) ? '#' : a.fileUrl
+        }))
+      };
+
+      const payload = {
+        id: task.id,
+        task_number: task.taskNumber || `TSK-${Date.now().toString().slice(-4)}`,
+        title: task.title || 'Untitled Task',
+        assigned_by: task.assignedBy || 'Admin',
+        responsible_person_id: task.responsiblePersonId || null,
+        responsible_person_name: task.responsiblePersonName || null,
+        department: task.department || 'General',
+        priority: task.priority || 'Medium',
+        due_date: task.dueDate || null,
+        overall_status: task.overallStatus || 'OPEN',
+        overall_progress: Number(task.overallProgress) || 0,
+        task_data: cleanTask,
+        updated_at: new Date().toISOString()
+      };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/enterprise_tasks?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          'Prefer': 'resolution=merge-duplicates,return=representation',
+        },
+        body: JSON.stringify(payload),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] saveTask error:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Deletes an enterprise task from Supabase Cloud
+   */
+  async deleteTask(taskId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/enterprise_tasks?id=eq.${encodeURIComponent(taskId)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] deleteTask error:', err);
+      return false;
+    }
+  },
 };
 

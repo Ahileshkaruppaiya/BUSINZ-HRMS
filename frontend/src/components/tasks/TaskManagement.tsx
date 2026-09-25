@@ -9,7 +9,8 @@ import {
   BarChart3, 
   CheckSquare,
   Sparkles,
-  FileCheck
+  FileCheck,
+  RefreshCw
 } from 'lucide-react';
 
 import { TaskRegister } from './TaskRegister';
@@ -30,7 +31,7 @@ interface TaskManagementProps {
 }
 
 export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, onCloseQuickAdd }) => {
-  const { currentUser, enhancedTasks, departments } = useHRMS();
+  const { currentUser, enhancedTasks, departments, refreshTasks } = useHRMS();
 
   const isSuperAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'ERP Administrator';
   const isCEO = isSuperAdmin || currentUser.role === 'CEO' || currentUser.designation === 'CEO' || currentUser.employeeId === 'EMP-000';
@@ -45,6 +46,13 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
 
   // Selected Task for Detail Modal
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isSyncingTasks, setIsSyncingTasks] = useState(false);
+
+  const handleSyncTasks = async () => {
+    setIsSyncingTasks(true);
+    await refreshTasks();
+    setTimeout(() => setIsSyncingTasks(false), 500);
+  };
 
   // If user opened via quick add modal trigger
   useEffect(() => {
@@ -201,6 +209,26 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
           </p>
         </div>
         <div className="header-actions" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            onClick={handleSyncTasks}
+            disabled={isSyncingTasks}
+            title="Fetch latest tasks live from Cloud Database"
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              fontWeight: 600, 
+              borderRadius: '10px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#334155'
+            }}
+          >
+            <RefreshCw size={14} style={{ animation: isSyncingTasks ? 'spin 1s linear infinite' : 'none' }} />
+            {isSyncingTasks ? 'Syncing...' : 'Sync Tasks'}
+          </button>
           {!isEmployee && activeTab !== 'new_task' && (
             <ExportDropdown 
               onExportExcel={handleExportExcel}

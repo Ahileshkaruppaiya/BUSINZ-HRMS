@@ -863,6 +863,7 @@ interface HRMSContextType {
 
   // Enhanced Enterprise Task Management
   enhancedTasks: TaskItemEnhanced[];
+  refreshTasks: () => Promise<void>;
   createEnhancedTask: (task: Omit<TaskItemEnhanced, 'id' | 'taskNumber' | 'overallProgress' | 'overallStatus' | 'updates' | 'comments' | 'attachments' | 'timeline' | 'auditLogs' | 'createdAt' | 'updatedAt'> & Partial<Pick<TaskItemEnhanced, 'assignees' | 'attachments'>>) => TaskItemEnhanced;
   updateAssigneeProgress: (taskId: string, assigneeId: string, progressPercentage: number, individualStatus: TaskAssigneeStatus, latestRemark?: string, completionEvidence?: TaskCompletionEvidence) => void;
   closeTask: (taskId: string, closedBy: string, closureRemarks?: string) => void;
@@ -1176,7 +1177,7 @@ const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
 export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Auto-purge legacy mock records from browser localStorage on clean slate transition
   if (typeof window !== 'undefined') {
-    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v16';
+    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v17';
     if (localStorage.getItem('vrm_hrms_data_version') !== STORAGE_VERSION) {
       localStorage.removeItem('vrm_hrms_employees');
       localStorage.removeItem('vrm_hrms_enhanced_tasks');
@@ -1483,7 +1484,53 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     syncSettingsFromDatabase();
-    return () => { isCancelled = true; };
+
+    // Cloud synchronization for Enterprise Tasks
+    const syncTasksFromDatabase = async () => {
+      try {
+        const cloudTasks = await supabaseDirect.getTasks();
+        if (Array.isArray(cloudTasks) && cloudTasks.length > 0) {
+          const sanitized = cloudTasks.map(sanitizeSelfAssignedTask);
+          setEnhancedTasks(sanitized);
+          try {
+            localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(sanitized));
+          } catch {}
+        } else {
+          // If Supabase has 0 tasks but localStorage has existing tasks, backup local tasks to cloud
+          const saved = localStorage.getItem('vrm_hrms_enhanced_tasks');
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                for (const t of parsed) {
+                  await supabaseDirect.saveTask(t);
+                }
+              }
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn('Notice syncing tasks from Supabase:', err);
+      }
+    };
+
+    syncTasksFromDatabase();
+
+    // Periodic auto-sync for live tasks (every 15s) and on tab focus
+    const taskInterval = setInterval(() => {
+      syncTasksFromDatabase();
+    }, 15000);
+
+    const onFocusTab = () => {
+      syncTasksFromDatabase();
+    };
+    window.addEventListener('focus', onFocusTab);
+
+    return () => { 
+      isCancelled = true;
+      clearInterval(taskInterval);
+      window.removeEventListener('focus', onFocusTab);
+    };
   }, []);
 
   const refreshEmployees = async () => {
@@ -1622,6 +1669,21 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } catch (err) {
       console.warn('Notice refreshing settings from Supabase:', err);
+    }
+  };
+
+  const refreshTasks = async () => {
+    try {
+      const cloudTasks = await supabaseDirect.getTasks();
+      if (Array.isArray(cloudTasks) && cloudTasks.length > 0) {
+        const sanitized = cloudTasks.map(sanitizeSelfAssignedTask);
+        setEnhancedTasks(sanitized);
+        try {
+          localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(sanitized));
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('Notice refreshing tasks from Supabase:', err);
     }
   };
 
@@ -5671,6 +5733,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const deleteTask = (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
     setEnhancedTasks(prev => prev.filter(t => t.id !== id));
+    supabaseDirect.deleteTask(id);
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -5819,6 +5882,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     setEnhancedTasks(prev => [newTask, ...prev]);
+    supabaseDirect.saveTask(newTask);
 
     // Also mirror to legacy tasks
     const legacyTask: TaskItem = {
@@ -5975,7 +6039,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       }
 
-      return {
+      const updatedTask = {
         ...task,
         overallStatus: newOverallStatus,
         overallProgress: newOverallProgress,
@@ -5985,6 +6049,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         auditLogs: [...auditEntries, ...task.auditLogs],
         updatedAt: today
       };
+      supabaseDirect.saveTask(updatedTask);
+      return updatedTask;
     }));
 
     // Also mirror to legacy tasks array
@@ -6029,7 +6095,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: `${today} ${nowTime}`
       };
 
-      return {
+      const updated: TaskItemEnhanced = {
         ...t,
         overallStatus: 'CLOSED',
         closedAt: new Date().toISOString(),
@@ -6039,6 +6105,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         auditLogs: [newAudit, ...t.auditLogs],
         updatedAt: today
       };
+      supabaseDirect.saveTask(updated);
+      return updated;
     }));
 
     addNotification({
@@ -6083,7 +6151,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: `${today} ${nowTime}`
       };
 
-      return {
+      const updated: TaskItemEnhanced = {
         ...t,
         overallStatus: derivedStatus === 'CLOSED' ? 'IN PROGRESS' : derivedStatus,
         overallProgress,
@@ -6096,6 +6164,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         auditLogs: [newAudit, ...t.auditLogs],
         updatedAt: today
       };
+      supabaseDirect.saveTask(updated);
+      return updated;
     }));
 
     addNotification({
@@ -6190,7 +6260,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: `${today} ${nowTime}`
       };
 
-      return {
+      const updated = {
         ...t,
         overallStatus,
         overallProgress,
@@ -6200,6 +6270,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         auditLogs: [newAudit, ...t.auditLogs],
         updatedAt: today
       };
+      supabaseDirect.saveTask(updated);
+      return updated;
     }));
 
     addNotification({
@@ -6261,7 +6333,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: `${today} ${nowTime}`
       };
 
-      return {
+      const updated = {
         ...t,
         overallStatus,
         overallProgress,
@@ -6270,6 +6342,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         auditLogs: [newAudit, ...t.auditLogs],
         updatedAt: today
       };
+      supabaseDirect.saveTask(updated);
+      return updated;
     }));
 
     addNotification({
@@ -6313,11 +6387,13 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: `${today} ${nowTime}`
       };
 
-      return {
+      const updated = {
         ...t,
         comments: [...t.comments, newComment],
         auditLogs: [newAudit, ...t.auditLogs]
       };
+      supabaseDirect.saveTask(updated);
+      return updated;
     }));
   };
 
@@ -6348,11 +6424,13 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: `${today} ${nowTime}`
       };
 
-      return {
+      const updated = {
         ...t,
         attachments: [...(t.attachments || []), newAttachment],
         auditLogs: [newAudit, ...t.auditLogs]
       };
+      supabaseDirect.saveTask(updated);
+      return updated;
     }));
   };
 
@@ -6390,11 +6468,13 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: `${today} ${nowTime}`
       };
 
-      return {
+      const updated = {
         ...t,
         links: [...(t.links || []), newLink],
         auditLogs: [newAudit, ...(t.auditLogs || [])]
       };
+      supabaseDirect.saveTask(updated);
+      return updated;
     }));
   };
 
@@ -6420,11 +6500,13 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: `${today} ${nowTime}`
       };
 
-      return {
+      const updated = {
         ...t,
         links: (t.links || []).filter(l => l.id !== linkId),
         auditLogs: [newAudit, ...(t.auditLogs || [])]
       };
+      supabaseDirect.saveTask(updated);
+      return updated;
     }));
   };
 
@@ -7502,6 +7584,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       updateTaskStatus,
       deleteTask,
       enhancedTasks,
+      refreshTasks,
       createEnhancedTask,
       updateAssigneeProgress,
       closeTask,
