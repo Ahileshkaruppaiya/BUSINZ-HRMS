@@ -1178,36 +1178,13 @@ const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
 export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Auto-purge legacy mock records from browser localStorage on clean slate transition
   if (typeof window !== 'undefined') {
-    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v20';
+    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v21';
     if (localStorage.getItem('vrm_hrms_data_version') !== STORAGE_VERSION) {
-      localStorage.removeItem('vrm_hrms_employees');
-      localStorage.removeItem('vrm_hrms_enhanced_tasks');
+      // Only clear legacy mock operational items if version changes, never wipe configured settings
       localStorage.removeItem('vrm_hrms_attendance_records');
       localStorage.removeItem('vrm_hrms_leave_requests');
-      localStorage.removeItem('hrms_loan_records');
-      localStorage.removeItem('vrm_hrms_loan_policies');
-      localStorage.removeItem('vrm_hrms_expenses');
-      localStorage.removeItem('vrm_hrms_assets');
-      localStorage.removeItem('vrm_hrms_mom_meetings');
-      localStorage.removeItem('vrm_hrms_payroll_records');
-      localStorage.removeItem('vrm_hrms_field_assignments');
-      localStorage.removeItem('vrm_hrms_trip_sessions');
-      localStorage.removeItem('vrm_hrms_tracking_alerts');
       localStorage.removeItem('vrm_hrms_shifts');
-      localStorage.removeItem('vrm_hrms_holiday_policies');
       localStorage.removeItem('vrm_hrms_shift_requests');
-      localStorage.removeItem('vrm_hrms_reward_policies');
-      localStorage.removeItem('vrm_hrms_employee_rewards');
-      localStorage.removeItem('vrm_hrms_master_attendance_policies');
-      localStorage.removeItem('vrm_hrms_master_leave_policies');
-      localStorage.removeItem('vrm_hrms_payroll_settings_config');
-      localStorage.removeItem('vrm_hrms_geofence_config');
-      localStorage.removeItem('vrm_hrms_company_info');
-      localStorage.removeItem('vrm_hrms_company_branches');
-      localStorage.removeItem('vrm_hrms_org_structure');
-      localStorage.removeItem('vrm_hrms_departments');
-      localStorage.removeItem('vrm_hrms_designations');
-      localStorage.removeItem('vrm_hrms_department_ot_policies');
       localStorage.removeItem('vrm_enterprise_integrations_v5');
       localStorage.removeItem('vrm_enterprise_integrations_v4');
       localStorage.removeItem('vrm_enterprise_integrations_v3');
@@ -1561,6 +1538,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       localStorage.setItem('vrm_hrms_department_ot_policies', JSON.stringify(departmentOtPolicies));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('department_ot_policies_data', departmentOtPolicies);
+      }
     } catch {}
   }, [departmentOtPolicies]);
   const [employeeOtPolicies, setEmployeeOtPolicies] = useState<EmployeeOtPolicy[]>(INITIAL_EMPLOYEE_OT_POLICIES);
@@ -2946,38 +2926,96 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return DEFAULT_LOAN_POLICIES;
   });
 
-  // LocalStorage persistence effects
+  // LocalStorage & Supabase Cloud persistence effects
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_departments', JSON.stringify(departments)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_departments', JSON.stringify(departments));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('departments_data', departments);
+      }
+    } catch {}
   }, [departments]);
 
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_designations', JSON.stringify(designations)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_designations', JSON.stringify(designations));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('designations_data', designations);
+      }
+    } catch {}
   }, [designations]);
 
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_company_info', JSON.stringify(companyInfo)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_company_info', JSON.stringify(companyInfo));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('company_info', companyInfo);
+      }
+    } catch {}
   }, [companyInfo]);
 
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_company_branches', JSON.stringify(companyBranches)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_company_branches', JSON.stringify(companyBranches));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('company_branches', companyBranches);
+      }
+    } catch {}
   }, [companyBranches]);
 
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_org_structure', JSON.stringify(orgStructure)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_org_structure', JSON.stringify(orgStructure));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('org_structure', orgStructure);
+      }
+    } catch {}
   }, [orgStructure]);
 
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_master_attendance_policies', JSON.stringify(masterAttendancePolicies)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_master_attendance_policies', JSON.stringify(masterAttendancePolicies));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('master_attendance_policies_data', masterAttendancePolicies);
+      }
+    } catch {}
   }, [masterAttendancePolicies]);
 
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_master_leave_policies', JSON.stringify(masterLeavePolicies)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_master_leave_policies', JSON.stringify(masterLeavePolicies));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('master_leave_policies_data', masterLeavePolicies);
+      }
+    } catch {}
   }, [masterLeavePolicies]);
 
   useEffect(() => {
-    try { localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(payrollSettingsConfig)); } catch {}
+    try {
+      localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(payrollSettingsConfig));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('payroll_settings_config', payrollSettingsConfig);
+      }
+    } catch {}
   }, [payrollSettingsConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vrm_hrms_reward_policies', JSON.stringify(rewardPolicies));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('reward_policies_data', rewardPolicies);
+      }
+    } catch {}
+  }, [rewardPolicies]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vrm_hrms_employee_rewards', JSON.stringify(employeeRewardRecords));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('employee_rewards_data', employeeRewardRecords);
+      }
+    } catch {}
+  }, [employeeRewardRecords]);
 
   useEffect(() => {
     try {
@@ -4400,16 +4438,23 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         oldValues: prev,
         newValues: updated
       });
+      // Direct immediate cloud save
+      supabaseDirect.saveCompanySetting('payroll_settings_config', updated);
       return updated;
     });
   };
 
   const toggleSalaryComponent = (code: string) => {
-    setPayrollSettingsConfig(prev => ({
-      ...prev,
-      components: prev.components.map(c => c.code === code ? { ...c, active: !c.active } : c),
-      updatedAt: new Date().toISOString()
-    }));
+    setPayrollSettingsConfig(prev => {
+      const updated = {
+        ...prev,
+        components: prev.components.map(c => c.code === code ? { ...c, active: !c.active } : c),
+        updatedAt: new Date().toISOString()
+      };
+      // Direct immediate cloud save
+      supabaseDirect.saveCompanySetting('payroll_settings_config', updated);
+      return updated;
+    });
   };
 
   // Rewards & Recognition
@@ -7537,6 +7582,81 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setTrackingAlerts(settings.tracking_alerts_data);
           try { localStorage.setItem('vrm_hrms_tracking_alerts', JSON.stringify(settings.tracking_alerts_data)); } catch {}
         }
+
+        // Payroll Settings Config (Salary Components, PF, ESIC, Tax, etc.)
+        if (settings.payroll_settings_config && typeof settings.payroll_settings_config === 'object') {
+          const cloudConfig = settings.payroll_settings_config;
+          const localSaved = localStorage.getItem('vrm_hrms_payroll_settings_config');
+          let localParsed: any = null;
+          try { if (localSaved) localParsed = JSON.parse(localSaved); } catch {}
+
+          if (Array.isArray(localParsed?.components) && localParsed.components.length > 0) {
+            // Find any components created locally that might not be in cloud yet
+            const cloudCodes = new Set((cloudConfig.components || []).map((c: any) => (c.code || '').toUpperCase()));
+            const missingFromCloud = localParsed.components.filter((c: any) => c && c.code && !cloudCodes.has(c.code.toUpperCase()));
+            if (missingFromCloud.length > 0) {
+              const mergedComponents = [...(cloudConfig.components || []), ...missingFromCloud];
+              const mergedConfig = { ...cloudConfig, components: mergedComponents };
+              setPayrollSettingsConfig(mergedConfig);
+              try { localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(mergedConfig)); } catch {}
+              supabaseDirect.saveCompanySetting('payroll_settings_config', mergedConfig);
+            } else {
+              setPayrollSettingsConfig(cloudConfig);
+              try { localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(cloudConfig)); } catch {}
+            }
+          } else {
+            setPayrollSettingsConfig(cloudConfig);
+            try { localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(cloudConfig)); } catch {}
+          }
+        }
+
+        // Master Attendance Policies
+        if (Array.isArray(settings.master_attendance_policies_data) && settings.master_attendance_policies_data.length > 0) {
+          setMasterAttendancePolicies(settings.master_attendance_policies_data);
+          try { localStorage.setItem('vrm_hrms_master_attendance_policies', JSON.stringify(settings.master_attendance_policies_data)); } catch {}
+        }
+
+        // Master Leave Policies
+        if (Array.isArray(settings.master_leave_policies_data) && settings.master_leave_policies_data.length > 0) {
+          setMasterLeavePolicies(settings.master_leave_policies_data);
+          try { localStorage.setItem('vrm_hrms_master_leave_policies', JSON.stringify(settings.master_leave_policies_data)); } catch {}
+        }
+
+        // Department OT Policies
+        if (Array.isArray(settings.department_ot_policies_data) && settings.department_ot_policies_data.length > 0) {
+          setDepartmentOtPolicies(settings.department_ot_policies_data);
+          try { localStorage.setItem('vrm_hrms_department_ot_policies', JSON.stringify(settings.department_ot_policies_data)); } catch {}
+        }
+
+        // Designations
+        if (Array.isArray(settings.designations_data) && settings.designations_data.length > 0) {
+          setDesignations(settings.designations_data);
+          try { localStorage.setItem('vrm_hrms_designations', JSON.stringify(settings.designations_data)); } catch {}
+        }
+
+        // Departments
+        if (Array.isArray(settings.departments_data) && settings.departments_data.length > 0) {
+          setDepartments(settings.departments_data);
+          try { localStorage.setItem('vrm_hrms_departments', JSON.stringify(settings.departments_data)); } catch {}
+        }
+
+        // Rewards & Recognition
+        if (Array.isArray(settings.reward_policies_data)) {
+          setRewardPolicies(settings.reward_policies_data);
+          try { localStorage.setItem('vrm_hrms_reward_policies', JSON.stringify(settings.reward_policies_data)); } catch {}
+        }
+        if (Array.isArray(settings.employee_rewards_data)) {
+          setEmployeeRewardRecords(settings.employee_rewards_data);
+          try { localStorage.setItem('vrm_hrms_employee_rewards', JSON.stringify(settings.employee_rewards_data)); } catch {}
+        }
+
+        // Enterprise System Config
+        if (Array.isArray(settings.grades_data)) setGrades(settings.grades_data);
+        if (Array.isArray(settings.employment_types_data)) setEmploymentTypes(settings.employment_types_data);
+        if (Array.isArray(settings.employee_categories_data)) setEmployeeCategories(settings.employee_categories_data);
+        if (settings.employee_config_data) setEmployeeConfig(settings.employee_config_data);
+        if (settings.general_system_config_data) setGeneralSystemConfig(settings.general_system_config_data);
+        if (settings.integrations_config_data) setIntegrationsConfig(settings.integrations_config_data);
       }
     } catch (err) {
       console.warn('[HRMSContext] syncAllModulesFromDatabase notice:', err);
