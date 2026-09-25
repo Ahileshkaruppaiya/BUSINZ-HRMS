@@ -1178,12 +1178,18 @@ const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
 export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Auto-purge legacy mock records from browser localStorage on clean slate transition
   if (typeof window !== 'undefined') {
-    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v17';
+    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v19';
     if (localStorage.getItem('vrm_hrms_data_version') !== STORAGE_VERSION) {
       localStorage.removeItem('vrm_hrms_employees');
       localStorage.removeItem('vrm_hrms_enhanced_tasks');
+      localStorage.removeItem('vrm_hrms_attendance_records');
+      localStorage.removeItem('vrm_hrms_leave_requests');
       localStorage.removeItem('hrms_loan_records');
       localStorage.removeItem('vrm_hrms_loan_policies');
+      localStorage.removeItem('vrm_hrms_expenses');
+      localStorage.removeItem('vrm_hrms_assets');
+      localStorage.removeItem('vrm_hrms_mom_meetings');
+      localStorage.removeItem('vrm_hrms_payroll_records');
       localStorage.removeItem('vrm_hrms_field_assignments');
       localStorage.removeItem('vrm_hrms_trip_sessions');
       localStorage.removeItem('vrm_hrms_tracking_alerts');
@@ -7440,11 +7446,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Shifts
-        if (Array.isArray(settings.shifts_data) && settings.shifts_data.length > 0) {
+        if (Array.isArray(settings.shifts_data)) {
           setShifts(settings.shifts_data);
           try { localStorage.setItem('vrm_hrms_shifts', JSON.stringify(settings.shifts_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('shifts_data', shifts);
         }
 
         // Shift Requests
@@ -7454,73 +7458,57 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Leave Requests
-        if (Array.isArray(settings.leave_requests_data) && settings.leave_requests_data.length > 0) {
+        if (Array.isArray(settings.leave_requests_data)) {
           setLeaveRequests(settings.leave_requests_data);
           try { localStorage.setItem('vrm_hrms_leave_requests', JSON.stringify(settings.leave_requests_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('leave_requests_data', leaveRequests);
         }
 
         // Holiday Policies
-        if (Array.isArray(settings.holiday_policies_data) && settings.holiday_policies_data.length > 0) {
+        if (Array.isArray(settings.holiday_policies_data)) {
           setHolidayPolicies(settings.holiday_policies_data);
           try { localStorage.setItem('vrm_hrms_holiday_policies', JSON.stringify(settings.holiday_policies_data)); } catch {}
         }
 
         // Attendance Records
-        if (Array.isArray(settings.attendance_records_data) && settings.attendance_records_data.length > 0) {
+        if (Array.isArray(settings.attendance_records_data)) {
           setAttendanceRecords(settings.attendance_records_data);
           try { localStorage.setItem('vrm_hrms_attendance_records', JSON.stringify(settings.attendance_records_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('attendance_records_data', attendanceRecords);
         }
 
         // Loan Policies
-        if (Array.isArray(settings.loan_policies_data) && settings.loan_policies_data.length > 0) {
+        if (Array.isArray(settings.loan_policies_data)) {
           setLoanPolicies(settings.loan_policies_data);
           try { localStorage.setItem('vrm_hrms_loan_policies', JSON.stringify(settings.loan_policies_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('loan_policies_data', loanPolicies);
         }
 
         // Loan Records
-        if (Array.isArray(settings.loan_records_data) && settings.loan_records_data.length > 0) {
+        if (Array.isArray(settings.loan_records_data)) {
           setLoanRecords(settings.loan_records_data);
           try { localStorage.setItem('hrms_loan_records', JSON.stringify(settings.loan_records_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('loan_records_data', loanRecords);
         }
 
         // Assets
-        if (Array.isArray(settings.assets_data) && settings.assets_data.length > 0) {
+        if (Array.isArray(settings.assets_data)) {
           setAssets(settings.assets_data);
           try { localStorage.setItem('vrm_hrms_assets', JSON.stringify(settings.assets_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('assets_data', assets);
         }
 
         // Expenses
-        if (Array.isArray(settings.expenses_data) && settings.expenses_data.length > 0) {
+        if (Array.isArray(settings.expenses_data)) {
           setExpenses(settings.expenses_data);
           try { localStorage.setItem('vrm_hrms_expenses', JSON.stringify(settings.expenses_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('expenses_data', expenses);
         }
 
         // MOM Meetings
-        if (Array.isArray(settings.mom_meetings_data) && settings.mom_meetings_data.length > 0) {
+        if (Array.isArray(settings.mom_meetings_data)) {
           setMomMeetings(settings.mom_meetings_data);
           try { localStorage.setItem('vrm_hrms_mom_meetings', JSON.stringify(settings.mom_meetings_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('mom_meetings_data', momMeetings);
         }
 
         // Payroll Records
-        if (Array.isArray(settings.payroll_records_data) && settings.payroll_records_data.length > 0) {
+        if (Array.isArray(settings.payroll_records_data)) {
           setPayrollRecords(settings.payroll_records_data);
           try { localStorage.setItem('vrm_hrms_payroll_records', JSON.stringify(settings.payroll_records_data)); } catch {}
-        } else if (isInitial) {
-          supabaseDirect.saveCompanySetting('payroll_records_data', payrollRecords);
         }
 
         // Geofence Config
@@ -7530,15 +7518,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Field Duty & Tracking
-        if (Array.isArray(settings.field_assignments_data) && settings.field_assignments_data.length > 0) {
+        if (Array.isArray(settings.field_assignments_data)) {
           setFieldAssignments(settings.field_assignments_data);
           try { localStorage.setItem('vrm_hrms_field_assignments', JSON.stringify(settings.field_assignments_data)); } catch {}
         }
-        if (Array.isArray(settings.trip_sessions_data) && settings.trip_sessions_data.length > 0) {
+        if (Array.isArray(settings.trip_sessions_data)) {
           setTripSessions(settings.trip_sessions_data);
           try { localStorage.setItem('vrm_hrms_trip_sessions', JSON.stringify(settings.trip_sessions_data)); } catch {}
         }
-        if (Array.isArray(settings.tracking_alerts_data) && settings.tracking_alerts_data.length > 0) {
+        if (Array.isArray(settings.tracking_alerts_data)) {
           setTrackingAlerts(settings.tracking_alerts_data);
           try { localStorage.setItem('vrm_hrms_tracking_alerts', JSON.stringify(settings.tracking_alerts_data)); } catch {}
         }
