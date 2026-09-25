@@ -84,7 +84,7 @@ export const INITIAL_DEFAULT_ROLES: RoleDefinition[] = [
     department: 'Executive Board',
     status: 'Active',
     isDefault: true,
-    userCount: 1,
+    userCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
@@ -95,7 +95,7 @@ export const INITIAL_DEFAULT_ROLES: RoleDefinition[] = [
     department: 'Human Resources',
     status: 'Active',
     isDefault: true,
-    userCount: 4,
+    userCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
@@ -106,7 +106,7 @@ export const INITIAL_DEFAULT_ROLES: RoleDefinition[] = [
     department: 'IT & Administration',
     status: 'Active',
     isDefault: true,
-    userCount: 2,
+    userCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
@@ -117,7 +117,7 @@ export const INITIAL_DEFAULT_ROLES: RoleDefinition[] = [
     department: 'Operations & Engineering',
     status: 'Active',
     isDefault: true,
-    userCount: 8,
+    userCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
@@ -128,7 +128,7 @@ export const INITIAL_DEFAULT_ROLES: RoleDefinition[] = [
     department: 'Operations',
     status: 'Active',
     isDefault: true,
-    userCount: 12,
+    userCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
@@ -139,7 +139,7 @@ export const INITIAL_DEFAULT_ROLES: RoleDefinition[] = [
     department: 'General Staff',
     status: 'Active',
     isDefault: true,
-    userCount: 154,
+    userCount: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   },
@@ -367,13 +367,21 @@ export const getInitialRBACState = (): RBACDataResponse => {
   return initialData;
 };
 
+const getAuthHeaders = (extraHeaders: Record<string, string> = {}) => {
+  const token = typeof window !== 'undefined'
+    ? (sessionStorage.getItem('vrm_auth_token') || localStorage.getItem('vrm_auth_token'))
+    : null;
+  return {
+    ...extraHeaders,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
 export const rbacService = {
   async fetchRBACData(): Promise<RBACDataResponse> {
     try {
       const res = await fetch(API_BASE, {
-        headers: {
-          'x-dev-mock-auth': 'true',
-        },
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         const json = await res.json();
@@ -428,7 +436,7 @@ export const rbacService = {
     try {
       await fetch(`${API_BASE}/roles/${roleId}/permissions`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-dev-mock-auth': 'true' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
       });
     } catch {
@@ -504,7 +512,7 @@ export const rbacService = {
     try {
       await fetch(`${API_BASE}/roles`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-dev-mock-auth': 'true' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(data),
       });
     } catch {
@@ -553,7 +561,7 @@ export const rbacService = {
     try {
       await fetch(`${API_BASE}/roles/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-dev-mock-auth': 'true' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(updates),
       });
     } catch {
@@ -605,7 +613,7 @@ export const rbacService = {
     try {
       await fetch(`${API_BASE}/roles/${id}`, {
         method: 'DELETE',
-        headers: { 'x-dev-mock-auth': 'true' },
+        headers: getAuthHeaders(),
       });
     } catch {
       // Handled
@@ -662,7 +670,7 @@ export const rbacService = {
     try {
       await fetch(`${API_BASE}/modules`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-dev-mock-auth': 'true' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(data),
       });
     } catch {

@@ -344,16 +344,6 @@ export const FaceAttendance: React.FC = () => {
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
-    } else {
-      // Demo simulated mode
-      setTimeout(() => {
-        const isSimulatedInside = locationMode === 'inside';
-        const userDist = isSimulatedInside ? 35 : 650;
-        const userLat = geofenceConfig.centerLat + (isSimulatedInside ? 0.0003 : 0.005);
-        const userLng = geofenceConfig.centerLng + (isSimulatedInside ? 0.0002 : 0.005);
-        const address = `${geofenceConfig.officeName} Gate 1 (Simulated ${userDist}m away)`;
-        processAttendanceScan(type, capturedPhotoUrl, userLat, userLng, userDist, address);
-      }, 1500);
     }
   };
 
@@ -477,11 +467,6 @@ export const FaceAttendance: React.FC = () => {
     if (userName && logEmpName) {
       if (logEmpName === userName) return true;
       if (logEmpName.includes(userName) || userName.includes(logEmpName)) return true;
-    }
-
-    // Demo fallback for generic EMP-USER / Staff Employee / Floor Employee -> defaults to EMP-008 (Murugan)
-    if ((userEmpId === 'emp-user' || userName.includes('staff') || userName.includes('floor')) && (logEmpId === 'emp-008' || logEmpName.includes('murugan'))) {
-      return true;
     }
 
     return false;

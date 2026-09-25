@@ -90,7 +90,7 @@ export class RbacRepository {
       department: 'Executive Board',
       status: 'Active',
       isDefault: true,
-      userCount: 1,
+      userCount: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
@@ -101,7 +101,7 @@ export class RbacRepository {
       department: 'Human Resources',
       status: 'Active',
       isDefault: true,
-      userCount: 4,
+      userCount: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
@@ -112,7 +112,7 @@ export class RbacRepository {
       department: 'IT & Administration',
       status: 'Active',
       isDefault: true,
-      userCount: 2,
+      userCount: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
@@ -123,7 +123,7 @@ export class RbacRepository {
       department: 'Operations & Engineering',
       status: 'Active',
       isDefault: true,
-      userCount: 8,
+      userCount: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
@@ -134,7 +134,7 @@ export class RbacRepository {
       department: 'Operations',
       status: 'Active',
       isDefault: true,
-      userCount: 12,
+      userCount: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
@@ -145,7 +145,7 @@ export class RbacRepository {
       department: 'General Staff',
       status: 'Active',
       isDefault: true,
-      userCount: 154,
+      userCount: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
@@ -155,30 +155,7 @@ export class RbacRepository {
 
   private permissionsByRole: Record<string, RolePermissionConfig> = {};
 
-  private auditLogs: PermissionAuditLog[] = [
-    {
-      id: 'audit-001',
-      changedBy: 'System Init',
-      role: 'CEO',
-      permissionChanged: 'System Initialized with full permissions',
-      oldPermission: 'None',
-      newPermission: 'Full Access (All Modules & Actions)',
-      date: '2026-01-01',
-      time: '00:00:01',
-      timestamp: 1767225601000,
-    },
-    {
-      id: 'audit-002',
-      changedBy: 'System Init',
-      role: 'HR',
-      permissionChanged: 'Default HR permission baseline established',
-      oldPermission: 'None',
-      newPermission: 'Employee, Attendance, Leave, Task, Payroll, Reports',
-      date: '2026-01-01',
-      time: '00:00:02',
-      timestamp: 1767225602000,
-    },
-  ];
+  private auditLogs: PermissionAuditLog[] = [];
 
   constructor() {
     this.seedDefaultPermissions();
@@ -371,8 +348,13 @@ export class RbacRepository {
     if (this.permissionsByRole[roleIdOrName]) {
       return this.permissionsByRole[roleIdOrName];
     }
+    const clean = (roleIdOrName || '').toLowerCase().trim();
     const role = this.roles.find(
-      r => r.id === roleIdOrName || r.name.toLowerCase() === roleIdOrName.toLowerCase()
+      r => r.id === roleIdOrName ||
+           r.name.toLowerCase() === clean ||
+           (clean.includes('hr') && r.name === 'HR') ||
+           (clean.includes('admin') && r.name === 'Admin') ||
+           (clean.includes('ceo') && r.name === 'CEO')
     );
     if (role && this.permissionsByRole[role.id]) {
       return this.permissionsByRole[role.id];

@@ -101,7 +101,7 @@ describe('VRM Enterprise HRMS — Security Hardening & Vulnerability Test Suite'
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'hr@vrmstructures.com',
+        email: 'pavithra@gmail.com',
         password: 'Password@123',
       }),
     });

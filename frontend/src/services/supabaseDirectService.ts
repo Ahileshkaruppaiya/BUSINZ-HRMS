@@ -105,13 +105,10 @@ export const supabaseDirect = {
       if (!Array.isArray(rows) || rows.length === 0) return null;
 
       const user = rows[0];
-      const dbPass = (user.password || 'Password@123').trim();
+      if (!user.password) return null;
+      const dbPass = user.password.trim();
 
-      const isPasswordValid =
-        cleanPass === dbPass ||
-        cleanPass === 'Password@123' ||
-        cleanPass === 'admin' ||
-        cleanPass.toLowerCase() === dbPass.toLowerCase();
+      const isPasswordValid = cleanPass === dbPass;
 
       if (!isPasswordValid) return null;
 
@@ -496,6 +493,768 @@ export const supabaseDirect = {
     } catch (err) {
       console.warn('[SupabaseDirect] deleteTask error:', err);
       return false;
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // SHIFTS
+  // --------------------------------------------------------------------------
+  async getShifts(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/shifts?select=*&order=created_at.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getShifts error:', err);
+      return [];
+    }
+  },
+
+  async insertShift(shift: {
+    shift_name: string;
+    start_time: string;
+    end_time: string;
+    break_duration_mins?: number;
+    working_hours?: number;
+    grace_period_mins?: number;
+    color?: string;
+  }): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      const payload = {
+        shift_name: shift.shift_name,
+        start_time: shift.start_time,
+        end_time: shift.end_time,
+        break_duration_mins: shift.break_duration_mins ?? 60,
+        working_hours: shift.working_hours ?? 8.0,
+        grace_period_mins: shift.grace_period_mins ?? 15,
+        color: shift.color || '#0E7490',
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/shifts`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        return { success: false, error: err };
+      }
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
+    }
+  },
+
+  async updateShift(id: string, updates: Record<string, any>): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/shifts?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] updateShift error:', err);
+      return false;
+    }
+  },
+
+  async deleteShift(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/shifts?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] deleteShift error:', err);
+      return false;
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // LEAVE REQUESTS
+  // --------------------------------------------------------------------------
+  async getLeaveRequests(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leave_requests?select=*,employee:employees(employee_id,first_name,last_name,department_id)&order=created_at.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getLeaveRequests error:', err);
+      return [];
+    }
+  },
+
+  async insertLeaveRequest(req: {
+    employee_id: string; // UUID from employees.id
+    leave_type: string;
+    start_date: string;
+    end_date: string;
+    days_count: number;
+    reason?: string;
+    status?: string;
+  }): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      // Map to PostgreSQL enum hr_leave_type: ['Casual Leave', 'Sick Leave', 'Paid Leave', 'Unpaid Leave', 'Work From Home']
+      const rawType = (req.leave_type || '').toLowerCase();
+      let normType = 'Casual Leave';
+      if (rawType.includes('sick')) normType = 'Sick Leave';
+      else if (rawType.includes('unpaid') || rawType.includes('loss') || rawType.includes('lop')) normType = 'Unpaid Leave';
+      else if (rawType.includes('paid') || rawType.includes('earn') || rawType.includes('annual')) normType = 'Paid Leave';
+      else if (rawType.includes('wfh') || rawType.includes('home')) normType = 'Work From Home';
+
+      const validStatuses = ['Pending', 'Approved', 'Rejected'];
+      const normStatus = validStatuses.includes(req.status || '') ? req.status : 'Pending';
+
+      const payload = {
+        employee_id: req.employee_id,
+        leave_type: normType,
+        start_date: req.start_date,
+        end_date: req.end_date,
+        days_count: Math.max(1, Math.round(req.days_count)),
+        reason: req.reason || 'Personal leave',
+        status: normStatus,
+        applied_date: new Date().toISOString().split('T')[0],
+      };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leave_requests`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        return { success: false, error: err };
+      }
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
+    }
+  },
+
+  async updateLeaveRequestStatus(id: string, status: string, approvedBy?: string): Promise<boolean> {
+    try {
+      // Map to PostgreSQL enum hr_request_status: ['Pending', 'Approved', 'Rejected']
+      let normStatus = 'Pending';
+      if (status === 'Approved') normStatus = 'Approved';
+      else if (status === 'Rejected' || status === 'Cancelled') normStatus = 'Rejected';
+
+      const body: any = {
+        status: normStatus,
+        updated_at: new Date().toISOString(),
+      };
+      if (approvedBy && approvedBy.length === 36) body.approved_by = approvedBy;
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/leave_requests?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify(body),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] updateLeaveRequestStatus error:', err);
+      return false;
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // ATTENDANCE RECORDS
+  // --------------------------------------------------------------------------
+  async getAttendanceRecords(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance_records?select=*,employee:employees(employee_id,first_name,last_name)&order=date.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getAttendanceRecords error:', err);
+      return [];
+    }
+  },
+
+  async insertAttendanceRecord(record: {
+    employee_id: string; // UUID of employee
+    date: string;
+    check_in?: string | null;
+    check_out?: string | null;
+    working_hours?: number;
+    status?: string;
+    late_status?: string;
+    method?: string;
+    in_geofence?: boolean;
+    location_lat?: number;
+    location_lng?: number;
+    location_address?: string;
+    shift_id?: string;
+    shift_date?: string;
+  }): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      // Map to PostgreSQL enum hr_attendance_status: ['Present', 'Absent', 'Late', 'Half Day', 'Work From Home', 'On Leave']
+      let status = 'Present';
+      const rawStatus = (record.status || '').toLowerCase();
+      if (rawStatus.includes('absent')) status = 'Absent';
+      else if (rawStatus.includes('late')) status = 'Late';
+      else if (rawStatus.includes('half')) status = 'Half Day';
+      else if (rawStatus.includes('home') || rawStatus.includes('wfh')) status = 'Work From Home';
+      else if (rawStatus.includes('leave') || rawStatus.includes('off') || rawStatus.includes('holiday')) status = 'On Leave';
+
+      const payload = {
+        employee_id: record.employee_id,
+        date: record.date,
+        check_in: record.check_in || null,
+        check_out: record.check_out || null,
+        working_hours: record.working_hours ?? 0,
+        status,
+        late_status: record.late_status || 'On Time',
+        method: record.method || 'Face Scan',
+        in_geofence: record.in_geofence ?? true,
+        face_verified: record.method === 'Face Scan',
+        location_lat: record.location_lat || 13.0827,
+        location_lng: record.location_lng || 80.2707,
+        location_address: record.location_address || 'Plant HQ',
+        shift_id: (record.shift_id && record.shift_id.length === 36) ? record.shift_id : null,
+        shift_date: record.shift_date || record.date,
+      };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance_records`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        return { success: false, error: err };
+      }
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
+    }
+  },
+
+  async updateAttendanceRecord(id: string, updates: Record<string, any>): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance_records?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] updateAttendanceRecord error:', err);
+      return false;
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // ASSETS
+  // --------------------------------------------------------------------------
+  async getAssets(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/assets?select=*&order=created_at.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getAssets error:', err);
+      return [];
+    }
+  },
+
+  async insertAsset(asset: {
+    asset_tag: string;
+    name: string;
+    category: string;
+    serial_number?: string;
+    purchase_cost?: number;
+    status?: string;
+    condition?: string;
+    assigned_employee_id?: string;
+    notes?: string;
+  }): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      // Map to PostgreSQL enum hr_asset_status: ['Assigned', 'Available', 'Under Maintenance', 'Retired']
+      let normStatus = 'Available';
+      const rawStatus = (asset.status || '').toLowerCase();
+      if (rawStatus.includes('assign') || rawStatus.includes('use') || rawStatus.includes('in use')) normStatus = 'Assigned';
+      else if (rawStatus.includes('maint')) normStatus = 'Under Maintenance';
+      else if (rawStatus.includes('retir')) normStatus = 'Retired';
+
+      // Map to PostgreSQL enum hr_asset_condition: ['New', 'Good', 'Fair', 'Needs Repair']
+      let normCondition = 'Good';
+      const rawCondition = (asset.condition || '').toLowerCase();
+      if (rawCondition.includes('new')) normCondition = 'New';
+      else if (rawCondition.includes('fair')) normCondition = 'Fair';
+      else if (rawCondition.includes('repair') || rawCondition.includes('poor') || rawCondition.includes('damag')) normCondition = 'Needs Repair';
+
+      const payload = {
+        asset_tag: asset.asset_tag,
+        name: asset.name,
+        category: asset.category || 'IT Equipment',
+        serial_number: asset.serial_number || null,
+        purchase_cost: Number(asset.purchase_cost) || 0,
+        status: normStatus,
+        condition: normCondition,
+        assigned_employee_id: (asset.assigned_employee_id && asset.assigned_employee_id.length === 36) ? asset.assigned_employee_id : null,
+        notes: asset.notes || null,
+      };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/assets`, {
+        method: 'POST',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) return { success: false, error: await res.text() };
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
+    }
+  },
+
+  async updateAsset(id: string, updates: Record<string, any>): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/assets?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] updateAsset error:', err);
+      return false;
+    }
+  },
+
+  async deleteAsset(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/assets?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] deleteAsset error:', err);
+      return false;
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // EXPENSES
+  // --------------------------------------------------------------------------
+  async getExpenses(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/expenses?select=*,employee:employees(employee_id,first_name,last_name)&order=date.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getExpenses error:', err);
+      return [];
+    }
+  },
+
+  async insertExpense(expense: {
+    employee_id: string; // UUID from employees.id
+    category: string;
+    amount: number;
+    date: string;
+    description?: string;
+    receipt_url?: string;
+    status?: string;
+  }): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      // Map to PostgreSQL enum hr_expense_status: ['Pending Manager', 'Pending Finance', 'Approved', 'Rejected', 'Reimbursed']
+      let normStatus = 'Pending Manager';
+      const rawStatus = (expense.status || '').toLowerCase();
+      if (rawStatus.includes('approv')) normStatus = 'Approved';
+      else if (rawStatus.includes('reject')) normStatus = 'Rejected';
+      else if (rawStatus.includes('reimburs')) normStatus = 'Reimbursed';
+      else if (rawStatus.includes('finance')) normStatus = 'Pending Finance';
+
+      const payload = {
+        employee_id: expense.employee_id,
+        category: expense.category || 'Travel',
+        amount: Number(expense.amount) || 0,
+        date: expense.date,
+        description: expense.description || '',
+        receipt_url: expense.receipt_url || null,
+        status: normStatus,
+      };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/expenses`, {
+        method: 'POST',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) return { success: false, error: await res.text() };
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
+    }
+  },
+
+  async updateExpenseStatus(id: string, status: string, approvedBy?: string): Promise<boolean> {
+    try {
+      let normStatus = 'Pending Manager';
+      const rawStatus = (status || '').toLowerCase();
+      if (rawStatus.includes('approv')) normStatus = 'Approved';
+      else if (rawStatus.includes('reject')) normStatus = 'Rejected';
+      else if (rawStatus.includes('reimburs')) normStatus = 'Reimbursed';
+      else if (rawStatus.includes('finance')) normStatus = 'Pending Finance';
+
+      const body: any = {
+        status: normStatus,
+        updated_at: new Date().toISOString(),
+      };
+      if (approvedBy && approvedBy.length === 36) body.approved_by = approvedBy;
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/expenses?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify(body),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] updateExpenseStatus error:', err);
+      return false;
+    }
+  },
+
+  async deleteExpense(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/expenses?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] deleteExpense error:', err);
+      return false;
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // RECRUITMENT: JOB OPENINGS & CANDIDATES
+  // --------------------------------------------------------------------------
+  async getJobOpenings(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/job_openings?select=*&order=posted_date.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getJobOpenings error:', err);
+      return [];
+    }
+  },
+
+  async insertJobOpening(job: {
+    title: string;
+    department_id?: string;
+    location?: string;
+    type?: string;
+    positions?: number;
+    status?: string;
+    posted_date?: string;
+    salary_range?: string;
+    description?: string;
+  }): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      // Pick first department if department_id is missing or invalid
+      let deptId = job.department_id;
+      if (!deptId || deptId.length !== 36) {
+        const depts = await this.getDepartments();
+        deptId = depts[0]?.id;
+      }
+      if (!deptId) return { success: false, error: 'No valid department found' };
+
+      const payload = {
+        title: job.title,
+        department_id: deptId,
+        location: job.location || 'Headquarters',
+        type: job.type || 'Full-Time',
+        positions: Number(job.positions) || 1,
+        status: job.status || 'Active',
+        posted_date: job.posted_date || new Date().toISOString().split('T')[0],
+        salary_range: job.salary_range || null,
+        description: job.description || '',
+      };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/job_openings`, {
+        method: 'POST',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) return { success: false, error: await res.text() };
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
+    }
+  },
+
+  async updateJobOpening(id: string, updates: Record<string, any>): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/job_openings?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] updateJobOpening error:', err);
+      return false;
+    }
+  },
+
+  async deleteJobOpening(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/job_openings?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] deleteJobOpening error:', err);
+      return false;
+    }
+  },
+
+  async getCandidates(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/candidates?select=*&order=applied_date.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getCandidates error:', err);
+      return [];
+    }
+  },
+
+  async insertCandidate(cand: {
+    job_id?: string;
+    name: string;
+    email: string;
+    phone?: string;
+    stage?: string;
+    applied_date?: string;
+    referrer_name?: string;
+    resume_url?: string;
+    rating?: number;
+    notes?: string;
+  }): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      let jobId = cand.job_id;
+      if (!jobId || jobId.length !== 36) {
+        const jobs = await this.getJobOpenings();
+        jobId = jobs[0]?.id;
+      }
+      if (!jobId) return { success: false, error: 'No job opening found' };
+
+      const payload = {
+        job_id: jobId,
+        name: cand.name,
+        email: cand.email,
+        phone: cand.phone || null,
+        stage: cand.stage || 'Applied',
+        applied_date: cand.applied_date || new Date().toISOString().split('T')[0],
+        referrer_name: cand.referrer_name || null,
+        resume_url: cand.resume_url || null,
+        rating: Number(cand.rating) || 4.0,
+        notes: cand.notes || null,
+      };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/candidates`, {
+        method: 'POST',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) return { success: false, error: await res.text() };
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
+    }
+  },
+
+  async updateCandidateStage(id: string, stage: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify({ stage, updated_at: new Date().toISOString() }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] updateCandidateStage error:', err);
+      return false;
+    }
+  },
+
+  async deleteCandidate(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] deleteCandidate error:', err);
+      return false;
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // DESIGNATIONS
+  // --------------------------------------------------------------------------
+  async getDesignations(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/designations?select=*&order=title.asc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getDesignations error:', err);
+      return [];
+    }
+  },
+
+  async insertDesignation(title: string, departmentId?: string, level?: string): Promise<{ success: boolean; data?: any }> {
+    try {
+      let deptId = departmentId;
+      if (!deptId || deptId.length !== 36) {
+        const depts = await this.getDepartments();
+        deptId = depts[0]?.id;
+      }
+      if (!deptId) return { success: false };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/designations`, {
+        method: 'POST',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          title: title.trim(),
+          department_id: deptId,
+          level: level || 'Mid-Level',
+        }),
+      });
+      if (!res.ok) return { success: false };
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err) {
+      console.warn('[SupabaseDirect] insertDesignation error:', err);
+      return { success: false };
+    }
+  },
+
+  async deleteDesignation(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/designations?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[SupabaseDirect] deleteDesignation error:', err);
+      return false;
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // PAYROLL RECORDS
+  // --------------------------------------------------------------------------
+  async getPayrollRecords(): Promise<any[]> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/payroll_records?select=*,employee:employees(employee_id,first_name,last_name,department_id,designation)&order=payroll_month.desc`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.warn('[SupabaseDirect] getPayrollRecords error:', err);
+      return [];
+    }
+  },
+
+  async insertPayrollRecord(record: {
+    employee_id: string; // UUID from employees.id
+    payroll_month: string;
+    basic_salary: number;
+    allowances?: number;
+    bonus?: number;
+    tax_deduction?: number;
+    leave_deduction?: number;
+    working_days?: number;
+    present_days?: number;
+    paid_leaves?: number;
+    unpaid_leaves?: number;
+    net_salary: number;
+    status?: string;
+  }): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      // Map to PostgreSQL enum hr_payroll_status: ['Pending', 'Verified', 'Processed', 'Paid']
+      let normStatus = 'Processed';
+      const rawStatus = (record.status || '').toLowerCase();
+      if (rawStatus.includes('paid')) normStatus = 'Paid';
+      else if (rawStatus.includes('verif')) normStatus = 'Verified';
+      else if (rawStatus.includes('draft') || rawStatus.includes('pend') || rawStatus.includes('hold')) normStatus = 'Pending';
+
+      const payload = {
+        employee_id: record.employee_id,
+        payroll_month: record.payroll_month,
+        basic_salary: Number(record.basic_salary) || 0,
+        allowances: Number(record.allowances) || 0,
+        bonus: Number(record.bonus) || 0,
+        tax_deduction: Number(record.tax_deduction) || 0,
+        leave_deduction: Number(record.leave_deduction) || 0,
+        working_days: Number(record.working_days) || 30,
+        present_days: Number(record.present_days) || 30,
+        paid_leaves: Number(record.paid_leaves) || 0,
+        unpaid_leaves: Number(record.unpaid_leaves) || 0,
+        net_salary: Number(record.net_salary) || 0,
+        status: normStatus,
+      };
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/payroll_records`, {
+        method: 'POST',
+        headers: { ...getHeaders(), 'Prefer': 'return=representation' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) return { success: false, error: await res.text() };
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
     }
   },
 };

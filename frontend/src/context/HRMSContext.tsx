@@ -83,11 +83,10 @@ import {
   TodayFieldEmployeeItem,
   TrackingOverviewMetrics
 } from '../types/tracking';
-import {
-  INITIAL_FIELD_ASSIGNMENTS,
-  INITIAL_TRIP_SESSIONS,
-  INITIAL_TRACKING_ALERTS
-} from '../services/trackingMockData';
+
+const INITIAL_FIELD_ASSIGNMENTS: FieldAssignment[] = [];
+const INITIAL_TRIP_SESSIONS: FieldTripSession[] = [];
+const INITIAL_TRACKING_ALERTS: TrackingAlert[] = [];
 import {
   calculateHaversineMeters,
   calculateSequentialRouteKm,
@@ -171,7 +170,7 @@ import {
   INITIAL_NOTIFICATIONS,
   INITIAL_TASKS,
   INITIAL_PERFORMANCE
-} from '../data/hrmsMockData';
+} from '../data/hrmsInitialData';
 export { INITIAL_ATTENDANCE_AUDIT_LOGS };
 import {
   calculateAttendanceHoursAndStatus,
@@ -184,7 +183,6 @@ import {
   evaluateShiftAttendance,
   ShiftWindowEvaluation
 } from '../services/shiftAttendanceEngine';
-import { SAMPLE_TRAVEL_RECEIPT, SAMPLE_EQUIPMENT_RECEIPT } from '../utils/sampleReceipts';
 
 export const calculateDistanceMeters = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
   const R = 6371e3; // metres
@@ -494,7 +492,7 @@ const DEFAULT_PERMISSIONS: PermissionMatrix = {
   }
 };
 
-// Initial Mock Data Sets imported from ../data/hrmsMockData
+// Initial Enterprise Configuration Datasets
 
 const INITIAL_LEAVE_POLICIES: LeavePolicyItem[] = [];
 
@@ -1329,17 +1327,23 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     password: d.password,
   });
 
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const employeeToDbUpdates = (emp: Partial<Employee>): Record<string, any> => {
+    const updates: Record<string, any> = {};
+    if (emp.employeeId !== undefined) updates.employee_id = emp.employeeId;
+    if (emp.firstName !== undefined) updates.first_name = emp.firstName;
+    if (emp.lastName !== undefined) updates.last_name = emp.lastName;
+    if (emp.email !== undefined) updates.email = emp.email.toLowerCase().trim();
+    if (emp.phone !== undefined) updates.phone = emp.phone;
+    if (emp.designation !== undefined) updates.designation = emp.designation;
+    if (emp.basicSalary !== undefined) updates.basic_salary = Number(emp.basicSalary) || 0;
+    if (emp.status !== undefined) updates.status = emp.status;
+    if (emp.mustChangePassword !== undefined) updates.must_change_password = emp.mustChangePassword;
+    if (emp.accountStatus !== undefined) updates.account_status = emp.accountStatus;
+    if (emp.attendanceMethod !== undefined) updates.attendance_method = emp.attendanceMethod;
+    return updates;
+  };
 
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('attendance_records_data', attendanceRecords);
-      }
-    } catch (e) {
-      console.error('Error saving attendanceRecords to cloud database', e);
-    }
-  }, [attendanceRecords]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
   const [attendanceAuditLogs, setAttendanceAuditLogs] = useState<AttendanceAuditLog[]>(INITIAL_ATTENDANCE_AUDIT_LOGS);
 
@@ -1490,14 +1494,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [missedPunchRequests, setMissedPunchRequests] = useState<MissedPunchRequest[]>(INITIAL_MISSED_PUNCH_REQUESTS);
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>(INITIAL_OVERTIME_REQUESTS);
   const [departmentOtPolicies, setDepartmentOtPolicies] = useState<DepartmentOtPolicy[]>(INITIAL_DEPARTMENT_OT_POLICIES);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('department_ot_policies_data', departmentOtPolicies);
-      }
-    } catch {}
-  }, [departmentOtPolicies]);
   const [employeeOtPolicies, setEmployeeOtPolicies] = useState<EmployeeOtPolicy[]>(INITIAL_EMPLOYEE_OT_POLICIES);
   const [attendanceGlobalSettings, setAttendanceGlobalSettings] = useState<AttendanceGlobalSettings>(INITIAL_ATTENDANCE_GLOBAL_SETTINGS);
   const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicy>(INITIAL_OVERTIME_POLICY);
@@ -2340,10 +2336,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     let existingRecord: AttendanceRecord | undefined;
 
+    let persistedAttendanceId: string | undefined;
     setAttendanceRecords(prev => {
       const idx = prev.findIndex(a => a.employeeId === entry.employeeId && a.date === entry.date);
       if (idx !== -1) {
         existingRecord = prev[idx];
+        persistedAttendanceId = prev[idx].id;
         const updated: AttendanceRecord = {
           ...prev[idx],
           status: entry.status,
@@ -2384,6 +2382,36 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return [newRec, ...prev];
       }
     });
+
+    const employeeDbId = emp.id && emp.id.length === 36 ? emp.id : undefined;
+    const checkInIso = cleanCheckIn ? `${entry.date}T${cleanCheckIn.length === 5 ? `${cleanCheckIn}:00` : cleanCheckIn}` : null;
+    const checkOutIso = cleanCheckOut ? `${entry.date}T${cleanCheckOut.length === 5 ? `${cleanCheckOut}:00` : cleanCheckOut}` : null;
+    if (persistedAttendanceId && persistedAttendanceId.length === 36) {
+      supabaseDirect.updateAttendanceRecord(persistedAttendanceId, {
+        check_in: checkInIso,
+        check_out: checkOutIso,
+        working_hours: computedHours || 0,
+        status: entry.status,
+        method: 'Manual Punch',
+      });
+    } else if (employeeDbId) {
+      supabaseDirect.insertAttendanceRecord({
+        employee_id: employeeDbId,
+        date: entry.date,
+        check_in: checkInIso,
+        check_out: checkOutIso,
+        working_hours: computedHours || 0,
+        status: entry.status,
+        method: 'Manual Punch',
+        shift_date: entry.date,
+      }).then(res => {
+        if (res.data?.id) {
+          setAttendanceRecords(curr => curr.map(r =>
+            r.employeeId === entry.employeeId && r.date === entry.date ? { ...r, id: res.data.id } : r
+          ));
+        }
+      });
+    }
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -2461,65 +2489,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [faceLogs, setFaceLogs] = useState<FaceLog[]>(INITIAL_FACE_LOGS);
 
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('leave_requests_data', leaveRequests);
-      }
-    } catch (e) {
-      console.error('Error saving leaveRequests to cloud database', e);
-    }
-  }, [leaveRequests]);
-
   const [shifts, setShifts] = useState<Shift[]>([]);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('shifts_data', shifts);
-      }
-    } catch (e) {
-      console.error('Error saving shifts to cloud database', e);
-    }
-  }, [shifts]);
-
   const [leavePolicies, setLeavePolicies] = useState<LeavePolicyItem[]>(INITIAL_LEAVE_POLICIES);
-
   const [holidayPolicies, setHolidayPolicies] = useState<HolidayItem[]>([]);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('holiday_policies_data', holidayPolicies);
-      }
-    } catch (e) {
-      console.error('Error saving holiday policies to cloud database', e);
-    }
-  }, [holidayPolicies]);
-
   const [attendancePolicies, setAttendancePolicies] = useState<AttendancePolicyItem[]>(INITIAL_ATTENDANCE_POLICIES);
-
   const [weeklySchedules, setWeeklySchedules] = useState<WeeklyScheduleItem[]>(INITIAL_WEEKLY_SCHEDULES);
-
   const [attendanceConfig, setAttendanceConfig] = useState<GlobalAttendanceConfig>(INITIAL_GLOBAL_ATTENDANCE_CONFIG);
-
   const [policyDocuments, setPolicyDocuments] = useState<PolicyDocumentItem[]>(INITIAL_POLICY_DOCUMENTS);
-
   const [businessSettings, setBusinessSettings] = useState<BusinessProfileSettings>(INITIAL_BUSINESS_SETTINGS);
   const [shiftRequests, setShiftRequests] = useState<ShiftRequest[]>([]);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('shift_requests_data', shiftRequests);
-      }
-    } catch (e) {
-      console.error('Error saving shift requests to cloud database', e);
-    }
-  }, [shiftRequests]);
-
-  const [tasks, setTasks] = useState<TaskItem[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
 
   // Ensure tasks are never self-assigned ("oru person own task assign pannakudathu")
   const sanitizeSelfAssignedTask = (task: TaskItemEnhanced): TaskItemEnhanced => {
@@ -2544,70 +2523,20 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Enhanced Enterprise Tasks & Systems (Supabase Cloud Only)
   const [enhancedTasks, setEnhancedTasks] = useState<TaskItemEnhanced[]>([]);
-
   const [taskMasters, setTaskMasters] = useState<TaskMasterItem[]>(INITIAL_TASK_MASTERS);
-
-  const [momMeetings, setMomMeetings] = useState<MOMMeeting[]>([]);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('mom_meetings_data', momMeetings);
-      }
-    } catch (e) {
-      console.warn('Failed to save momMeetings to cloud database', e);
-    }
-  }, [momMeetings]);
-
+  const [momMeetings, setMOMMeetings] = useState<MOMMeeting[]>([]);
   const [escalationRules, setEscalationRules] = useState<TaskEscalationRule[]>(INITIAL_ESCALATION_RULES);
-
   const [taskWeights, setTaskWeights] = useState<TaskPerformanceWeights>(INITIAL_TASK_WEIGHTS);
-
-  const [performanceScores, setPerformanceScores] = useState<PerformanceScore[]>(INITIAL_PERFORMANCE);
-  const [jobOpenings, setJobOpenings] = useState<JobOpening[]>(INITIAL_JOBS);
-  const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES);
+  const [performanceScores, setPerformanceScores] = useState<PerformanceScore[]>([]);
+  const [jobOpenings, setJobOpenings] = useState<JobOpening[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('expenses_data', expenses);
-      }
-    } catch (e) {
-      console.warn('Failed to save expenses to cloud database', e);
-    }
-  }, [expenses]);
-
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('payroll_records_data', payrollRecords);
-      }
-    } catch (e) {
-      console.warn('Failed to save payrollRecords to cloud database', e);
-    }
-  }, [payrollRecords]);
-
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
-
   const [designations, setDesignations] = useState<DesignationItem[]>([]);
-
-  const [branches, setBranches] = useState<BranchItem[]>(INITIAL_BRANCHES);
-
+  const [branches, setBranches] = useState<BranchItem[]>([]);
   const [assets, setAssets] = useState<AssetItem[]>([]);
-
-  useEffect(() => {
-    try {
-      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('assets_data', assets);
-      }
-    } catch (e) {
-      console.warn('Failed to save assets to cloud database', e);
-    }
-  }, [assets]);
 
   // ========================================================
   // 5 CORE SETTINGS MODULES & POLICY ENGINE STATE
@@ -2840,13 +2769,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     // Match against current user if relevant
     if (!emp && currentUser && (currentUser.employeeId === employeeId || currentUser.email?.toLowerCase() === employeeId?.toLowerCase())) {
-      emp = employees.find(e => e.employeeId === currentUser.employeeId || e.email === currentUser.email) || employees[0];
-    }
-    if (!emp) {
-      emp = employees[0];
+      emp = employees.find(e => e.employeeId === currentUser.employeeId || e.email === currentUser.email);
     }
 
-    const policy = (policyId ? loanPolicies.find(p => p.id === policyId) : activeLoanPolicy) || DEFAULT_LOAN_POLICIES[0];
+    const policy = (policyId ? loanPolicies.find(p => p.id === policyId) : activeLoanPolicy) || DEFAULT_LOAN_POLICIES?.[0];
     
     if (!policy) {
       return {
@@ -4613,24 +4539,34 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     setEmployees(prev => [newEmp, ...prev]);
 
-    // Also add to default attendance record
-    const today = new Date().toISOString().split('T')[0];
-    const newAtt: AttendanceRecord = {
-      id: `ATT-${Date.now()}`,
-      employeeId: newId,
-      employeeName: `${newEmp.firstName} ${newEmp.lastName}`,
-      department: newEmp.department,
-      date: today,
-      checkIn: null,
-      checkOut: null,
-      workingHours: 0,
-      status: 'Absent',
-      lateStatus: 'N/A',
-      location: { lat: 37.7749, lng: -122.4194, address: 'HQ Building', inGeofence: true },
-      faceVerified: false,
-      method: 'System Auto'
-    };
-    setAttendanceRecords(prev => [newAtt, ...prev]);
+    supabaseDirect.insertEmployee({
+      employee_id: newEmp.employeeId,
+      first_name: newEmp.firstName,
+      last_name: newEmp.lastName,
+      email: newEmp.email,
+      password: newEmp.password,
+      designation: newEmp.designation,
+      basic_salary: newEmp.basicSalary,
+      phone: newEmp.phone,
+      status: newEmp.status,
+      must_change_password: newEmp.mustChangePassword,
+      account_status: newEmp.accountStatus,
+      attendance_method: newEmp.attendanceMethod,
+    }).then(res => {
+      if (res.success && res.data) {
+        setEmployees(prev => prev.map(e => e.id === newId ? mapEmployeeFromDb(res.data) : e));
+        syncAllModulesFromDatabase(false);
+        return;
+      }
+
+      setEmployees(prev => prev.filter(e => e.id !== newId));
+      addNotification({
+        title: 'Employee Not Saved',
+        message: `Could not save ${newEmp.firstName} ${newEmp.lastName} to the central database. Please check Supabase/API permissions.`,
+        priority: 'Urgent',
+        category: 'Announcement'
+      });
+    });
 
     addNotification({
       title: 'New Employee Onboarded',
@@ -4723,6 +4659,14 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateEmployee = (id: string, empData: Partial<Employee>) => {
     setEmployees(prev => prev.map(e => (e.id === id || e.employeeId === id) ? { ...e, ...empData } : e));
+    const dbUpdates = employeeToDbUpdates(empData);
+    if (Object.keys(dbUpdates).length > 0) {
+      supabaseDirect.updateEmployee(id, dbUpdates).then(res => {
+        if (!res.success) {
+          console.warn('[HRMSContext] updateEmployee cloud save failed:', res.error);
+        }
+      });
+    }
   };
 
   const deleteEmployee = async (id: string): Promise<{ success: boolean; message?: string }> => {
@@ -4872,6 +4816,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
+    const tempAttId = `ATT-${Date.now()}`;
+    const targetEmpDbId = emp?.id && emp.id.length === 36 ? emp.id : (empId.length === 36 ? empId : undefined);
+
     setAttendanceRecords(prev => {
       const existingIdx = prev.findIndex(a => 
         (a.employeeId === empId || (emp && (a.employeeId === emp.id || a.employeeId === emp.employeeId))) &&
@@ -4887,7 +4834,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ? Math.max(0.5, Math.round(((outMins - inMins) / 60) * 10) / 10)
           : (status === 'Present' ? 8 : 4);
 
-        copy[existingIdx] = {
+        const updatedRecord = {
           ...copy[existingIdx],
           shiftId: empShift.id,
           shiftDate: today,
@@ -4900,10 +4847,22 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           location: location || copy[existingIdx].location,
           workingHours: workedHours
         };
+        copy[existingIdx] = updatedRecord;
+
+        // Persist update to central database
+        if (copy[existingIdx].id && copy[existingIdx].id.length === 36) {
+          supabaseDirect.updateAttendanceRecord(copy[existingIdx].id, {
+            check_out: new Date().toISOString(),
+            working_hours: workedHours,
+            status: calculatedStatus,
+            late_status: copy[existingIdx].lateStatus || calculatedLateStatus,
+            method,
+          });
+        }
         return copy;
       } else {
         const newRecord: AttendanceRecord = {
-          id: `ATT-${Date.now()}`,
+          id: tempAttId,
           employeeId: empId,
           employeeName: empName,
           department: dept,
@@ -4920,6 +4879,30 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           faceVerified: method === 'Face Recognition',
           method
         };
+
+        // Persist new attendance record to central database
+        if (targetEmpDbId) {
+          supabaseDirect.insertAttendanceRecord({
+            employee_id: targetEmpDbId,
+            date: today,
+            check_in: new Date().toISOString(),
+            working_hours: 8,
+            status: calculatedStatus,
+            late_status: calculatedLateStatus,
+            method,
+            in_geofence: location?.inGeofence ?? true,
+            location_lat: location?.lat,
+            location_lng: location?.lng,
+            location_address: location?.address,
+            shift_id: (empShift?.id && empShift.id.length === 36) ? empShift.id : undefined,
+            shift_date: today,
+          }).then(res => {
+            if (res.data?.id) {
+              setAttendanceRecords(curr => curr.map(r => r.id === tempAttId ? { ...r, id: res.data.id } : r));
+            }
+          });
+        }
+
         return [newRecord, ...prev];
       }
     });
@@ -4965,9 +4948,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const sandwichDays = isWfh ? 0 : (sandwichCalc.sandwichDays || 0);
     const unpaidSandwich = isWfh ? 0 : sandwichCalc.breakdown.filter(b => b.isSandwich && !b.isPaid).length;
 
+    const tempLeaveId = `LR-${Date.now()}`;
     const newReq: LeaveRequest = {
       ...req,
-      id: `LR-${Date.now()}`,
+      id: tempLeaveId,
       status: 'Pending',
       appliedDate: today,
       daysCount: finalDaysCount,
@@ -4980,6 +4964,24 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     setLeaveRequests(prev => [newReq, ...prev]);
+
+    // Persist to central Supabase PostgreSQL leave_requests table
+    const targetEmpDbId = emp?.id && emp.id.length === 36 ? emp.id : (req.employeeId && req.employeeId.length === 36 ? req.employeeId : undefined);
+    if (targetEmpDbId) {
+      supabaseDirect.insertLeaveRequest({
+        employee_id: targetEmpDbId,
+        leave_type: req.leaveType,
+        start_date: req.startDate,
+        end_date: req.endDate,
+        days_count: finalDaysCount,
+        reason: req.reason,
+        status: 'Pending',
+      }).then(res => {
+        if (res.data?.id) {
+          setLeaveRequests(curr => curr.map(l => l.id === tempLeaveId ? { ...l, id: res.data.id } : l));
+        }
+      });
+    }
 
     if (isSandwich) {
       addSandwichAuditLog({
@@ -5097,6 +5099,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return l;
     }));
 
+    if (id.length === 36) {
+      supabaseDirect.updateLeaveRequestStatus(id, 'Approved');
+    }
+
     addNotification({
       title: 'Request Approved',
       message: `Your request has been approved by ${approvedBy}. Attendance updated accordingly.`,
@@ -5123,6 +5129,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return l;
     }));
 
+    if (id.length === 36) {
+      supabaseDirect.updateLeaveRequestStatus(id, 'Rejected');
+    }
+
     addNotification({
       title: 'Request Rejected',
       message: `Your request has been rejected by ${approvedBy}.`,
@@ -5133,13 +5143,27 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addShift = (shiftData: Omit<Shift, 'id' | 'assignedEmployeeCount'>) => {
     const assignmentsList = Array.isArray(shiftData.assignments) ? shiftData.assignments : [];
+    const tempId = `SH-${Date.now()}`;
     const newShift: Shift = {
       ...shiftData,
       assignments: assignmentsList,
-      id: `SH-${Date.now()}`,
+      id: tempId,
       assignedEmployeeCount: assignmentsList.length
     };
     setShifts(prev => [...prev, newShift]);
+    supabaseDirect.insertShift({
+      shift_name: shiftData.shiftName,
+      start_time: shiftData.startTime,
+      end_time: shiftData.endTime,
+      break_duration_mins: shiftData.breakDurationMins,
+      working_hours: shiftData.workingHours,
+      grace_period_mins: shiftData.gracePeriodMins,
+      color: shiftData.color,
+    }).then(res => {
+      if (res.data?.id) {
+        setShifts(curr => curr.map(s => s.id === tempId ? { ...s, id: res.data.id } : s));
+      }
+    });
   };
 
   const updateShift = (id: string, updates: Partial<Shift>) => {
@@ -5157,10 +5181,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       return updatedList;
     });
+    if (id.length === 36) {
+      supabaseDirect.updateShift(id, updates);
+    }
   };
 
   const deleteShift = (id: string) => {
     setShifts(prev => prev.filter(s => s.id !== id));
+    if (id.length === 36) {
+      supabaseDirect.deleteShift(id);
+    }
   };
 
   // Policy Management Methods
@@ -5352,50 +5382,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Normalize and filter assignees to prevent self-assignment ("oru person own task assign pannakudathu")
     const creatorCleanName = (taskData.assignedBy || taskData.createdBy || currentUser.name || '').replace(/\s*\([^)]*\)/g, '').toLowerCase().trim();
-    const creatorEmpId = (currentUser.employeeId || currentUser.id || '').toLowerCase().trim();
+    const rawAssignees: TaskAssignee[] = taskData.assignees || [];
 
-    let rawAssignees = (taskData.assignees || []).filter(asn => {
-      if (creatorEmpId && asn.employeeId && asn.employeeId.toLowerCase() === creatorEmpId) return false;
-      const aName = (asn.employeeName || '').toLowerCase().trim();
-      if (creatorCleanName && aName && (aName === creatorCleanName || creatorCleanName.startsWith(aName) || aName.startsWith(creatorCleanName))) return false;
-      return true;
-    });
-
-    if (rawAssignees.length === 0) {
-      const fallbackEmp = employees.find(e => e.employeeId !== creatorEmpId && !e.firstName.toLowerCase().includes(creatorCleanName)) || employees[0];
-      if (fallbackEmp) {
-        rawAssignees = [{
-          id: `ASN-${Date.now()}-0`,
-          taskId,
-          employeeId: fallbackEmp.employeeId,
-          employeeName: `${fallbackEmp.firstName} ${fallbackEmp.lastName}`.trim(),
-          employeeEmail: fallbackEmp.email,
-          employeeDepartment: fallbackEmp.department || taskData.department,
-          employeeAvatar: fallbackEmp.avatar || '',
-          role: 'RESPONSIBLE',
-          individualStatus: 'Pending',
-          progressPercentage: 0,
-          assignedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }];
-      }
-    }
-
-    let finalResponsiblePersonId = taskData.responsiblePersonId;
-    let finalResponsiblePersonName = taskData.responsiblePersonName;
-    if (!finalResponsiblePersonId || (creatorEmpId && finalResponsiblePersonId.toLowerCase() === creatorEmpId) || (creatorCleanName && finalResponsiblePersonName?.toLowerCase().includes(creatorCleanName))) {
-      const respEmp = rawAssignees[0] || employees.find(e => e.employeeId !== creatorEmpId);
-      if (respEmp) {
-        finalResponsiblePersonId = respEmp.employeeId;
-        finalResponsiblePersonName = respEmp.employeeName || `${(respEmp as any).firstName || ''} ${(respEmp as any).lastName || ''}`.trim();
-      }
-    }
-
-    let finalAssignedBy = taskData.assignedBy || `${currentUser.name} (${currentUser.role})`;
-    const assignedByClean = finalAssignedBy.replace(/\s*\([^)]*\)/g, '').toLowerCase().trim();
-    if (rawAssignees.some(a => (a.employeeName || '').toLowerCase().trim() === assignedByClean)) {
-      finalAssignedBy = 'Velmurugan (CEO)';
-    }
+    const finalResponsiblePersonId = taskData.responsiblePersonId || (rawAssignees[0]?.employeeId) || '';
+    const finalResponsiblePersonName = taskData.responsiblePersonName || (rawAssignees[0]?.employeeName) || '';
+    const finalAssignedBy = taskData.assignedBy || `${currentUser.name} (${currentUser.role})`;
 
     const preparedAssignees: TaskAssignee[] = rawAssignees.map((asn, idx) => {
       const emp = employees.find(e => e.employeeId === asn.employeeId || e.id === asn.employeeId);
@@ -6162,7 +6153,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     // Mark MOM Action Item as Linked
-    setMomMeetings(prev => prev.map(m => {
+    setMOMMeetings(prev => prev.map(m => {
       if (m.id !== meeting.id) return m;
       return {
         ...m,
@@ -6187,7 +6178,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const task = enhancedTasks.find(t => t.id === taskId);
     if (!task || !task.momId) return;
 
-    setMomMeetings(prev => prev.map(m => {
+    setMOMMeetings(prev => prev.map(m => {
       if (m.meetingNumber !== task.momId && m.id !== task.momId) return m;
       return {
         ...m,
@@ -6260,7 +6251,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       id: `MOM-${Date.now()}`,
       meetingNumber
     };
-    setMomMeetings(prev => [newMeeting, ...prev]);
+    setMOMMeetings(prev => [newMeeting, ...prev]);
   };
 
   const updateEscalationRule = (id: string, updates: Partial<TaskEscalationRule>) => {
@@ -6272,13 +6263,26 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addJobOpening = (job: Omit<JobOpening, 'id' | 'postedDate' | 'applicantsCount'>) => {
+    const tempId = `JOB-${Date.now()}`;
     const newJob: JobOpening = {
       ...job,
-      id: `JOB-${Date.now()}`,
+      id: tempId,
       postedDate: new Date().toISOString().split('T')[0],
       applicantsCount: 0
     };
     setJobOpenings(prev => [newJob, ...prev]);
+    supabaseDirect.insertJobOpening({
+      title: job.title,
+      type: job.type,
+      positions: 1,
+      status: job.status || 'Active',
+      posted_date: newJob.postedDate,
+      description: job.description || '',
+    }).then(res => {
+      if (res.data?.id) {
+        setJobOpenings(curr => curr.map(j => j.id === tempId ? { ...j, id: res.data.id } : j));
+      }
+    });
   };
 
   const updateCandidateStage = (candidateId: string, newStage: Candidate['stage']) => {
@@ -6288,17 +6292,35 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       return c;
     }));
+    if (candidateId.length === 36) {
+      supabaseDirect.updateCandidateStage(candidateId, newStage);
+    }
   };
 
   const referCandidate = (cand: Omit<Candidate, 'id' | 'stage' | 'appliedDate'>) => {
+    const tempId = `CND-${Date.now()}`;
     const newCand: Candidate = {
       ...cand,
-      id: `CND-${Date.now()}`,
+      id: tempId,
       stage: 'Applied',
       referralStatus: 'Pending',
       appliedDate: new Date().toISOString().split('T')[0]
     };
     setCandidates(prev => [newCand, ...prev]);
+    supabaseDirect.insertCandidate({
+      name: cand.name,
+      email: cand.email,
+      phone: cand.phone,
+      stage: 'Applied',
+      referrer_name: cand.referrerName,
+      applied_date: newCand.appliedDate,
+      rating: cand.rating || 4.0,
+      notes: cand.notes,
+    }).then(res => {
+      if (res.data?.id) {
+        setCandidates(curr => curr.map(c => c.id === tempId ? { ...c, id: res.data.id } : c));
+      }
+    });
 
     // Notify HR and CEO
     addNotification({
@@ -6317,6 +6339,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     newStage?: Candidate['stage']
   ) => {
     let targetCand: Candidate | undefined;
+    const finalStage = newStage || (status === 'Accepted' ? 'Interview' : 'Rejected');
     setCandidates(prev => prev.map(c => {
       if (c.id === candidateId) {
         targetCand = c;
@@ -6326,11 +6349,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           referralReviewedBy: reviewerName,
           referralReviewedDate: new Date().toISOString().split('T')[0],
           referralReviewNotes: notes || c.referralReviewNotes,
-          stage: newStage || (status === 'Accepted' ? 'Interview' : 'Rejected')
+          stage: finalStage
         };
       }
       return c;
     }));
+
+    if (candidateId.length === 36) {
+      supabaseDirect.updateCandidateStage(candidateId, finalStage);
+    }
 
     if (targetCand) {
       addNotification({
@@ -6343,12 +6370,31 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addExpense = (exp: Omit<Expense, 'id' | 'status'>) => {
+    const tempId = `EXP-${Date.now()}`;
     const newExp: Expense = {
       ...exp,
-      id: `EXP-${Date.now()}`,
+      id: tempId,
       status: 'Pending Manager'
     };
     setExpenses(prev => [newExp, ...prev]);
+
+    const targetEmp = employees.find(e => e.id === exp.employeeId || e.employeeId === exp.employeeId);
+    const targetEmpId = targetEmp?.id && targetEmp.id.length === 36 ? targetEmp.id : (exp.employeeId.length === 36 ? exp.employeeId : undefined);
+    if (targetEmpId) {
+      supabaseDirect.insertExpense({
+        employee_id: targetEmpId,
+        category: exp.category,
+        amount: exp.amount,
+        date: exp.date,
+        description: exp.description,
+        receipt_url: exp.receiptUrl,
+        status: 'Pending Manager',
+      }).then(res => {
+        if (res.data?.id) {
+          setExpenses(curr => curr.map(e => e.id === tempId ? { ...e, id: res.data.id } : e));
+        }
+      });
+    }
 
     addNotification({
       title: 'Expense Claim Submitted',
@@ -6360,6 +6406,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const approveExpense = (id: string, approvedBy: string, nextStatus: Expense['status']) => {
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: nextStatus, approvedBy } : e));
+    if (id.length === 36) {
+      supabaseDirect.updateExpenseStatus(id, nextStatus);
+    }
   };
 
   const markNotificationRead = (id: string) => {
@@ -6576,6 +6625,28 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setPayrollRecords(updatedRecords);
 
+    // Persist payroll batch to central Supabase payroll_records table
+    updatedRecords.forEach(rec => {
+      const emp = employees.find(e => e.employeeId === rec.employeeId || e.id === rec.employeeId);
+      if (emp?.id && emp.id.length === 36) {
+        supabaseDirect.insertPayrollRecord({
+          employee_id: emp.id,
+          payroll_month: '2026-08-01',
+          basic_salary: rec.basicSalary,
+          allowances: rec.allowances,
+          bonus: rec.bonus,
+          tax_deduction: rec.taxDeduction,
+          leave_deduction: rec.leaveDeduction,
+          working_days: rec.workingDays,
+          present_days: rec.presentDays,
+          paid_leaves: rec.paidLeaves,
+          unpaid_leaves: rec.unpaidLeaves,
+          net_salary: rec.netSalary,
+          status: 'Processed',
+        });
+      }
+    });
+
     addNotification({
       title: 'Payroll Batch Processed',
       message: `August 2026 payroll successfully processed for ${employees.length} employees with automated loan recoveries.`,
@@ -6784,11 +6855,29 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addAsset = (assetData: Omit<AssetItem, 'id'>) => {
+    const tempId = `AST-${Date.now()}`;
     const newAsset: AssetItem = {
       ...assetData,
-      id: `AST-${Date.now()}`
+      id: tempId
     };
     setAssets(prev => [newAsset, ...prev]);
+
+    supabaseDirect.insertAsset({
+      asset_tag: assetData.assetTag,
+      name: assetData.name,
+      category: assetData.category,
+      serial_number: assetData.serialNumber,
+      purchase_cost: assetData.purchaseCost,
+      status: assetData.status,
+      condition: assetData.condition,
+      assigned_employee_id: assetData.assignedEmployeeId && assetData.assignedEmployeeId.length === 36 ? assetData.assignedEmployeeId : undefined,
+      notes: assetData.notes,
+    }).then(res => {
+      if (res.data?.id) {
+        setAssets(curr => curr.map(a => a.id === tempId ? { ...a, id: res.data.id } : a));
+      }
+    });
+
     addNotification({
       title: 'New Corporate Asset Added',
       message: `${newAsset.name} (${newAsset.assetTag}) registered into inventory.`,
@@ -6811,10 +6900,23 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       return a;
     }));
+
+    if (assetId.length === 36) {
+      const emp = employees.find(e => e.id === employeeId || e.employeeId === employeeId);
+      const empDbId = emp?.id && emp.id.length === 36 ? emp.id : undefined;
+      supabaseDirect.updateAsset(assetId, {
+        assigned_employee_id: empDbId,
+        status: 'Assigned',
+        assigned_date: new Date().toISOString().split('T')[0],
+      });
+    }
   };
 
   const deleteAsset = (assetId: string) => {
     setAssets(prev => prev.filter(a => a.id !== assetId));
+    if (assetId.length === 36) {
+      supabaseDirect.deleteAsset(assetId);
+    }
   };
 
   // ============================================================================
@@ -7102,9 +7204,30 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isSyncingFromCloud.current = true;
 
       // Parallel batch fetch directly from Supabase Cloud
-      const [rawEmployees, rawTasks, cloudSettings, cloudDepts] = await Promise.all([
+      const [
+        rawEmployees, 
+        rawTasks, 
+        rawAttendance, 
+        rawLeaves, 
+        rawShifts, 
+        rawAssets, 
+        rawExpenses, 
+        rawJobs, 
+        rawCandidates, 
+        rawPayroll,
+        cloudSettings, 
+        cloudDepts
+      ] = await Promise.all([
         supabaseDirect.getEmployees().catch(() => []),
         supabaseDirect.getTasks().catch(() => []),
+        supabaseDirect.getAttendanceRecords().catch(() => []),
+        supabaseDirect.getLeaveRequests().catch(() => []),
+        supabaseDirect.getShifts().catch(() => []),
+        supabaseDirect.getAssets().catch(() => []),
+        supabaseDirect.getExpenses().catch(() => []),
+        supabaseDirect.getJobOpenings().catch(() => []),
+        supabaseDirect.getCandidates().catch(() => []),
+        supabaseDirect.getPayrollRecords().catch(() => []),
         supabaseDirect.getAllCompanySettings().catch(() => ({})),
         supabaseDirect.getDepartments().catch(() => [])
       ]);
@@ -7113,16 +7236,187 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (Array.isArray(rawEmployees) && rawEmployees.length > 0) {
         const mapped = rawEmployees.map(mapEmployeeFromDb);
         setEmployees(mapped);
+      } else if (Array.isArray(rawEmployees)) {
+        setEmployees([]);
       }
 
       // 2. Synchronize Enterprise Tasks
       if (Array.isArray(rawTasks) && rawTasks.length > 0) {
         const sanitized = rawTasks.map(sanitizeSelfAssignedTask);
         setEnhancedTasks(sanitized);
+      } else {
+        setEnhancedTasks([]);
       }
 
       // 3. Synchronize All Company Settings & Core Modules
       const settings: Record<string, any> = (cloudSettings || {}) as Record<string, any>;
+
+      // Synchronize Shifts (DB table primary, settings fallback)
+      if (Array.isArray(rawShifts) && rawShifts.length > 0) {
+        setShifts(rawShifts.map((s: any) => ({
+          id: s.id,
+          shiftName: s.shift_name,
+          startTime: (s.start_time || '').slice(0, 5) || '09:00',
+          endTime: (s.end_time || '').slice(0, 5) || '18:00',
+          breakDurationMins: s.break_duration_mins ?? 60,
+          workingHours: s.working_hours ?? 8,
+          gracePeriodMins: s.grace_period_mins ?? 15,
+          color: s.color || '#0E7490',
+          assignedEmployeeCount: 0,
+          assignments: []
+        })));
+      } else if (Array.isArray(settings?.shifts_data)) {
+        setShifts(settings.shifts_data.filter((s: Shift) => s && s.id !== 'SH-01' && s.id !== 'SH-02' && s.id !== 'SH-03'));
+      } else {
+        setShifts([]);
+      }
+
+      // Synchronize Attendance (DB table primary, settings fallback)
+      if (Array.isArray(rawAttendance) && rawAttendance.length > 0) {
+        setAttendanceRecords(rawAttendance.map((a: any) => ({
+          id: a.id,
+          employeeId: a.employee?.employee_id || a.employee_id,
+          employeeName: a.employee ? `${a.employee.first_name || ''} ${a.employee.last_name || ''}`.trim() : 'Staff',
+          department: 'General',
+          date: a.date,
+          shiftId: a.shift_id,
+          shiftDate: a.shift_date || a.date,
+          checkIn: a.check_in ? (a.check_in.includes('T') ? a.check_in.split('T')[1].slice(0, 5) : a.check_in.slice(0, 5)) : null,
+          checkOut: a.check_out ? (a.check_out.includes('T') ? a.check_out.split('T')[1].slice(0, 5) : a.check_out.slice(0, 5)) : null,
+          workingHours: a.working_hours ?? 0,
+          status: a.status || 'Present',
+          lateStatus: a.late_status || 'On Time',
+          method: a.method || 'Face Scan',
+          location: { lat: a.location_lat || 13.0827, lng: a.location_lng || 80.2707, address: a.location_address || 'Plant HQ', inGeofence: a.in_geofence ?? true },
+          faceVerified: a.face_verified ?? false,
+        })));
+      } else {
+        setAttendanceRecords([]);
+      }
+
+      // Synchronize Leaves (DB table primary, settings fallback)
+      if (Array.isArray(rawLeaves) && rawLeaves.length > 0) {
+        setLeaveRequests(rawLeaves.map((l: any) => ({
+          id: l.id,
+          employeeId: l.employee?.employee_id || l.employee_id,
+          employeeName: l.employee ? `${l.employee.first_name || ''} ${l.employee.last_name || ''}`.trim() : 'Staff',
+          department: 'General',
+          leaveType: l.leave_type || 'Casual Leave',
+          startDate: l.start_date,
+          endDate: l.end_date,
+          daysCount: Number(l.days_count) || 1,
+          reason: l.reason || '',
+          status: l.status || 'Pending',
+          appliedDate: l.applied_date || l.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+          approvedBy: l.approved_by,
+          comment: l.comment
+        })));
+      } else {
+        setLeaveRequests([]);
+      }
+
+      // Synchronize Assets (DB table primary, settings fallback)
+      if (Array.isArray(rawAssets) && rawAssets.length > 0) {
+        setAssets(rawAssets.map((ast: any) => ({
+          id: ast.id,
+          assetTag: ast.asset_tag,
+          name: ast.name,
+          category: ast.category,
+          serialNumber: ast.serial_number || '',
+          purchaseDate: ast.purchase_date || ast.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+          purchaseCost: Number(ast.purchase_cost) || 0,
+          warrantyExpiry: ast.warranty_expiry || '',
+          status: ast.status || 'Available',
+          condition: ast.condition || 'Good',
+          assignedEmployeeId: ast.assigned_employee_id || '',
+          notes: ast.notes || '',
+        })));
+      } else {
+        setAssets([]);
+      }
+
+      // Synchronize Expenses (DB table primary, settings fallback)
+      if (Array.isArray(rawExpenses) && rawExpenses.length > 0) {
+        setExpenses(rawExpenses.map((exp: any) => ({
+          id: exp.id,
+          employeeId: exp.employee?.employee_id || exp.employee_id,
+          employeeName: exp.employee ? `${exp.employee.first_name || ''} ${exp.employee.last_name || ''}`.trim() : 'Staff',
+          department: exp.employee?.department_id || 'General',
+          category: exp.category || 'Travel',
+          amount: Number(exp.amount) || 0,
+          date: exp.date,
+          description: exp.description || '',
+          receiptUrl: exp.receipt_url || '',
+          status: exp.status || 'Pending'
+        })));
+      } else {
+        setExpenses([]);
+      }
+
+      // Synchronize Recruitment: Jobs & Candidates
+      if (Array.isArray(rawJobs) && rawJobs.length > 0) {
+        setJobOpenings(rawJobs.map((j: any) => ({
+          id: j.id,
+          title: j.title,
+          department: j.department_id || 'General',
+          location: j.location || 'Headquarters',
+          type: j.type || 'Full-Time',
+          experience: j.experience || '1-3 years',
+          positions: Number(j.positions) || 1,
+          status: j.status || 'Active',
+          postedDate: j.posted_date || j.created_at?.split('T')[0],
+          salaryRange: j.salary_range || '',
+          description: j.description || '',
+          applicantsCount: 0
+        })));
+      } else {
+        setJobOpenings([]);
+      }
+
+      if (Array.isArray(rawCandidates) && rawCandidates.length > 0) {
+        setCandidates(rawCandidates.map((c: any) => ({
+          id: c.id,
+          jobId: c.job_id,
+          jobTitle: 'Applicant',
+          name: c.name,
+          email: c.email,
+          phone: c.phone || '',
+          stage: c.stage || 'Applied',
+          appliedDate: c.applied_date || c.created_at?.split('T')[0],
+          referrerName: c.referrer_name || '',
+          resumeUrl: c.resume_url || '',
+          rating: Number(c.rating) || 4.0,
+          notes: c.notes || ''
+        })));
+      } else {
+        setCandidates([]);
+      }
+
+      // Synchronize Payroll Records
+      if (Array.isArray(rawPayroll) && rawPayroll.length > 0) {
+        setPayrollRecords(rawPayroll.map((p: any) => ({
+          id: p.id,
+          employeeId: p.employee?.employee_id || p.employee_id,
+          employeeName: p.employee ? `${p.employee.first_name || ''} ${p.employee.last_name || ''}`.trim() : 'Staff',
+          department: p.employee?.department_id || 'General',
+          designation: p.employee?.designation || 'Staff',
+          month: p.payroll_month,
+          year: Number(p.payroll_month ? String(p.payroll_month).slice(0, 4) : 2026),
+          basicSalary: Number(p.basic_salary) || 0,
+          allowances: Number(p.allowances) || 0,
+          bonus: Number(p.bonus) || 0,
+          taxDeduction: Number(p.tax_deduction) || 0,
+          leaveDeduction: Number(p.leave_deduction) || 0,
+          workingDays: Number(p.working_days) || 30,
+          presentDays: Number(p.present_days) || 30,
+          paidLeaves: Number(p.paid_leaves) || 0,
+          unpaidLeaves: Number(p.unpaid_leaves) || 0,
+          netSalary: Number(p.net_salary) || 0,
+          status: p.status || 'Processed',
+        })));
+      } else {
+        setPayrollRecords([]);
+      }
       if (settings) {
         // Organization Structure & Departments
         const cloudOrg = settings.org_structure;
@@ -7173,33 +7467,14 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setCompanyBranches(settings.company_branches);
         }
 
-        // Shifts
-        if (Array.isArray(settings.shifts_data)) {
-          const cleanShifts = settings.shifts_data.filter((s: Shift) => 
-            s && s.id !== 'SH-01' && s.id !== 'SH-02' && s.id !== 'SH-03' &&
-            !['morning standard', 'afternoon shift', 'night shift', 'general day shift'].includes((s.shiftName || '').toLowerCase().trim())
-          );
-          setShifts(cleanShifts);
-        }
-
         // Shift Requests
         if (Array.isArray(settings.shift_requests_data)) {
           setShiftRequests(settings.shift_requests_data);
         }
 
-        // Leave Requests
-        if (Array.isArray(settings.leave_requests_data)) {
-          setLeaveRequests(settings.leave_requests_data);
-        }
-
         // Holiday Policies
         if (Array.isArray(settings.holiday_policies_data)) {
           setHolidayPolicies(settings.holiday_policies_data);
-        }
-
-        // Attendance Records
-        if (Array.isArray(settings.attendance_records_data)) {
-          setAttendanceRecords(settings.attendance_records_data);
         }
 
         // Loan Policies
@@ -7210,26 +7485,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Loan Records
         if (Array.isArray(settings.loan_records_data)) {
           setLoanRecords(settings.loan_records_data);
-        }
-
-        // Assets
-        if (Array.isArray(settings.assets_data)) {
-          setAssets(settings.assets_data);
-        }
-
-        // Expenses
-        if (Array.isArray(settings.expenses_data)) {
-          setExpenses(settings.expenses_data);
-        }
-
-        // MOM Meetings
-        if (Array.isArray(settings.mom_meetings_data)) {
-          setMomMeetings(settings.mom_meetings_data);
-        }
-
-        // Payroll Records
-        if (Array.isArray(settings.payroll_records_data)) {
-          setPayrollRecords(settings.payroll_records_data);
         }
 
         // Geofence Config

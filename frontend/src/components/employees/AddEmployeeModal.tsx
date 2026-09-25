@@ -625,18 +625,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleAddMockDocument = (category: string) => {
-    const newDoc: UploadedDoc = {
-      id: `doc-${Date.now()}`,
-      category,
-      name: `${category.replace(/[^a-zA-Z0-9]/g, '_')}_Verified.pdf`,
-      size: `${Math.floor(Math.random() * 600 + 350)} KB`,
-      type: 'PDF',
-      uploadDate: new Date().toISOString().split('T')[0]
-    };
-    setDocuments(prev => [...prev.filter(d => d.category !== category), newDoc]);
-  };
-
   const triggerUploadForCategory = (category: string) => {
     setActiveUploadCategory(category);
     if (fileInputRef.current) {
@@ -970,11 +958,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     newEmp.credentialEmailStatus = emailStatus;
     newEmp.password = targetPassword;
 
-    // Cache to localStorage for instant fallback login access
-    try {
-      const stored = JSON.parse(localStorage.getItem('vrm_hrms_employees') || '[]');
-      localStorage.setItem('vrm_hrms_employees', JSON.stringify([newEmp, ...stored.filter((e: any) => e.employeeId !== newEmp.employeeId && e.id !== newEmp.id)]));
-    } catch {}
 
     addEmployee(newEmp);
     setCreatedEmployee(newEmp);
@@ -2826,7 +2809,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 type="button" 
                 className="btn btn-secondary btn-sm" 
                 style={{ fontSize: '0.75rem', padding: '5px 12px' }}
-                onClick={() => handleAddMockDocument('Additional Certificate')}
+                onClick={() => triggerUploadForCategory('Additional Certificate')}
               >
                 + Attach Extra Document
               </button>

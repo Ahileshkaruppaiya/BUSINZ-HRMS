@@ -17,7 +17,7 @@ export const authRateLimiter = rateLimit({
             details: [],
         },
     },
-    skip: (req) => env.NODE_ENV === 'test' || process.env.NODE_ENV === 'test' || process.env.VITEST === 'true' || req.headers['x-internal-benchmark'] !== undefined || req.headers['x-dev-mock-auth'] === 'true',
+    skip: (req) => env.NODE_ENV === 'test' || process.env.NODE_ENV === 'test' || process.env.VITEST === 'true' || req.headers['x-internal-benchmark'] !== undefined,
 });
 /**
  * High-capacity rate limiter for general API endpoints.

@@ -69,11 +69,14 @@ export class TrackingRepository {
         return list;
     }
     async createAssignment(data) {
-        const emp = await employeeRepository.getEmployeeById(data.employeeId || 'EMP-004');
-        const empName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : 'Staff';
+        if (!data.employeeId) {
+            throw new Error('employeeId is required for field duty assignment');
+        }
+        const emp = await employeeRepository.getEmployeeById(data.employeeId);
+        const empName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : data.employeeId;
         const newAssignment = {
             id: `fa-${Date.now()}`,
-            employeeId: data.employeeId || 'EMP-004',
+            employeeId: data.employeeId,
             employeeName: empName,
             department: emp?.department || 'Operations',
             dutyType: data.dutyType || 'Site Visit',
@@ -82,8 +85,8 @@ export class TrackingRepository {
             endDate: data.endDate || todayIso,
             startTime: data.startTime || '09:00',
             endTime: data.endTime || '18:00',
-            customerSiteName: data.customerSiteName || 'Site',
-            siteAddress: data.siteAddress || 'Site Address',
+            customerSiteName: data.customerSiteName || 'Client Site',
+            siteAddress: data.siteAddress || '',
             purpose: data.purpose || 'Field Duty Operations',
             trackingRequired: data.trackingRequired ?? true,
             travelKmRequired: data.travelKmRequired ?? true,
@@ -261,27 +264,9 @@ export class TrackingRepository {
         return inMemoryAlerts;
     }
     async resolveAlert(alertId) {
-        let alert = inMemoryAlerts.find((a) => a.id === alertId);
+        const alert = inMemoryAlerts.find((a) => a.id === alertId);
         if (!alert) {
-            const newAlert = {
-                id: alertId,
-                assignmentId: 'fa-auto',
-                employeeId: 'EMP-001',
-                employeeName: 'Pavithra',
-                department: 'HR',
-                alertType: 'GPS Disabled',
-                issueStartTime: new Date().toISOString(),
-                durationMinutes: 5,
-                lastKnownLocation: 'Chennai HQ',
-                lastKnownLat: 13.0827,
-                lastKnownLng: 80.2707,
-                status: 'Resolved',
-                issueEndTime: new Date().toISOString(),
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            };
-            inMemoryAlerts.push(newAlert);
-            return newAlert;
+            return null;
         }
         alert.status = 'Resolved';
         alert.issueEndTime = new Date().toISOString();

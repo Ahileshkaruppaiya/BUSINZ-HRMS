@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { generateTemporaryPassword, validatePasswordComplexity } from '../src/services/passwordService.js';
 import { sendCredentialEmail, formatCredentialEmailBody } from '../src/services/emailService.js';
 
@@ -10,7 +10,7 @@ beforeAll(async () => {
   const loginRes = await fetch(`${BASE_URL}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ identifier: 'hr@vrmstructures.com', password: 'Password@123' }),
+    body: JSON.stringify({ identifier: 'pavithra@gmail.com', password: 'Password@123' }),
   });
 
   expect(loginRes.status).toBe(200);
@@ -101,7 +101,7 @@ describe('VRM Enterprise HRMS — Full Employee Onboarding & Login Account Creat
       body: JSON.stringify({
         firstName: 'Duplicate',
         lastName: 'Check',
-        email: 'hr@vrmstructures.com',
+        email: 'pavithra@gmail.com',
         department: 'HR',
       }),
     });
@@ -118,7 +118,7 @@ describe('VRM Enterprise HRMS — Full Employee Onboarding & Login Account Creat
         Authorization: `Bearer ${hrAuthToken}`,
       },
       body: JSON.stringify({
-        employeeId: 'EMP-001',
+        employeeId: 'EMP-006',
         firstName: 'Duplicate',
         lastName: 'ID',
         email: `unique.${Date.now()}@vrmstructures.com`,

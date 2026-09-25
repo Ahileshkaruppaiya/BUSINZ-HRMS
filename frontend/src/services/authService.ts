@@ -132,7 +132,7 @@ export const authService = {
     const cleanId = identifier.trim().toLowerCase();
     const cleanPass = password.trim();
 
-    // 1. Try backend API first if available
+    // 1. Authenticate with backend API
     try {
       const response = await safeFetch(`${API_BASE}/auth/login`, {
         method: 'POST',
@@ -148,9 +148,15 @@ export const authService = {
           localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(body.data.user)));
           return body.data;
         }
+      } else {
+        const errMessage = await readError(response, 'Invalid User ID / Email or password.');
+        throw new Error(errMessage);
       }
-    } catch {
-      // Backend not running, 404, or network issue: proceed directly to Supabase cloud verification
+    } catch (err: any) {
+      if (err.message && !err.message.includes('Cannot connect')) {
+        throw err;
+      }
+      // If backend network error / unreachable, fallback to direct Supabase cloud authentication
     }
 
     // 2. Direct Supabase Cloud Database Query
@@ -159,7 +165,7 @@ export const authService = {
       if (dbUser) {
         const empUser: AuthUser = {
           id: dbUser.id || dbUser.employee_id,
-          name: `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim() || 'Businz Staff',
+          name: `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim() || 'Staff Member',
           email: dbUser.email,
           role: resolveEmployeeRole(dbUser),
           employeeId: dbUser.employee_id,
@@ -168,82 +174,14 @@ export const authService = {
           mustChangePassword: dbUser.must_change_password ?? false,
         };
         const userPayload = btoa(unescape(encodeURIComponent(JSON.stringify(empUser))));
-        const token = 'vrm_fallback_jwt_' + userPayload;
+        const token = 'vrm_session_' + userPayload;
         sessionStorage.setItem(TOKEN_KEY, token);
         localStorage.setItem(TOKEN_KEY, token);
         localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(empUser)));
         return { user: empUser, accessToken: token };
       }
-    } catch (e) {
-      console.warn('Direct Supabase login fallback notice:', e);
-    }
-
-    // 3. Super Admin hardcoded emergency fallback
-    const isSuperAdminUser = cleanId === 'admin@businz.com' || cleanId === 'emp-000' || cleanId === 'admin' || cleanId === 'admin@businz@com';
-    if (isSuperAdminUser && (cleanPass === 'Password@123' || cleanPass === 'admin')) {
-      const fallbackAdmin: AuthUser = {
-        id: 'USR-001',
-        name: 'Businz Super Admin',
-        email: 'admin@businz.com',
-        role: 'Super Admin',
-        employeeId: 'EMP-000',
-        department: 'Management',
-        designation: 'Super Administrator',
-        mustChangePassword: false,
-      };
-      const userPayload = btoa(unescape(encodeURIComponent(JSON.stringify(fallbackAdmin))));
-      const dummyToken = 'vrm_fallback_jwt_' + userPayload;
-      sessionStorage.setItem(TOKEN_KEY, dummyToken);
-      localStorage.setItem(TOKEN_KEY, dummyToken);
-      localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(fallbackAdmin)));
-      return { user: fallbackAdmin, accessToken: dummyToken };
-    }
-
-    // Check if there are local stored employees
-    try {
-      const savedEmps = localStorage.getItem('vrm_hrms_employees');
-      if (savedEmps) {
-        const emps = JSON.parse(savedEmps);
-        const match = emps.find((e: any) => {
-          const idMatches = 
-            e.email?.toLowerCase() === cleanId || 
-            e.personalEmail?.toLowerCase() === cleanId || 
-            e.companyEmail?.toLowerCase() === cleanId || 
-            e.employeeId?.toLowerCase() === cleanId;
-          
-          if (!idMatches) return false;
-
-          const passMatches = 
-            !e.password || 
-            e.password === password || 
-            password === 'Password@123' || 
-            password === 'admin' ||
-            (typeof e.password === 'string' && e.password.toLowerCase() === password.toLowerCase());
-
-          return passMatches;
-        });
-
-        if (match) {
-          const empUser: AuthUser = {
-            id: match.id || match.employeeId,
-            name: `${match.firstName || ''} ${match.lastName || ''}`.trim() || 'Businz Employee',
-            email: match.email || match.personalEmail || cleanId,
-            role: resolveEmployeeRole(match),
-            employeeId: match.employeeId,
-            department: match.department || 'General',
-            designation: match.designation || 'Staff',
-            mustChangePassword: false,
-          };
-          const userPayload = btoa(unescape(encodeURIComponent(JSON.stringify(empUser))));
-          const dummyToken = 'vrm_fallback_jwt_' + userPayload;
-          sessionStorage.setItem(TOKEN_KEY, dummyToken);
-          localStorage.setItem(TOKEN_KEY, dummyToken);
-          localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(empUser)));
-          return { user: empUser, accessToken: dummyToken };
-        }
-      }
-    } catch (e) {
-      // ignore
+    } catch (e: any) {
+      console.warn('Direct database verification notice:', e);
     }
 
     throw new Error('Invalid User ID / Email or password.');
@@ -253,17 +191,17 @@ export const authService = {
     const token = this.getToken();
     if (!token) throw new Error('No active session');
 
-    // 1. If fallback JWT, try decoding payload first
-    if (token.startsWith('vrm_fallback_jwt_')) {
-      const rawPayload = token.slice('vrm_fallback_jwt_'.length);
+    // 1. If direct session token, decode payload
+    if (token.startsWith('vrm_session_')) {
+      const rawPayload = token.slice('vrm_session_'.length);
       try {
         if (rawPayload && !/^\d+$/.test(rawPayload)) {
           const jsonStr = decodeURIComponent(escape(atob(rawPayload)));
           const u = JSON.parse(jsonStr);
           if (u && u.email && u.role) {
             const authUser: AuthUser = {
-              id: u.id || u.employeeId || 'usr-1',
-              name: u.name || 'Businz Staff',
+              id: u.id || u.employeeId,
+              name: u.name || 'Staff Member',
               email: u.email,
               role: u.role,
               employeeId: u.employeeId,
@@ -283,18 +221,18 @@ export const authService = {
         // ignore
       }
 
-      // Fallback to locally stored current user object
+      // Cached user object
       const stored = localStorage.getItem('vrm_hrms_current_user');
       if (stored) {
         try {
           const u = JSON.parse(stored);
           if (u && u.email && u.role) {
             return {
-              id: u.id || u.employeeId || 'USR-001',
-              name: u.name || 'Businz User',
+              id: u.id || u.employeeId,
+              name: u.name,
               email: u.email,
               role: u.role,
-              employeeId: u.employeeId || 'EMP-001',
+              employeeId: u.employeeId,
               department: u.department || 'General',
               designation: u.designation || u.role || 'Staff',
               mustChangePassword: false,
@@ -359,9 +297,7 @@ export const authService = {
     const token = this.getToken();
     if (!token) throw new Error('Your session has expired. Please sign in again.');
 
-    if (token.startsWith('vrm_fallback_jwt_')) {
-      const dummyToken = 'vrm_fallback_jwt_' + Date.now();
-      sessionStorage.setItem(TOKEN_KEY, dummyToken);
+    if (token.startsWith('vrm_session_')) {
       return;
     }
 

@@ -144,23 +144,3 @@ export const generateReceiptSvg = (
 
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
-
-export const SAMPLE_TRAVEL_RECEIPT = generateReceiptSvg(
-  'Southern Express Logistics & Travel Services',
-  'INV-TRV-8942',
-  '2026-08-26',
-  'Travel',
-  'Dinesh Kumar',
-  4500,
-  'Client site visit to industrial equipment facility in Coimbatore'
-);
-
-export const SAMPLE_EQUIPMENT_RECEIPT = generateReceiptSvg(
-  'Apex Industrial Safety Solutions Pvt Ltd',
-  'INV-IND-4419',
-  '2026-08-20',
-  'Equipment',
-  'Ramesh Kumar',
-  15000,
-  'Safety helmets, high-visibility jackets, and tool calibration kit'
-);

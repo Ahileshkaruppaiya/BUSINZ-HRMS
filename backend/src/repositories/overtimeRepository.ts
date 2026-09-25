@@ -14,43 +14,39 @@ export interface OvertimeModel {
   createdAt: string;
 }
 
-const inMemoryOvertime: OvertimeModel[] = [];
-
 export class OvertimeRepository {
-  async getApprovedOvertimeForMonth(employeeId: string, _month: number, _year: number): Promise<OvertimeModel[]> {
-    if (isRealSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase
-          .from('overtime_records')
-          .select('*')
-          .eq('status', 'APPROVED');
-
-        if (data && !error) {
-          return data.map(d => ({
-            id: d.id,
-            employeeId: d.employee_id,
-            date: d.date,
-            hours: Number(d.hours),
-            hourlyRate: Number(d.hourly_rate),
-            amount: Number(d.amount),
-            status: d.status,
-            reason: d.reason,
-            approvedBy: d.approved_by,
-            approvedAt: d.approved_at,
-            createdAt: d.created_at,
-          }));
-        }
-      } catch {
-        // fallback
-      }
+  async getAllOvertime(): Promise<OvertimeModel[]> {
+    if (!isRealSupabaseConfigured()) {
+      return [];
     }
 
-    return inMemoryOvertime.filter(ot => ot.employeeId === employeeId && ot.status === 'APPROVED');
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data } = await supabase
+        .from('company_settings')
+        .select('setting_val')
+        .eq('setting_key', 'overtime_records_data')
+        .maybeSingle();
+
+      if (data?.setting_val && Array.isArray(data.setting_val)) {
+        return data.setting_val;
+      }
+    } catch (err) {
+      console.warn('Database error in getAllOvertime:', err);
+    }
+
+    return [];
   }
 
-  async getAllOvertime(): Promise<OvertimeModel[]> {
-    return inMemoryOvertime;
+  async getApprovedOvertimeForMonth(employeeId: string, month: number, year: number): Promise<OvertimeModel[]> {
+    const all = await this.getAllOvertime();
+    const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+    return all.filter(
+      ot =>
+        ot.status === 'APPROVED' &&
+        ot.employeeId?.toLowerCase().trim() === employeeId.toLowerCase().trim() &&
+        ot.date.startsWith(monthPrefix)
+    );
   }
 
   async createOvertime(record: Omit<OvertimeModel, 'id' | 'createdAt' | 'status' | 'amount'>): Promise<OvertimeModel> {
@@ -62,17 +58,68 @@ export class OvertimeRepository {
       status: 'PENDING',
       createdAt: new Date().toISOString(),
     };
-    inMemoryOvertime.unshift(newRecord);
+
+    if (isRealSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const current = await this.getAllOvertime();
+        const updated = [newRecord, ...current];
+
+        const { data: existing } = await supabase
+          .from('company_settings')
+          .select('id')
+          .eq('setting_key', 'overtime_records_data')
+          .maybeSingle();
+
+        if (existing?.id) {
+          await supabase
+            .from('company_settings')
+            .update({ setting_val: updated, updated_at: new Date().toISOString() })
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('company_settings')
+            .insert({ setting_key: 'overtime_records_data', setting_val: updated });
+        }
+      } catch (err) {
+        console.warn('Could not insert overtime record to Supabase:', err);
+      }
+    }
+
     return newRecord;
   }
 
   async approveOvertime(id: string, approverName: string): Promise<OvertimeModel | null> {
-    const rec = inMemoryOvertime.find(r => r.id === id);
-    if (!rec) return null;
-    rec.status = 'APPROVED';
-    rec.approvedBy = approverName;
-    rec.approvedAt = new Date().toISOString();
-    return rec;
+    const now = new Date().toISOString();
+    const all = await this.getAllOvertime();
+    const target = all.find(r => r.id === id);
+    if (!target) return null;
+
+    target.status = 'APPROVED';
+    target.approvedBy = approverName;
+    target.approvedAt = now;
+
+    if (isRealSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const { data: existing } = await supabase
+          .from('company_settings')
+          .select('id')
+          .eq('setting_key', 'overtime_records_data')
+          .maybeSingle();
+
+        if (existing?.id) {
+          await supabase
+            .from('company_settings')
+            .update({ setting_val: all, updated_at: new Date().toISOString() })
+            .eq('id', existing.id);
+        }
+      } catch (err) {
+        console.warn('Could not approve overtime in Supabase:', err);
+      }
+    }
+
+    return target;
   }
 }
 

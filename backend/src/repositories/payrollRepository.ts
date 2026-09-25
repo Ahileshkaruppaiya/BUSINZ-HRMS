@@ -6,14 +6,14 @@ import {
   PayslipResponseData,
 } from '../types/payroll.js';
 import { employeeRepository } from './employeeRepository.js';
+import { settingsRepository } from './settingsRepository.js';
 
-// In-memory data store for payroll runs & processed records (clean state, no stale cache)
+// In-memory data store for payroll runs & processed records during active session
 const inMemoryRuns: PayrollRunModel[] = [];
 const inMemoryRecords: Map<string, FullPayrollCalculationResult[]> = new Map();
 
 export class PayrollRepository {
   async getRunByMonth(month: number, year: number): Promise<PayrollRunModel | null> {
-    const key = `run-${year}-${String(month).padStart(2, '0')}`;
     const found = inMemoryRuns.find(r => r.payrollMonth === month && r.payrollYear === year);
     if (found) return found;
 
@@ -25,7 +25,7 @@ export class PayrollRepository {
           .select('*')
           .eq('payroll_month', month)
           .eq('payroll_year', year)
-          .single();
+          .maybeSingle();
 
         if (data && !error) {
           return {
@@ -46,8 +46,8 @@ export class PayrollRepository {
             updatedAt: data.updated_at,
           };
         }
-      } catch {
-        // fallback
+      } catch (err) {
+        console.warn('Database error in getRunByMonth:', err);
       }
     }
 
@@ -59,6 +59,39 @@ export class PayrollRepository {
   }
 
   async getAllRuns(): Promise<PayrollRunModel[]> {
+    if (isRealSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+          .from('payroll_runs')
+          .select('*')
+          .order('payroll_year', { ascending: false })
+          .order('payroll_month', { ascending: false });
+
+        if (data && !error && data.length > 0) {
+          return data.map(d => ({
+            id: d.id,
+            payrollMonth: d.payroll_month,
+            payrollYear: d.payroll_year,
+            status: d.status,
+            totalEmployees: d.total_employees,
+            totalGross: Number(d.total_gross),
+            totalDeductions: Number(d.total_deductions),
+            totalNet: Number(d.total_net),
+            processedBy: d.processed_by,
+            approvedBy: d.approved_by,
+            processedAt: d.processed_at,
+            approvedAt: d.approved_at,
+            paidAt: d.paid_at,
+            createdAt: d.created_at,
+            updatedAt: d.updated_at,
+          }));
+        }
+      } catch (err) {
+        console.warn('Database error in getAllRuns:', err);
+      }
+    }
+
     return inMemoryRuns;
   }
 
@@ -83,6 +116,25 @@ export class PayrollRepository {
     };
 
     inMemoryRuns.unshift(newRun);
+
+    if (isRealSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdmin();
+        await supabase.from('payroll_runs').insert({
+          id: newRun.id,
+          payroll_month: newRun.payrollMonth,
+          payroll_year: newRun.payrollYear,
+          status: newRun.status,
+          total_employees: newRun.totalEmployees,
+          total_gross: newRun.totalGross,
+          total_deductions: newRun.totalDeductions,
+          total_net: newRun.totalNet,
+        });
+      } catch (err) {
+        console.warn('Could not insert payroll run to Supabase:', err);
+      }
+    }
+
     return newRun;
   }
 
@@ -91,7 +143,10 @@ export class PayrollRepository {
     records: FullPayrollCalculationResult[],
     processorName: string
   ): Promise<PayrollRunModel> {
-    const run = inMemoryRuns.find(r => r.id === runId);
+    let run: PayrollRunModel | null = inMemoryRuns.find(r => r.id === runId) || null;
+    if (!run) {
+      run = await this.getRunById(runId);
+    }
     if (!run) {
       throw new Error(`Payroll run ${runId} not found`);
     }
@@ -115,11 +170,56 @@ export class PayrollRepository {
 
     inMemoryRecords.set(runId, records);
 
+    if (isRealSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdmin();
+        await supabase
+          .from('payroll_runs')
+          .update({
+            status: run.status,
+            total_employees: run.totalEmployees,
+            total_gross: run.totalGross,
+            total_deductions: run.totalDeductions,
+            total_net: run.totalNet,
+            processed_by: run.processedBy,
+            processed_at: run.processedAt,
+            updated_at: run.updatedAt,
+          })
+          .eq('id', runId);
+
+        // Also save to company_settings payroll_records_data for frontend synchronization
+        const { data: csData } = await supabase
+          .from('company_settings')
+          .select('id, setting_val')
+          .eq('setting_key', 'payroll_records_data')
+          .maybeSingle();
+
+        const currentRecords: any[] = Array.isArray(csData?.setting_val) ? csData!.setting_val : [];
+        const mergedRecords = [...records, ...currentRecords.filter(cr => !records.some(r => r.employeeId === cr.employeeId && r.payrollMonth === cr.payrollMonth && r.payrollYear === cr.payrollYear))];
+
+        if (csData?.id) {
+          await supabase
+            .from('company_settings')
+            .update({ setting_val: mergedRecords, updated_at: new Date().toISOString() })
+            .eq('id', csData.id);
+        } else {
+          await supabase
+            .from('company_settings')
+            .insert({ setting_key: 'payroll_records_data', setting_val: mergedRecords });
+        }
+      } catch (err) {
+        console.warn('Could not persist processed run to Supabase:', err);
+      }
+    }
+
     return run;
   }
 
   async updateRunStatus(runId: string, status: PayrollRunStatus, approverName?: string): Promise<PayrollRunModel> {
-    const run = inMemoryRuns.find(r => r.id === runId);
+    let run: PayrollRunModel | null = inMemoryRuns.find(r => r.id === runId) || null;
+    if (!run) {
+      run = await this.getRunById(runId);
+    }
     if (!run) {
       throw new Error(`Payroll run ${runId} not found`);
     }
@@ -142,11 +242,51 @@ export class PayrollRepository {
       run.paidAt = new Date().toISOString();
     }
 
+    if (isRealSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const payload: any = {
+          status: run.status,
+          updated_at: run.updatedAt,
+        };
+        if (run.approvedBy) payload.approved_by = run.approvedBy;
+        if (run.approvedAt) payload.approved_at = run.approvedAt;
+        if (run.paidAt) payload.paid_at = run.paidAt;
+
+        await supabase
+          .from('payroll_runs')
+          .update(payload)
+          .eq('id', runId);
+      } catch (err) {
+        console.warn('Could not update run status in Supabase:', err);
+      }
+    }
+
     return run;
   }
 
   async getRecordsForRun(runId: string): Promise<FullPayrollCalculationResult[]> {
-    return inMemoryRecords.get(runId) || [];
+    const memory = inMemoryRecords.get(runId);
+    if (memory && memory.length > 0) return memory;
+
+    if (isRealSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const { data: csData } = await supabase
+          .from('company_settings')
+          .select('setting_val')
+          .eq('setting_key', 'payroll_records_data')
+          .maybeSingle();
+
+        if (csData?.setting_val && Array.isArray(csData.setting_val)) {
+          return csData.setting_val;
+        }
+      } catch (err) {
+        console.warn('Could not get records from Supabase:', err);
+      }
+    }
+
+    return [];
   }
 
   async getAllProcessedRecords(): Promise<FullPayrollCalculationResult[]> {
@@ -154,14 +294,33 @@ export class PayrollRepository {
     for (const recs of inMemoryRecords.values()) {
       all.push(...recs);
     }
-    return all;
+    if (all.length > 0) return all;
+
+    if (isRealSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const { data: csData } = await supabase
+          .from('company_settings')
+          .select('setting_val')
+          .eq('setting_key', 'payroll_records_data')
+          .maybeSingle();
+
+        if (csData?.setting_val && Array.isArray(csData.setting_val)) {
+          return csData.setting_val;
+        }
+      } catch (err) {
+        console.warn('Could not get records from Supabase:', err);
+      }
+    }
+
+    return [];
   }
 
   async getRecordForEmployee(employeeId: string, month?: number, year?: number): Promise<FullPayrollCalculationResult | null> {
     const all = await this.getAllProcessedRecords();
     return (
       all.find(r => {
-        const matchesEmp = r.employeeId === employeeId;
+        const matchesEmp = r.employeeId?.toLowerCase().trim() === employeeId.toLowerCase().trim();
         if (!month || !year) return matchesEmp;
         return matchesEmp && r.payrollMonth === month && r.payrollYear === year;
       }) || null
@@ -173,6 +332,10 @@ export class PayrollRepository {
     if (!record) return null;
 
     const emp = await employeeRepository.getEmployeeById(employeeId);
+    if (!emp) return null;
+
+    const compSettings = await settingsRepository.getCompanySettings();
+
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
@@ -180,23 +343,23 @@ export class PayrollRepository {
 
     return {
       company: {
-        companyName: 'Businz Technologies Private Limited',
-        legalName: 'Businz Technologies Pvt Ltd',
-        address: 'Businz Towers, Tech Corridor, OMR, Chennai, Tamil Nadu - 600096',
-        pan: 'AAACB1234F',
-        gst: '33AAACB1234F1Z5',
+        companyName: compSettings.companyName || 'Corporate Organization',
+        legalName: compSettings.legalEntity || compSettings.companyName || 'Corporate Organization',
+        address: compSettings.address || '',
+        pan: compSettings.panNumber || '',
+        gst: compSettings.taxIdGst || '',
       },
       employee: {
-        id: emp?.id || employeeId,
-        employeeId: emp?.employeeId || employeeId,
-        firstName: emp?.firstName || 'Staff',
-        lastName: emp?.lastName || 'Member',
-        email: emp?.email || 'staff@businz.com',
-        department: emp?.department || 'Engineering',
-        designation: emp?.designation || 'Specialist',
-        bankName: emp?.bankName,
-        accountNumber: emp?.accountNumber,
-        ifscCode: emp?.ifscCode,
+        id: emp.id,
+        employeeId: emp.employeeId,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        email: emp.email,
+        department: emp.department,
+        designation: emp.designation,
+        bankName: emp.bankName,
+        accountNumber: emp.accountNumber,
+        ifscCode: emp.ifscCode,
       },
       payroll: {
         month: record.payrollMonth,

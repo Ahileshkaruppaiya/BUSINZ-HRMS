@@ -159,8 +159,8 @@ export const validateFormula = (formula: string): { isValid: boolean; error?: st
     return { isValid: false, error: 'Formula contains unsupported special characters' };
   }
 
-  // Mock test calculation
-  const mockContext: FormulaContext = {
+  // Test evaluation context
+  const testEvaluationContext: FormulaContext = {
     BASIC: 30000,
     HRA: 12000,
     GROSS: 45000,
@@ -177,7 +177,7 @@ export const validateFormula = (formula: string): { isValid: boolean; error?: st
   };
 
   try {
-    const res = evaluateFormula(formula, mockContext);
+    const res = evaluateFormula(formula, testEvaluationContext);
     return { isValid: true, sampleResult: res };
   } catch (err: any) {
     return { isValid: false, error: err.message || 'Evaluation error' };

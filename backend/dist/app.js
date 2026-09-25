@@ -41,7 +41,6 @@ export const createApp = () => {
             'Authorization',
             'x-user-role',
             'x-employee-id',
-            'x-dev-mock-auth',
             'x-internal-benchmark',
         ],
     }));

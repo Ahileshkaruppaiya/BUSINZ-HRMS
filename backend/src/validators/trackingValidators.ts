@@ -52,7 +52,6 @@ export const locationPointSchema = z.object({
   accuracy: z.number().optional(),
   speed: z.number().min(0).optional().default(0),
   batteryLevel: z.number().min(0).max(100).optional().default(100),
-  isMock: z.boolean().optional().default(false),
   syncedOffline: z.boolean().optional(),
 });
 

@@ -50,11 +50,6 @@ export const AssetManagement: React.FC = () => {
       if (assetEmpName.includes(userName) || userName.includes(assetEmpName)) return true;
     }
 
-    // Demo fallback for generic EMP-USER / Staff Employee / Floor Employee -> defaults to EMP-008
-    if ((userEmpId === 'emp-user' || userName.includes('staff') || userName.includes('floor')) && assetEmpId === 'emp-008') {
-      return true;
-    }
-
     return false;
   };
 

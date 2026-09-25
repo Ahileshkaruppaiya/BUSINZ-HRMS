@@ -131,8 +131,18 @@ export const createEmployee = async (req: Request, res: Response, next: NextFunc
     const temporaryPassword = ((req.body.password || (validated as any).password) as string)?.trim() || generateTemporaryPassword();
 
     // Determine Employee Code
-    const allEmps = await employeeRepository.getAllEmployees();
-    const employeeCode = validated.employeeId?.trim() || `EMP-${(allEmps.length + 1).toString().padStart(3, '0')}`;
+    let employeeCode = validated.employeeId?.trim();
+    if (!employeeCode) {
+      const allEmps = await employeeRepository.getAllEmployees();
+      const numbers = allEmps
+        .map(e => {
+          const match = (e.employeeId || '').match(/\d+/);
+          return match ? parseInt(match[0], 10) : 0;
+        })
+        .filter(n => !isNaN(n));
+      const maxNum = numbers.length > 0 ? Math.max(...numbers) : 0;
+      employeeCode = `EMP-${(maxNum + 1).toString().padStart(3, '0')}`;
+    }
     const employeeDbId = `e01a1111-0000-0000-0000-${Date.now().toString(16).padStart(12, '0').slice(-12)}`;
 
     // Determine role dynamically

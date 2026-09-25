@@ -5,82 +5,6 @@ import { env } from '../config/env.js';
 import { generateTemporaryPassword, validatePasswordComplexity } from '../services/passwordService.js';
 import { sendCredentialEmail } from '../services/emailService.js';
 import { auditRepository } from './auditRepository.js';
-// Initial seed accounts for testing and fallback
-const defaultHashedPassword = bcrypt.hashSync('Password@123', 10);
-const fallbackUsers = new Map([
-    [
-        'admin@businz.com',
-        {
-            id: 'usr-businz-admin',
-            email: 'admin@businz.com',
-            passwordHash: defaultHashedPassword,
-            name: 'Businz Super Admin',
-            role: 'Super Admin',
-            employeeId: 'EMP-000',
-            department: 'Management',
-            designation: 'Super Administrator',
-            isActive: true,
-            mustChangePassword: false,
-            accountStatus: 'ACTIVE',
-            credentialEmailStatus: 'SENT',
-            credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
-        },
-    ],
-    [
-        'hr@vrmstructures.com',
-        {
-            id: 'usr-001',
-            email: 'hr@vrmstructures.com',
-            passwordHash: defaultHashedPassword,
-            name: 'Pavithra S',
-            role: 'HR Manager',
-            employeeId: 'EMP-001',
-            department: 'HR',
-            designation: 'HR Manager',
-            isActive: true,
-            mustChangePassword: false,
-            accountStatus: 'ACTIVE',
-            credentialEmailStatus: 'SENT',
-            credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
-        },
-    ],
-    [
-        'finance@vrmstructures.com',
-        {
-            id: 'usr-002',
-            email: 'finance@vrmstructures.com',
-            passwordHash: defaultHashedPassword,
-            name: 'Ramesh Kumar',
-            role: 'Finance Manager',
-            employeeId: 'EMP-002',
-            department: 'Finance',
-            designation: 'Finance Manager',
-            isActive: true,
-            mustChangePassword: false,
-            accountStatus: 'ACTIVE',
-            credentialEmailStatus: 'SENT',
-            credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
-        },
-    ],
-    [
-        'field@vrmstructures.com',
-        {
-            id: 'usr-004',
-            email: 'field@vrmstructures.com',
-            passwordHash: defaultHashedPassword,
-            name: 'Karthik Rajan',
-            role: 'Employee',
-            employeeId: 'EMP-004',
-            department: 'Field Operations',
-            designation: 'Field Engineer',
-            isActive: true,
-            mustChangePassword: false,
-            accountStatus: 'ACTIVE',
-            credentialEmailStatus: 'SENT',
-            credentialEmailSentAt: '2026-01-01T09:00:00.000Z',
-        },
-    ],
-]);
 export class AuthRepository {
     /**
      * Dual identifier search: Finds account by either registered email OR Employee Code (e.g. EMP-005)
@@ -90,53 +14,57 @@ export class AuthRepository {
             return null;
         const clean = identifier.trim();
         const cleanLower = clean.toLowerCase();
-        // 1. Direct Map lookup if email
-        if (fallbackUsers.has(cleanLower)) {
-            return fallbackUsers.get(cleanLower);
-        }
-        // 2. Iterate memory accounts for match on employeeId or email
-        for (const user of fallbackUsers.values()) {
-            if (user.email.toLowerCase() === cleanLower ||
-                user.employeeId.toLowerCase() === cleanLower ||
-                user.id.toLowerCase() === cleanLower) {
-                return user;
-            }
-        }
-        // 3. Query Supabase database if configured
+        // Query Supabase PostgreSQL database directly
         if (isRealSupabaseConfigured()) {
             try {
                 const supabase = getSupabaseAdmin();
                 const query = supabase
                     .from('employees')
-                    .select('id, auth_id, employee_id, first_name, last_name, email, department_id, designation, status, must_change_password, account_status, credential_email_status, credential_email_sent_at, last_login_at, password');
+                    .select('id, auth_id, employee_id, first_name, last_name, email, department_id, designation, status, must_change_password, account_status, credential_email_status, credential_email_sent_at, last_login_at, password, roles(id, key, name)');
                 let response;
                 if (clean.includes('@')) {
-                    response = await query.ilike('email', cleanLower).single();
+                    response = await query.ilike('email', cleanLower).maybeSingle();
                 }
                 else {
-                    response = await query.ilike('employee_id', clean).single();
+                    response = await query.ilike('employee_id', clean).maybeSingle();
                 }
                 const data = response.data;
                 if (data && !response.error) {
-                    const designationLower = (data.designation || '').toLowerCase();
-                    const userRole = designationLower.includes('ceo') || designationLower.includes('director')
-                        ? 'CEO'
-                        : designationLower.includes('hr')
-                            ? 'HR Manager'
-                            : designationLower.includes('account') || designationLower.includes('finance')
-                                ? 'Finance Manager'
-                                : 'Employee';
+                    let userRole = 'Employee';
+                    const roleKey = data.roles?.key || '';
+                    const roleName = data.roles?.name || '';
+                    if (roleKey === 'ceo' || roleName === 'CEO')
+                        userRole = 'CEO';
+                    else if (roleKey === 'super_admin' || roleName === 'Super Admin')
+                        userRole = 'Super Admin';
+                    else if (roleKey === 'hr_admin' || roleName === 'HR Admin' || roleName === 'HR Manager')
+                        userRole = 'HR Manager';
+                    else if (roleKey === 'finance_manager' || roleName === 'Finance Manager')
+                        userRole = 'Finance Manager';
+                    else if (roleKey === 'dept_manager' || roleName === 'Dept Manager' || roleName === 'Department Manager')
+                        userRole = 'Department Manager';
+                    else {
+                        const dLower = (data.designation || '').toLowerCase();
+                        if (dLower.includes('ceo') || dLower.includes('director'))
+                            userRole = 'CEO';
+                        else if (dLower.includes('super admin'))
+                            userRole = 'Super Admin';
+                        else if (dLower.includes('hr manager') || dLower.includes('hr admin'))
+                            userRole = 'HR Manager';
+                        else if (dLower.includes('finance') || dLower.includes('account'))
+                            userRole = 'Finance Manager';
+                    }
                     const accountStatus = data.account_status || (data.status === 'Active' ? 'ACTIVE' : 'DISABLED');
-                    const rawDbPass = data.password || 'Password@123';
-                    const passwordHash = rawDbPass.startsWith('$2') ? rawDbPass : defaultHashedPassword;
+                    const rawDbPass = data.password || '';
+                    const passwordHash = rawDbPass.startsWith('$2') ? rawDbPass : (rawDbPass ? await bcrypt.hash(rawDbPass, 10) : '');
                     const userAccount = {
                         id: data.auth_id || data.id,
                         email: data.email,
                         passwordHash,
                         plainPassword: rawDbPass,
-                        name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Businz Staff',
+                        name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Staff',
                         role: userRole,
-                        employeeId: data.employee_id || 'EMP-001',
+                        employeeId: data.employee_id,
                         department: data.department || 'General',
                         designation: data.designation || 'Staff',
                         isActive: accountStatus === 'ACTIVE',
@@ -146,7 +74,6 @@ export class AuthRepository {
                         credentialEmailSentAt: data.credential_email_sent_at || undefined,
                         lastLoginAt: data.last_login_at || undefined,
                     };
-                    fallbackUsers.set(userAccount.email.toLowerCase(), userAccount);
                     return userAccount;
                 }
             }
@@ -184,13 +111,13 @@ export class AuthRepository {
             accountStatus: 'ACTIVE',
             credentialEmailStatus: 'PENDING',
         };
-        fallbackUsers.set(account.email, account);
         if (isRealSupabaseConfigured()) {
             try {
                 const supabase = getSupabaseAdmin();
                 await supabase
                     .from('employees')
                     .update({
+                    password: temporaryPassword,
                     must_change_password: true,
                     account_status: 'ACTIVE',
                     credential_email_status: 'PENDING',
@@ -207,10 +134,20 @@ export class AuthRepository {
      * Updates employee's credential email dispatch status
      */
     async updateEmailStatus(email, status, sentAt) {
-        const user = await this.findByEmail(email);
-        if (user) {
-            user.credentialEmailStatus = status;
-            user.credentialEmailSentAt = sentAt;
+        if (isRealSupabaseConfigured()) {
+            try {
+                const supabase = getSupabaseAdmin();
+                await supabase
+                    .from('employees')
+                    .update({
+                    credential_email_status: status,
+                    credential_email_sent_at: sentAt,
+                })
+                    .ilike('email', email.toLowerCase().trim());
+            }
+            catch (err) {
+                console.warn('Could not update email status in Supabase:', err);
+            }
         }
     }
     /**
@@ -239,6 +176,7 @@ export class AuthRepository {
                 await supabase
                     .from('employees')
                     .update({
+                    password: newPassword,
                     must_change_password: false,
                 })
                     .eq('email', user.email);
@@ -272,6 +210,23 @@ export class AuthRepository {
         user.credentialEmailStatus = emailResult.status;
         user.credentialEmailSentAt = emailResult.sentAt;
         await auditRepository.recordLog('CREDENTIAL_EMAIL_RESENT', user.employeeId, performedBy, { email: user.email, deliveryStatus: emailResult.status });
+        if (isRealSupabaseConfigured()) {
+            try {
+                const supabase = getSupabaseAdmin();
+                await supabase
+                    .from('employees')
+                    .update({
+                    password: newTempPassword,
+                    must_change_password: true,
+                    credential_email_status: emailResult.status,
+                    credential_email_sent_at: emailResult.sentAt,
+                })
+                    .ilike('employee_id', user.employeeId);
+            }
+            catch (err) {
+                console.warn('Could not sync reset password to Supabase:', err);
+            }
+        }
         return {
             success: true,
             temporaryPassword: newTempPassword,
@@ -379,11 +334,7 @@ export class AuthRepository {
     async verifyPassword(password, hash, plain) {
         if (!password)
             return false;
-        if (plain && (password === plain || password.toLowerCase() === plain.toLowerCase()))
-            return true;
-        if (password === 'Password@123' || password === 'admin')
-            return true;
-        if (password === hash)
+        if (plain && password === plain)
             return true;
         if (hash && hash.startsWith('$2')) {
             try {
