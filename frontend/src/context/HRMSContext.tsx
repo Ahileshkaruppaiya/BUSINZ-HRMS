@@ -1176,20 +1176,28 @@ interface HRMSContextType {
 const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
 
 export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Auto-purge legacy mock records from browser localStorage on clean slate transition
+  // Pure Supabase Cloud Architecture: purge any remaining business data from browser localStorage
   if (typeof window !== 'undefined') {
-    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v21';
-    if (localStorage.getItem('vrm_hrms_data_version') !== STORAGE_VERSION) {
-      // Only clear legacy mock operational items if version changes, never wipe configured settings
-      localStorage.removeItem('vrm_hrms_attendance_records');
-      localStorage.removeItem('vrm_hrms_leave_requests');
-      localStorage.removeItem('vrm_hrms_shifts');
-      localStorage.removeItem('vrm_hrms_shift_requests');
-      localStorage.removeItem('vrm_enterprise_integrations_v5');
-      localStorage.removeItem('vrm_enterprise_integrations_v4');
-      localStorage.removeItem('vrm_enterprise_integrations_v3');
-      localStorage.removeItem('vrm_enterprise_integrations_v2');
-      localStorage.setItem('vrm_hrms_data_version', STORAGE_VERSION);
+    const STORAGE_MODE = 'vrm_hrms_supabase_cloud_only_v2';
+    if (localStorage.getItem('vrm_hrms_storage_mode') !== STORAGE_MODE) {
+      const keysToRemove = [
+        'vrm_hrms_employees', 'vrm_hrms_enhanced_tasks', 'vrm_hrms_attendance_records',
+        'vrm_hrms_leave_requests', 'hrms_loan_records', 'vrm_hrms_loan_policies',
+        'vrm_hrms_expenses', 'vrm_hrms_assets', 'vrm_hrms_mom_meetings',
+        'vrm_hrms_payroll_records', 'vrm_hrms_field_assignments', 'vrm_hrms_trip_sessions',
+        'vrm_hrms_tracking_alerts', 'vrm_hrms_shifts', 'vrm_hrms_holiday_policies',
+        'vrm_hrms_shift_requests', 'vrm_hrms_reward_policies', 'vrm_hrms_employee_rewards',
+        'vrm_hrms_master_attendance_policies', 'vrm_hrms_master_leave_policies',
+        'vrm_hrms_payroll_settings_config', 'vrm_hrms_geofence_config', 'vrm_hrms_company_info',
+        'vrm_hrms_company_branches', 'vrm_hrms_org_structure', 'vrm_hrms_departments',
+        'vrm_hrms_designations', 'vrm_hrms_department_ot_policies',
+        'vrm_enterprise_integrations_v5', 'vrm_enterprise_integrations_v4',
+        'vrm_enterprise_integrations_v3', 'vrm_enterprise_integrations_v2'
+      ];
+      for (const k of keysToRemove) {
+        try { localStorage.removeItem(k); } catch {}
+      }
+      localStorage.setItem('vrm_hrms_storage_mode', STORAGE_MODE);
     }
   }
 
@@ -1240,24 +1248,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isCloudInitialized = useRef(false);
   const isSyncingFromCloud = useRef(false);
 
-  const [geofenceConfig, setGeofenceConfig] = useState<GeofenceConfig>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_geofence_config');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Error loading geofenceConfig from storage', e);
-    }
-    return INITIAL_GEOFENCE_CONFIG;
-  });
+  const [geofenceConfig, setGeofenceConfig] = useState<GeofenceConfig>(INITIAL_GEOFENCE_CONFIG);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_geofence_config', JSON.stringify(geofenceConfig));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('geofence_config', geofenceConfig);
       }
     } catch (e) {
-      console.error('Error saving geofenceConfig to storage', e);
+      console.error('Error saving geofenceConfig to cloud database', e);
     }
   }, [geofenceConfig]);
 
@@ -1273,31 +1272,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return url;
   };
 
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_employees');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.warn('Error reading employees from localStorage:', e);
-    }
-    return INITIAL_EMPLOYEES.filter(e => !isSystemAdmin(e));
-  });
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
-  // LocalStorage persistence for employees
-  useEffect(() => {
-    try {
-      localStorage.setItem('vrm_hrms_employees', JSON.stringify(employees));
-    } catch (e) {
-      console.warn('Error persisting employees to localStorage:', e);
-    }
-  }, [employees]);
-
-    // Supabase Database Employee Entity Mapper
+  // Supabase Database Employee Entity Mapper
   const mapEmployeeFromDb = (d: any): Employee => ({
     id: d.id,
     employeeId: d.employeeId || d.employee_id,
@@ -1352,25 +1329,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     password: d.password,
   });
 
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_attendance_records');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_ATTENDANCE;
-  });
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_attendance_records', JSON.stringify(attendanceRecords));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('attendance_records_data', attendanceRecords);
       }
     } catch (e) {
-      console.error('Error saving attendanceRecords to storage', e);
+      console.error('Error saving attendanceRecords to cloud database', e);
     }
   }, [attendanceRecords]);
 
@@ -1522,22 +1489,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Enterprise Attendance, Shifts & Overtime Policy State
   const [missedPunchRequests, setMissedPunchRequests] = useState<MissedPunchRequest[]>(INITIAL_MISSED_PUNCH_REQUESTS);
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>(INITIAL_OVERTIME_REQUESTS);
-  const [departmentOtPolicies, setDepartmentOtPolicies] = useState<DepartmentOtPolicy[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_department_ot_policies');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((p: any) => !['DOT-01', 'DOT-02', 'DOT-03', 'DOT-04', 'DOT-05', 'DOT-06'].includes(p.id) && !['production', 'engineering', 'accounts', 'sales', 'operations'].includes((p.department || '').toLowerCase()));
-        }
-      }
-    } catch {}
-    return INITIAL_DEPARTMENT_OT_POLICIES;
-  });
+  const [departmentOtPolicies, setDepartmentOtPolicies] = useState<DepartmentOtPolicy[]>(INITIAL_DEPARTMENT_OT_POLICIES);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_department_ot_policies', JSON.stringify(departmentOtPolicies));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('department_ot_policies_data', departmentOtPolicies);
       }
@@ -2505,81 +2460,41 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [faceLogs, setFaceLogs] = useState<FaceLog[]>(INITIAL_FACE_LOGS);
 
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_leave_requests');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_LEAVES;
-  });
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_leave_requests', JSON.stringify(leaveRequests));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('leave_requests_data', leaveRequests);
       }
     } catch (e) {
-      console.error('Error saving leaveRequests to storage', e);
+      console.error('Error saving leaveRequests to cloud database', e);
     }
   }, [leaveRequests]);
 
-  const [shifts, setShifts] = useState<Shift[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_shifts');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Exclude any legacy mock shifts
-          return parsed.filter((s: Shift) => 
-            s && s.id !== 'SH-01' && s.id !== 'SH-02' && s.id !== 'SH-03' &&
-            !['morning standard', 'afternoon shift', 'night shift', 'general day shift'].includes((s.shiftName || '').toLowerCase().trim())
-          );
-        }
-      }
-    } catch (e) {
-      console.error('Error loading shifts from storage', e);
-    }
-    return [];
-  });
+  const [shifts, setShifts] = useState<Shift[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_shifts', JSON.stringify(shifts));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('shifts_data', shifts);
       }
     } catch (e) {
-      console.error('Error saving shifts to storage', e);
+      console.error('Error saving shifts to cloud database', e);
     }
   }, [shifts]);
 
   const [leavePolicies, setLeavePolicies] = useState<LeavePolicyItem[]>(INITIAL_LEAVE_POLICIES);
 
-  const [holidayPolicies, setHolidayPolicies] = useState<HolidayItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_holiday_policies');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {
-      console.error('Error loading holiday policies from storage', e);
-    }
-    return INITIAL_HOLIDAYS;
-  });
+  const [holidayPolicies, setHolidayPolicies] = useState<HolidayItem[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_holiday_policies', JSON.stringify(holidayPolicies));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('holiday_policies_data', holidayPolicies);
       }
     } catch (e) {
-      console.error('Error saving holiday policies to storage', e);
+      console.error('Error saving holiday policies to cloud database', e);
     }
   }, [holidayPolicies]);
 
@@ -2592,24 +2507,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [policyDocuments, setPolicyDocuments] = useState<PolicyDocumentItem[]>(INITIAL_POLICY_DOCUMENTS);
 
   const [businessSettings, setBusinessSettings] = useState<BusinessProfileSettings>(INITIAL_BUSINESS_SETTINGS);
-  const [shiftRequests, setShiftRequests] = useState<ShiftRequest[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_shift_requests');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {
-      console.error('Error loading shift requests from storage', e);
-    }
-    return INITIAL_SHIFT_REQUESTS;
-  });
+  const [shiftRequests, setShiftRequests] = useState<ShiftRequest[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_shift_requests', JSON.stringify(shiftRequests));
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('shift_requests_data', shiftRequests);
+      }
     } catch (e) {
-      console.error('Error saving shift requests to storage', e);
+      console.error('Error saving shift requests to cloud database', e);
     }
   }, [shiftRequests]);
 
@@ -2636,63 +2542,20 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return task;
   };
 
-  // Enhanced Enterprise Tasks & Systems with localStorage persistence
-  const [enhancedTasks, setEnhancedTasks] = useState<TaskItemEnhanced[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_enhanced_tasks');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(sanitizeSelfAssignedTask);
-        }
-      }
-    } catch (e) {
-      console.error('Error reading enhanced tasks from storage', e);
-    }
-    return INITIAL_ENHANCED_TASKS.map(sanitizeSelfAssignedTask);
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(enhancedTasks));
-    } catch (e) {
-      console.warn('Quota exceeded saving enhanced tasks to storage, stripping large base64 URLs:', e);
-      try {
-        const sanitized = enhancedTasks.map(t => ({
-          ...t,
-          attachments: (t.attachments || []).map(a => ({
-            ...a,
-            fileUrl: (a.fileUrl && a.fileUrl.length > 50000) ? '#' : a.fileUrl
-          }))
-        }));
-        localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(sanitized));
-      } catch (inner) {
-        console.error('Failed to save sanitized enhanced tasks', inner);
-      }
-    }
-  }, [enhancedTasks]);
+  // Enhanced Enterprise Tasks & Systems (Supabase Cloud Only)
+  const [enhancedTasks, setEnhancedTasks] = useState<TaskItemEnhanced[]>([]);
 
   const [taskMasters, setTaskMasters] = useState<TaskMasterItem[]>(INITIAL_TASK_MASTERS);
 
-  const [momMeetings, setMomMeetings] = useState<MOMMeeting[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_mom_meetings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_MOM_MEETINGS;
-  });
+  const [momMeetings, setMomMeetings] = useState<MOMMeeting[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_mom_meetings', JSON.stringify(momMeetings));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('mom_meetings_data', momMeetings);
       }
     } catch (e) {
-      console.warn('Failed to save momMeetings to storage', e);
+      console.warn('Failed to save momMeetings to cloud database', e);
     }
   }, [momMeetings]);
 
@@ -2703,117 +2566,57 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [performanceScores, setPerformanceScores] = useState<PerformanceScore[]>(INITIAL_PERFORMANCE);
   const [jobOpenings, setJobOpenings] = useState<JobOpening[]>(INITIAL_JOBS);
   const [candidates, setCandidates] = useState<Candidate[]>(INITIAL_CANDIDATES);
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_expenses');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_EXPENSES;
-  });
+  const [expenses, setExpenses] = useState<Expense[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_expenses', JSON.stringify(expenses));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('expenses_data', expenses);
       }
     } catch (e) {
-      console.warn('Failed to save expenses to storage', e);
+      console.warn('Failed to save expenses to cloud database', e);
     }
   }, [expenses]);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
-  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_payroll_records');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_PAYROLL;
-  });
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_payroll_records', JSON.stringify(payrollRecords));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('payroll_records_data', payrollRecords);
       }
     } catch (e) {
-      console.warn('Failed to save payrollRecords to storage', e);
+      console.warn('Failed to save payrollRecords to cloud database', e);
     }
   }, [payrollRecords]);
 
-  const [departments, setDepartments] = useState<DepartmentItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_departments');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return INITIAL_DEPTS;
-  });
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
 
-  const [designations, setDesignations] = useState<DesignationItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_designations');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return INITIAL_DESIGNATIONS;
-  });
+  const [designations, setDesignations] = useState<DesignationItem[]>([]);
 
   const [branches, setBranches] = useState<BranchItem[]>(INITIAL_BRANCHES);
 
-  const [assets, setAssets] = useState<AssetItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_assets');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_ASSETS;
-  });
+  const [assets, setAssets] = useState<AssetItem[]>([]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_assets', JSON.stringify(assets));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('assets_data', assets);
       }
     } catch (e) {
-      console.warn('Failed to save assets to storage', e);
+      console.warn('Failed to save assets to cloud database', e);
     }
   }, [assets]);
 
   // ========================================================
   // 5 CORE SETTINGS MODULES & POLICY ENGINE STATE
   // ========================================================
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_company_info');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return INITIAL_COMPANY_INFO;
-  });
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(INITIAL_COMPANY_INFO);
 
-  const [companyBranches, setCompanyBranches] = useState<CompanyBranch[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_company_branches');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return INITIAL_COMPANY_BRANCHES;
-  });
+  const [companyBranches, setCompanyBranches] = useState<CompanyBranch[]>([]);
 
-  const [orgStructure, setOrgStructure] = useState<OrganizationStructure>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_org_structure');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return INITIAL_ORG_STRUCTURE;
-  });
+  const [orgStructure, setOrgStructure] = useState<OrganizationStructure>(INITIAL_ORG_STRUCTURE);
 
   const triggerToast = (message: string) => {
     const newNote: NotificationItem = {
@@ -2828,23 +2631,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setNotifications(prev => [newNote, ...prev]);
   };
 
-  const [masterAttendancePolicies, setMasterAttendancePolicies] = useState<AttendancePolicy[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_master_attendance_policies');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DEFAULT_MASTER_ATTENDANCE_POLICIES;
-  });
+  const [masterAttendancePolicies, setMasterAttendancePolicies] = useState<AttendancePolicy[]>([]);
 
   const [attendanceCorrections, setAttendanceCorrections] = useState<AttendanceCorrectionRequest[]>(INITIAL_ATTENDANCE_CORRECTIONS);
 
-  const [masterLeavePolicies, setMasterLeavePolicies] = useState<MasterLeavePolicy[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_master_leave_policies');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DEFAULT_MASTER_LEAVE_POLICIES;
-  });
+  const [masterLeavePolicies, setMasterLeavePolicies] = useState<MasterLeavePolicy[]>([]);
 
   // Sandwich Leave Policy Engine States
   const [sandwichPolicies, setSandwichPolicies] = useState<SandwichLeavePolicy[]>(initialSandwichPolicies);
@@ -2865,38 +2656,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSandwichAuditLogs(prev => [newEntry, ...prev]);
   };
 
-  const [payrollSettingsConfig, setPayrollSettingsConfig] = useState<PayrollSettingsConfig>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_payroll_settings_config');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.components)) {
-          // Strip out legacy mock components from previous versions
-          const mockIds = ['comp-basic', 'comp-da', 'comp-conv', 'comp-hra'];
-          parsed.components = parsed.components.filter((c: any) => {
-            if (!c || !c.id) return false;
-            if (mockIds.includes(c.id)) return false;
-            if (typeof c.id === 'string' && c.id.startsWith('comp-')) return false;
-            return true;
-          });
-        } else {
-          parsed.components = [];
-        }
-        // Clean out legacy mock policies if they exist in localStorage
-        if (!parsed.pfPolicy || parsed.pfPolicy.formula === '(BASIC + DA + CONV) * 12 / 100') {
-          parsed.pfPolicy = INITIAL_PAYROLL_CONFIG.pfPolicy;
-        }
-        if (!parsed.esicPolicy || parsed.esicPolicy.formula === 'GROSS * 0.75 / 100') {
-          parsed.esicPolicy = INITIAL_PAYROLL_CONFIG.esicPolicy;
-        }
-        if (!parsed.incrementPolicy || parsed.incrementPolicy.slabs?.some((s: any) => typeof s.id === 'string' && s.id.startsWith('inc-'))) {
-          parsed.incrementPolicy = INITIAL_PAYROLL_CONFIG.incrementPolicy;
-        }
-        return parsed;
-      }
-    } catch {}
-    return INITIAL_PAYROLL_CONFIG;
-  });
+  const [payrollSettingsConfig, setPayrollSettingsConfig] = useState<PayrollSettingsConfig>(INITIAL_PAYROLL_CONFIG);
 
   const [rewardPolicies, setRewardPolicies] = useState<RewardPolicy[]>(INITIAL_REWARD_POLICIES);
 
@@ -2918,18 +2678,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // ==========================================
   // 6. ADVANCE SALARY / LOAN POLICY & RECORDS
   // ==========================================
-  const [loanPolicies, setLoanPolicies] = useState<LoanPolicy[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_loan_policies');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DEFAULT_LOAN_POLICIES;
-  });
+  const [loanPolicies, setLoanPolicies] = useState<LoanPolicy[]>(DEFAULT_LOAN_POLICIES);
 
-  // LocalStorage & Supabase Cloud persistence effects
+  // Supabase Cloud persistence effects
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_departments', JSON.stringify(departments));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('departments_data', departments);
       }
@@ -2938,7 +2691,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_designations', JSON.stringify(designations));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('designations_data', designations);
       }
@@ -2947,7 +2699,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_company_info', JSON.stringify(companyInfo));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('company_info', companyInfo);
       }
@@ -2956,7 +2707,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_company_branches', JSON.stringify(companyBranches));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('company_branches', companyBranches);
       }
@@ -2965,7 +2715,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_org_structure', JSON.stringify(orgStructure));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('org_structure', orgStructure);
       }
@@ -2974,7 +2723,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_master_attendance_policies', JSON.stringify(masterAttendancePolicies));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('master_attendance_policies_data', masterAttendancePolicies);
       }
@@ -2983,7 +2731,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_master_leave_policies', JSON.stringify(masterLeavePolicies));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('master_leave_policies_data', masterLeavePolicies);
       }
@@ -2992,7 +2739,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(payrollSettingsConfig));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('payroll_settings_config', payrollSettingsConfig);
       }
@@ -3001,7 +2747,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_reward_policies', JSON.stringify(rewardPolicies));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('reward_policies_data', rewardPolicies);
       }
@@ -3010,7 +2755,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_employee_rewards', JSON.stringify(employeeRewardRecords));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('employee_rewards_data', employeeRewardRecords);
       }
@@ -3019,7 +2763,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_loan_policies', JSON.stringify(loanPolicies));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('loan_policies_data', loanPolicies);
       }
@@ -3078,30 +2821,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoanPolicies(prev => prev.filter(p => p.id !== id));
   };
 
-  const [loanRecords, setLoanRecords] = useState<LoanRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('hrms_loan_records');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= INITIAL_LOAN_RECORDS.length) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load loanRecords from localStorage', e);
-    }
-    return INITIAL_LOAN_RECORDS;
-  });
+  const [loanRecords, setLoanRecords] = useState<LoanRecord[]>([]);
 
-  // Sync loan records to localStorage and Supabase Cloud whenever updated
+  // Sync loan records to Supabase Cloud whenever updated
   useEffect(() => {
     try {
-      localStorage.setItem('hrms_loan_records', JSON.stringify(loanRecords));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('loan_records_data', loanRecords);
       }
     } catch (e) {
-      console.warn('Failed to save loanRecords to localStorage', e);
+      console.warn('Failed to save loanRecords to cloud database', e);
     }
   }, [loanRecords]);
 
@@ -5020,12 +4749,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
     } catch {}
 
-    // 3. Update React state and local storage cache
+    // 3. Update React state
     setEmployees(prev => {
       const updated = prev.filter(e => e.id !== id && e.employeeId !== id);
-      try {
-        localStorage.setItem('vrm_hrms_employees', JSON.stringify(updated));
-      } catch {}
       return updated;
     });
 
@@ -5068,13 +4794,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
     } catch {}
 
-    // 3. Update state & storage
+    // 3. Update React state
     const idSet = new Set(idsToDelete);
     setEmployees(prev => {
       const updated = prev.filter(e => !idSet.has(e.id) && !idSet.has(e.employeeId));
-      try {
-        localStorage.setItem('vrm_hrms_employees', JSON.stringify(updated));
-      } catch {}
       return updated;
     });
 
@@ -7097,48 +6820,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // ============================================================================
   // Field Duty & GPS Live Tracking
   // ============================================================================
-  const [fieldAssignments, setFieldAssignments] = useState<FieldAssignment[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_field_assignments');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Error reading field assignments from storage', e);
-    }
-    return INITIAL_FIELD_ASSIGNMENTS;
-  });
-
-  const [tripSessions, setTripSessions] = useState<FieldTripSession[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_trip_sessions');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Error reading trip sessions from storage', e);
-    }
-    return INITIAL_TRIP_SESSIONS;
-  });
-
-  const [trackingAlerts, setTrackingAlerts] = useState<TrackingAlert[]>(() => {
-    try {
-      const saved = localStorage.getItem('vrm_hrms_tracking_alerts');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Error reading tracking alerts from storage', e);
-    }
-    return INITIAL_TRACKING_ALERTS;
-  });
+  const [fieldAssignments, setFieldAssignments] = useState<FieldAssignment[]>(INITIAL_FIELD_ASSIGNMENTS);
+  const [tripSessions, setTripSessions] = useState<FieldTripSession[]>(INITIAL_TRIP_SESSIONS);
+  const [trackingAlerts, setTrackingAlerts] = useState<TrackingAlert[]>(INITIAL_TRACKING_ALERTS);
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_field_assignments', JSON.stringify(fieldAssignments));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('field_assignments_data', fieldAssignments);
       }
@@ -7149,7 +6836,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_trip_sessions', JSON.stringify(tripSessions));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('trip_sessions_data', tripSessions);
       }
@@ -7160,7 +6846,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     try {
-      localStorage.setItem('vrm_hrms_tracking_alerts', JSON.stringify(trackingAlerts));
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('tracking_alerts_data', trackingAlerts);
       }
@@ -7428,14 +7113,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (Array.isArray(rawEmployees) && rawEmployees.length > 0) {
         const mapped = rawEmployees.map(mapEmployeeFromDb);
         setEmployees(mapped);
-        try { localStorage.setItem('vrm_hrms_employees', JSON.stringify(mapped)); } catch {}
       }
 
       // 2. Synchronize Enterprise Tasks
       if (Array.isArray(rawTasks) && rawTasks.length > 0) {
         const sanitized = rawTasks.map(sanitizeSelfAssignedTask);
         setEnhancedTasks(sanitized);
-        try { localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(sanitized)); } catch {}
       }
 
       // 3. Synchronize All Company Settings & Core Modules
@@ -7459,7 +7142,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             teams: Array.isArray(cloudOrg.teams) ? cloudOrg.teams : []
           };
           setOrgStructure(mergedOrg);
-          try { localStorage.setItem('vrm_hrms_org_structure', JSON.stringify(mergedOrg)); } catch {}
 
           setDepartments(mergedOrg.departments.map(name => ({
             id: `dept-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
@@ -7486,11 +7168,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Company Details & Branches
         if (settings.company_info && typeof settings.company_info === 'object' && settings.company_info.companyName) {
           setCompanyInfo(settings.company_info);
-          try { localStorage.setItem('vrm_hrms_company_info', JSON.stringify(settings.company_info)); } catch {}
         }
         if (Array.isArray(settings.company_branches) && settings.company_branches.length > 0) {
           setCompanyBranches(settings.company_branches);
-          try { localStorage.setItem('vrm_hrms_company_branches', JSON.stringify(settings.company_branches)); } catch {}
         }
 
         // Shifts
@@ -7500,154 +7180,110 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             !['morning standard', 'afternoon shift', 'night shift', 'general day shift'].includes((s.shiftName || '').toLowerCase().trim())
           );
           setShifts(cleanShifts);
-          try { localStorage.setItem('vrm_hrms_shifts', JSON.stringify(cleanShifts)); } catch {}
         }
 
         // Shift Requests
         if (Array.isArray(settings.shift_requests_data)) {
           setShiftRequests(settings.shift_requests_data);
-          try { localStorage.setItem('vrm_hrms_shift_requests', JSON.stringify(settings.shift_requests_data)); } catch {}
         }
 
         // Leave Requests
         if (Array.isArray(settings.leave_requests_data)) {
           setLeaveRequests(settings.leave_requests_data);
-          try { localStorage.setItem('vrm_hrms_leave_requests', JSON.stringify(settings.leave_requests_data)); } catch {}
         }
 
         // Holiday Policies
         if (Array.isArray(settings.holiday_policies_data)) {
           setHolidayPolicies(settings.holiday_policies_data);
-          try { localStorage.setItem('vrm_hrms_holiday_policies', JSON.stringify(settings.holiday_policies_data)); } catch {}
         }
 
         // Attendance Records
         if (Array.isArray(settings.attendance_records_data)) {
           setAttendanceRecords(settings.attendance_records_data);
-          try { localStorage.setItem('vrm_hrms_attendance_records', JSON.stringify(settings.attendance_records_data)); } catch {}
         }
 
         // Loan Policies
         if (Array.isArray(settings.loan_policies_data)) {
           setLoanPolicies(settings.loan_policies_data);
-          try { localStorage.setItem('vrm_hrms_loan_policies', JSON.stringify(settings.loan_policies_data)); } catch {}
         }
 
         // Loan Records
         if (Array.isArray(settings.loan_records_data)) {
           setLoanRecords(settings.loan_records_data);
-          try { localStorage.setItem('hrms_loan_records', JSON.stringify(settings.loan_records_data)); } catch {}
         }
 
         // Assets
         if (Array.isArray(settings.assets_data)) {
           setAssets(settings.assets_data);
-          try { localStorage.setItem('vrm_hrms_assets', JSON.stringify(settings.assets_data)); } catch {}
         }
 
         // Expenses
         if (Array.isArray(settings.expenses_data)) {
           setExpenses(settings.expenses_data);
-          try { localStorage.setItem('vrm_hrms_expenses', JSON.stringify(settings.expenses_data)); } catch {}
         }
 
         // MOM Meetings
         if (Array.isArray(settings.mom_meetings_data)) {
           setMomMeetings(settings.mom_meetings_data);
-          try { localStorage.setItem('vrm_hrms_mom_meetings', JSON.stringify(settings.mom_meetings_data)); } catch {}
         }
 
         // Payroll Records
         if (Array.isArray(settings.payroll_records_data)) {
           setPayrollRecords(settings.payroll_records_data);
-          try { localStorage.setItem('vrm_hrms_payroll_records', JSON.stringify(settings.payroll_records_data)); } catch {}
         }
 
         // Geofence Config
         if (settings.geofence_config && typeof settings.geofence_config === 'object' && settings.geofence_config.officeName) {
           setGeofenceConfig(settings.geofence_config);
-          try { localStorage.setItem('vrm_hrms_geofence_config', JSON.stringify(settings.geofence_config)); } catch {}
         }
 
         // Field Duty & Tracking
         if (Array.isArray(settings.field_assignments_data)) {
           setFieldAssignments(settings.field_assignments_data);
-          try { localStorage.setItem('vrm_hrms_field_assignments', JSON.stringify(settings.field_assignments_data)); } catch {}
         }
         if (Array.isArray(settings.trip_sessions_data)) {
           setTripSessions(settings.trip_sessions_data);
-          try { localStorage.setItem('vrm_hrms_trip_sessions', JSON.stringify(settings.trip_sessions_data)); } catch {}
         }
         if (Array.isArray(settings.tracking_alerts_data)) {
           setTrackingAlerts(settings.tracking_alerts_data);
-          try { localStorage.setItem('vrm_hrms_tracking_alerts', JSON.stringify(settings.tracking_alerts_data)); } catch {}
         }
 
         // Payroll Settings Config (Salary Components, PF, ESIC, Tax, etc.)
         if (settings.payroll_settings_config && typeof settings.payroll_settings_config === 'object') {
-          const cloudConfig = settings.payroll_settings_config;
-          const localSaved = localStorage.getItem('vrm_hrms_payroll_settings_config');
-          let localParsed: any = null;
-          try { if (localSaved) localParsed = JSON.parse(localSaved); } catch {}
-
-          if (Array.isArray(localParsed?.components) && localParsed.components.length > 0) {
-            // Find any components created locally that might not be in cloud yet
-            const cloudCodes = new Set((cloudConfig.components || []).map((c: any) => (c.code || '').toUpperCase()));
-            const missingFromCloud = localParsed.components.filter((c: any) => c && c.code && !cloudCodes.has(c.code.toUpperCase()));
-            if (missingFromCloud.length > 0) {
-              const mergedComponents = [...(cloudConfig.components || []), ...missingFromCloud];
-              const mergedConfig = { ...cloudConfig, components: mergedComponents };
-              setPayrollSettingsConfig(mergedConfig);
-              try { localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(mergedConfig)); } catch {}
-              supabaseDirect.saveCompanySetting('payroll_settings_config', mergedConfig);
-            } else {
-              setPayrollSettingsConfig(cloudConfig);
-              try { localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(cloudConfig)); } catch {}
-            }
-          } else {
-            setPayrollSettingsConfig(cloudConfig);
-            try { localStorage.setItem('vrm_hrms_payroll_settings_config', JSON.stringify(cloudConfig)); } catch {}
-          }
+          setPayrollSettingsConfig(settings.payroll_settings_config);
         }
 
         // Master Attendance Policies
         if (Array.isArray(settings.master_attendance_policies_data) && settings.master_attendance_policies_data.length > 0) {
           setMasterAttendancePolicies(settings.master_attendance_policies_data);
-          try { localStorage.setItem('vrm_hrms_master_attendance_policies', JSON.stringify(settings.master_attendance_policies_data)); } catch {}
         }
 
         // Master Leave Policies
         if (Array.isArray(settings.master_leave_policies_data) && settings.master_leave_policies_data.length > 0) {
           setMasterLeavePolicies(settings.master_leave_policies_data);
-          try { localStorage.setItem('vrm_hrms_master_leave_policies', JSON.stringify(settings.master_leave_policies_data)); } catch {}
         }
 
         // Department OT Policies
         if (Array.isArray(settings.department_ot_policies_data) && settings.department_ot_policies_data.length > 0) {
           setDepartmentOtPolicies(settings.department_ot_policies_data);
-          try { localStorage.setItem('vrm_hrms_department_ot_policies', JSON.stringify(settings.department_ot_policies_data)); } catch {}
         }
 
         // Designations
         if (Array.isArray(settings.designations_data) && settings.designations_data.length > 0) {
           setDesignations(settings.designations_data);
-          try { localStorage.setItem('vrm_hrms_designations', JSON.stringify(settings.designations_data)); } catch {}
         }
 
         // Departments
         if (Array.isArray(settings.departments_data) && settings.departments_data.length > 0) {
           setDepartments(settings.departments_data);
-          try { localStorage.setItem('vrm_hrms_departments', JSON.stringify(settings.departments_data)); } catch {}
         }
 
         // Rewards & Recognition
         if (Array.isArray(settings.reward_policies_data)) {
           setRewardPolicies(settings.reward_policies_data);
-          try { localStorage.setItem('vrm_hrms_reward_policies', JSON.stringify(settings.reward_policies_data)); } catch {}
         }
         if (Array.isArray(settings.employee_rewards_data)) {
           setEmployeeRewardRecords(settings.employee_rewards_data);
-          try { localStorage.setItem('vrm_hrms_employee_rewards', JSON.stringify(settings.employee_rewards_data)); } catch {}
         }
 
         // Enterprise System Config
