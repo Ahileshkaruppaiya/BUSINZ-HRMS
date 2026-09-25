@@ -8,6 +8,31 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
   if (token && token.startsWith('vrm_fallback_jwt_')) {
+    const rawPayload = token.slice('vrm_fallback_jwt_'.length);
+    let decodedUser: any = null;
+    try {
+      if (rawPayload && !/^\d+$/.test(rawPayload)) {
+        const jsonStr = Buffer.from(rawPayload, 'base64').toString('utf8');
+        decodedUser = JSON.parse(jsonStr);
+      }
+    } catch {
+      // ignore
+    }
+
+    if (decodedUser && decodedUser.email) {
+      req.user = {
+        id: decodedUser.id || 'usr-' + (decodedUser.employeeId || 'staff'),
+        email: decodedUser.email,
+        role: decodedUser.role || 'HR Manager',
+        employeeId: decodedUser.employeeId || 'EMP-001',
+        name: decodedUser.name || 'Businz Staff',
+        department: decodedUser.department || 'HR',
+        designation: decodedUser.designation || decodedUser.role || 'HR Manager',
+        mustChangePassword: !!decodedUser.mustChangePassword,
+      };
+      return next();
+    }
+
     req.user = {
       id: 'usr-businz-admin',
       email: 'admin@businz.com',

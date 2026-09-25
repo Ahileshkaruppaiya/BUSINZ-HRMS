@@ -1187,7 +1187,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.removeItem('vrm_hrms_field_assignments');
       localStorage.removeItem('vrm_hrms_trip_sessions');
       localStorage.removeItem('vrm_hrms_tracking_alerts');
-      localStorage.removeItem('vrm_hrms_current_user');
       localStorage.removeItem('vrm_hrms_shifts');
       localStorage.removeItem('vrm_hrms_holiday_policies');
       localStorage.removeItem('vrm_hrms_shift_requests');
@@ -4622,7 +4621,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       avatar = '';
     }
 
-    setCurrentUser({
+    const switchedUser: User = {
       id: 'USR-' + Date.now(),
       name,
       email,
@@ -4631,7 +4630,14 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       department: dept,
       designation: desig,
       employeeId: empId
-    });
+    };
+
+    setCurrentUser(switchedUser);
+    try {
+      localStorage.setItem('vrm_hrms_current_user', JSON.stringify(switchedUser));
+    } catch (e) {
+      console.warn('Error persisting switched role user:', e);
+    }
   };
 
   // RBAC Permission Check

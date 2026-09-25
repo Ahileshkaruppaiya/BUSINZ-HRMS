@@ -21,7 +21,6 @@ const AuthenticatedApp: React.FC = () => {
         const authUser = await authService.getCurrentUser();
         if (!active) return;
         const appUser = toAppUser(authUser);
-        switchRole(appUser.role);
         updateCurrentUser(appUser);
         setAuthState('authenticated');
       } catch {

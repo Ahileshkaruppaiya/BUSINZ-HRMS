@@ -115,7 +115,10 @@ const safeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<
 };
 
 export const authService = {
-  getToken: () => sessionStorage.getItem(TOKEN_KEY),
+  getToken: () => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  },
 
   clearSession: () => {
     sessionStorage.removeItem(TOKEN_KEY);
@@ -141,6 +144,8 @@ export const authService = {
         const body = (await response.json()) as ApiResponse<{ accessToken: string; user: AuthUser }>;
         if (body.data?.accessToken && body.data.user) {
           sessionStorage.setItem(TOKEN_KEY, body.data.accessToken);
+          localStorage.setItem(TOKEN_KEY, body.data.accessToken);
+          localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(body.data.user)));
           return body.data;
         }
       }
@@ -162,8 +167,10 @@ export const authService = {
           designation: dbUser.designation || 'Staff',
           mustChangePassword: dbUser.must_change_password ?? false,
         };
-        const token = 'vrm_fallback_jwt_' + Date.now();
+        const userPayload = btoa(unescape(encodeURIComponent(JSON.stringify(empUser))));
+        const token = 'vrm_fallback_jwt_' + userPayload;
         sessionStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(TOKEN_KEY, token);
         localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(empUser)));
         return { user: empUser, accessToken: token };
       }
@@ -184,8 +191,10 @@ export const authService = {
         designation: 'Super Administrator',
         mustChangePassword: false,
       };
-      const dummyToken = 'vrm_fallback_jwt_' + Date.now();
+      const userPayload = btoa(unescape(encodeURIComponent(JSON.stringify(fallbackAdmin))));
+      const dummyToken = 'vrm_fallback_jwt_' + userPayload;
       sessionStorage.setItem(TOKEN_KEY, dummyToken);
+      localStorage.setItem(TOKEN_KEY, dummyToken);
       localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(fallbackAdmin)));
       return { user: fallbackAdmin, accessToken: dummyToken };
     }
@@ -225,8 +234,10 @@ export const authService = {
             designation: match.designation || 'Staff',
             mustChangePassword: false,
           };
-          const dummyToken = 'vrm_fallback_jwt_' + Date.now();
+          const userPayload = btoa(unescape(encodeURIComponent(JSON.stringify(empUser))));
+          const dummyToken = 'vrm_fallback_jwt_' + userPayload;
           sessionStorage.setItem(TOKEN_KEY, dummyToken);
+          localStorage.setItem(TOKEN_KEY, dummyToken);
           localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(empUser)));
           return { user: empUser, accessToken: dummyToken };
         }
@@ -242,64 +253,99 @@ export const authService = {
     const token = this.getToken();
     if (!token) throw new Error('No active session');
 
-    // If session is a hybrid / fallback token, read from local storage directly
+    // 1. If fallback JWT, try decoding payload first
     if (token.startsWith('vrm_fallback_jwt_')) {
+      const rawPayload = token.slice('vrm_fallback_jwt_'.length);
+      try {
+        if (rawPayload && !/^\d+$/.test(rawPayload)) {
+          const jsonStr = decodeURIComponent(escape(atob(rawPayload)));
+          const u = JSON.parse(jsonStr);
+          if (u && u.email && u.role) {
+            const authUser: AuthUser = {
+              id: u.id || u.employeeId || 'usr-1',
+              name: u.name || 'Businz Staff',
+              email: u.email,
+              role: u.role,
+              employeeId: u.employeeId,
+              department: u.department || 'General',
+              designation: u.designation || u.role,
+              mustChangePassword: false,
+            };
+            try {
+              localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(authUser)));
+            } catch {
+              // ignore
+            }
+            return authUser;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // Fallback to locally stored current user object
       const stored = localStorage.getItem('vrm_hrms_current_user');
       if (stored) {
         try {
           const u = JSON.parse(stored);
-          return {
-            id: u.id || 'USR-001',
-            name: u.name || 'Businz Super Admin',
-            email: u.email || 'admin@businz.com',
-            role: u.role || 'Super Admin',
-            employeeId: u.employeeId || 'EMP-000',
-            department: u.department || 'Management',
-            designation: u.designation || 'Super Administrator',
-            mustChangePassword: false,
-          };
+          if (u && u.email && u.role) {
+            return {
+              id: u.id || u.employeeId || 'USR-001',
+              name: u.name || 'Businz User',
+              email: u.email,
+              role: u.role,
+              employeeId: u.employeeId || 'EMP-001',
+              department: u.department || 'General',
+              designation: u.designation || u.role || 'Staff',
+              mustChangePassword: false,
+            };
+          }
         } catch (e) {
           // ignore
         }
       }
-      return {
-        id: 'USR-001',
-        name: 'Businz Super Admin',
-        email: 'admin@businz.com',
-        role: 'Super Admin',
-        employeeId: 'EMP-000',
-        department: 'Management',
-        designation: 'Super Administrator',
-        mustChangePassword: false,
-      };
+
+      this.clearSession();
+      throw new Error('Your session has expired. Please sign in again.');
     }
 
+    // 2. Real JWT token: query backend /auth/me
     try {
       const response = await safeFetch(`${API_BASE}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
         const body = (await response.json()) as ApiResponse<AuthUser>;
-        if (body.data) return body.data;
+        if (body.data && body.data.email) {
+          try {
+            localStorage.setItem('vrm_hrms_current_user', JSON.stringify(toAppUser(body.data)));
+          } catch {
+            // ignore
+          }
+          return body.data;
+        }
       }
     } catch (e) {
       // If network/backend error, use stored user if available
     }
 
+    // 3. Fallback to cached valid user if available
     const stored = localStorage.getItem('vrm_hrms_current_user');
     if (stored) {
       try {
         const u = JSON.parse(stored);
-        return {
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role,
-          employeeId: u.employeeId,
-          department: u.department,
-          designation: u.designation,
-          mustChangePassword: false,
-        };
+        if (u && u.email && u.role) {
+          return {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+            employeeId: u.employeeId,
+            department: u.department,
+            designation: u.designation,
+            mustChangePassword: false,
+          };
+        }
       } catch (e) {
         // ignore
       }
