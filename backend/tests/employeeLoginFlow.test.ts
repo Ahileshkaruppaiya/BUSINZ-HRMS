@@ -372,4 +372,13 @@ describe('VRM Enterprise HRMS — Full Employee Onboarding & Login Account Creat
       expect(metaString).not.toContain('passwordHash');
     }
   });
+
+  afterAll(async () => {
+    try {
+      await fetch(`${BASE_URL}/api/v1/employees/${testEmpCode}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${hrAuthToken}` },
+      });
+    } catch {}
+  });
 });

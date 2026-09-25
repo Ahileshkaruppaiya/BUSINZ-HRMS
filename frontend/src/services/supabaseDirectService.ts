@@ -130,4 +130,120 @@ export const supabaseDirect = {
       return null;
     }
   },
+
+  /**
+   * Directly deletes an employee from Supabase REST
+   */
+  async deleteEmployee(idOrEmpId: string): Promise<{ success: boolean; error?: any }> {
+    try {
+      if (!idOrEmpId) return { success: false, error: 'No employee ID provided' };
+      const cleanId = idOrEmpId.trim();
+
+      // Clean up potential foreign key dependencies first
+      try {
+        const queryFilter = `or=(id.eq.${encodeURIComponent(cleanId)},employee_id.eq.${encodeURIComponent(cleanId)})`;
+        const empRows = await fetch(`${SUPABASE_URL}/rest/v1/employees?${queryFilter}&select=id,employee_id`, {
+          headers: getHeaders(),
+        });
+        if (empRows.ok) {
+          const matching = await empRows.json();
+          if (Array.isArray(matching) && matching.length > 0) {
+            const uuid = matching[0].id;
+            const empCode = matching[0].employee_id;
+
+            // Remove non-cascading child records if any
+            const tablesToClean = [
+              { table: 'attendance_records', col: 'employee_id' },
+              { table: 'leave_requests', col: 'employee_id' },
+              { table: 'task_assignees', col: 'employee_id' },
+              { table: 'password_resets', col: 'email' },
+            ];
+
+            await Promise.allSettled(
+              tablesToClean.map(t =>
+                fetch(`${SUPABASE_URL}/rest/v1/${t.table}?${t.col}=eq.${encodeURIComponent(uuid)}`, {
+                  method: 'DELETE',
+                  headers: getHeaders(),
+                })
+              )
+            );
+          }
+        }
+      } catch (cascadeErr) {
+        console.warn('[SupabaseDirect] Pre-delete cascade notice:', cascadeErr);
+      }
+
+      // Delete from employees table
+      const deleteFilter = `or=(id.eq.${encodeURIComponent(cleanId)},employee_id.eq.${encodeURIComponent(cleanId)})`;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?${deleteFilter}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('[SupabaseDirect] deleteEmployee error:', res.status, errText);
+        return { success: false, error: errText };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[SupabaseDirect] deleteEmployee exception:', err);
+      return { success: false, error: err?.message || err };
+    }
+  },
+
+  /**
+   * Deletes multiple employees in batch
+   */
+  async deleteEmployees(idsOrEmpIds: string[]): Promise<{ success: boolean; deletedCount: number; errors: any[] }> {
+    const errors: any[] = [];
+    let deletedCount = 0;
+
+    for (const id of idsOrEmpIds) {
+      const result = await this.deleteEmployee(id);
+      if (result.success) {
+        deletedCount++;
+      } else {
+        errors.push({ id, error: result.error });
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      deletedCount,
+      errors,
+    };
+  },
+
+  /**
+   * Updates an employee record directly in Supabase REST
+   */
+  async updateEmployee(idOrEmpId: string, updates: Record<string, any>): Promise<{ success: boolean; data?: any; error?: any }> {
+    try {
+      if (!idOrEmpId) return { success: false, error: 'No employee ID provided' };
+      const cleanId = idOrEmpId.trim();
+      const filter = `or=(id.eq.${encodeURIComponent(cleanId)},employee_id.eq.${encodeURIComponent(cleanId)})`;
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?${filter}`, {
+        method: 'PATCH',
+        headers: {
+          ...getHeaders(),
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        return { success: false, error: errText };
+      }
+
+      const data = await res.json();
+      return { success: true, data: Array.isArray(data) ? data[0] : data };
+    } catch (err: any) {
+      return { success: false, error: err?.message || err };
+    }
+  },
 };
+

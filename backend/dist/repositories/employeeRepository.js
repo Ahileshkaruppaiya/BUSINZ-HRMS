@@ -556,14 +556,37 @@ export class EmployeeRepository {
         return emp;
     }
     async deleteEmployee(id) {
-        const idx = fallbackEmployees.findIndex((e) => e.id === id || e.employeeId === id);
+        if (!id)
+            return false;
+        const cleanId = id.trim();
+        let deleted = false;
+        const idx = fallbackEmployees.findIndex((e) => e.id === cleanId || e.employeeId === cleanId);
         if (idx >= 0) {
             fallbackEmployees.splice(idx, 1);
-            memoryCache.invalidatePattern('emp_');
-            memoryCache.invalidatePattern('ss_');
-            return true;
+            deleted = true;
         }
-        return false;
+        memoryCache.invalidatePattern('emp_');
+        memoryCache.invalidatePattern('ss_');
+        memoryCache.invalidate('employees_all_active');
+        if (isRealSupabaseConfigured()) {
+            try {
+                const supabase = getSupabaseAdmin();
+                const { error } = await supabase
+                    .from('employees')
+                    .delete()
+                    .or(`id.eq.${cleanId},employee_id.eq.${cleanId}`);
+                if (!error) {
+                    deleted = true;
+                }
+                else {
+                    console.warn('Could not delete employee from Supabase:', error);
+                }
+            }
+            catch (err) {
+                console.warn('Supabase delete exception:', err);
+            }
+        }
+        return deleted;
     }
 }
 export const employeeRepository = new EmployeeRepository();

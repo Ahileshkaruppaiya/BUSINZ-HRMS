@@ -37,6 +37,8 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
   const { 
     employees, 
     deleteEmployee, 
+    deleteMultipleEmployees,
+    refreshEmployees,
     canDeleteEmployee, 
     searchQuery, 
     setSearchQuery, 
@@ -73,9 +75,9 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
   const [showOfferLetterModal, setShowOfferLetterModal] = useState<boolean>(false);
   const [offerLetterEmp, setOfferLetterEmp] = useState<Employee | null>(null);
 
-  // Delete modal state
-  const [deleteTargetEmp, setDeleteTargetEmp] = useState<Employee | null>(null);
-  const [deleteCheckResult, setDeleteCheckResult] = useState<{ canDelete: boolean; reason?: string } | null>(null);
+  // Delete modal state (supports single and multiple employees)
+  const [deleteTargetEmps, setDeleteTargetEmps] = useState<Employee[]>([]);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   const isEmployeeRole = currentUser.role === 'Employee';
   const isManagerRole = currentUser.role === 'Department Manager';
@@ -87,14 +89,10 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
     currentUser.designation === 'CEO' || 
     currentUser.employeeId === 'EMP-000';
 
-  // Role-based scoping of employee records (exclude system administrator Businz Admin)
-  const roleScopedEmployees = (
-    isEmployeeRole
-      ? employees.filter(e => e.employeeId === (currentUser.employeeId || 'EMP-001') || e.email === currentUser.email)
-      : isManagerRole
-      ? employees.filter(e => e.department === currentUser.department)
-      : employees
-  ).filter(e => 
+  // Workforce Directory Scoping:
+  // All authenticated company staff can browse company colleagues in the directory
+  // Management actions (Add, Delete, Offer Letter, Checkboxes) are guarded by isCEO
+  const roleScopedEmployees = employees.filter(e => 
     e.employeeId !== 'EMP-000' && 
     e.email?.toLowerCase() !== 'admin@businz.com' && 
     e.designation !== 'Super Administrator'
@@ -518,6 +516,41 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
                             <FileText size={14} />
                           </button>
                         )}
+
+                        {isCEO && (
+                          <button 
+                            type="button"
+                            title="Delete Employee"
+                            aria-label="Delete Employee"
+                            onClick={() => setDeleteTargetEmps([emp])}
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              border: '1px solid #FEE2E2',
+                              background: '#FEF2F2',
+                              color: '#EF4444',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              padding: 0,
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#FEE2E2';
+                              e.currentTarget.style.borderColor = '#FCA5A5';
+                              e.currentTarget.style.color = '#DC2626';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#FEF2F2';
+                              e.currentTarget.style.borderColor = '#FEE2E2';
+                              e.currentTarget.style.color = '#EF4444';
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -537,15 +570,9 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
           if (emp) setActiveProfileEmp(emp);
         } : undefined}
         onDelete={() => {
-          if (selectedEmpIds.length === 1) {
-            const emp = filteredEmployees.find(e => e.id === selectedEmpIds[0]);
-            if (emp) {
-              const check = canDeleteEmployee(emp.employeeId);
-              setDeleteTargetEmp(emp);
-              setDeleteCheckResult(check);
-            }
-          } else {
-            alert(`Selected ${selectedEmpIds.length} employees`);
+          if (selectedEmpIds.length > 0) {
+            const emps = filteredEmployees.filter(e => selectedEmpIds.includes(e.id));
+            setDeleteTargetEmps(emps);
           }
         }}
         customActions={
@@ -602,64 +629,122 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
         />
       )}
 
-      {/* Delete Employee Confirmation / Safety Check Modal */}
-      {deleteTargetEmp && deleteCheckResult && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-content" style={{ maxWidth: '480px', borderRadius: 'var(--radius-dialog)' }}>
-            <div className="modal-header" style={{ alignItems: 'flex-start' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '10px',
-                  backgroundColor: deleteCheckResult.canDelete ? '#FEE2E2' : '#FEF3C7',
-                  color: deleteCheckResult.canDelete ? '#EF4444' : '#F59E0B',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  {deleteCheckResult.canDelete ? <Trash2 size={20} /> : <AlertCircle size={20} />}
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
-                    {deleteCheckResult.canDelete ? 'Delete Employee Profile' : 'Deletion Blocked by System'}
-                  </h3>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
-                    Employee ID: <strong style={{ fontFamily: 'monospace' }}>{deleteTargetEmp.employeeId}</strong>
-                  </p>
-                </div>
-              </div>
-              <button 
-                className="btn-icon" 
-                onClick={() => {
-                  setDeleteTargetEmp(null);
-                  setDeleteCheckResult(null);
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
+      {/* Delete Employee Confirmation & Dependency Check Modal (Single and Multi) */}
+      {deleteTargetEmps.length > 0 && (() => {
+        const deleteResults = deleteTargetEmps.map(emp => ({
+          emp,
+          ...canDeleteEmployee(emp.employeeId)
+        }));
+        const eligibleEmps = deleteResults.filter(r => r.canDelete).map(r => r.emp);
+        const blockedEmps = deleteResults.filter(r => !r.canDelete);
+        const isSingle = deleteTargetEmps.length === 1;
 
-            <div className="modal-body" style={{ padding: '20px 24px' }}>
-              {deleteCheckResult.canDelete ? (
-                <div>
-                  <p style={{ fontSize: '0.92rem', color: 'var(--color-text-primary)', marginBottom: '12px' }}>
-                    Are you sure you want to delete <strong>{deleteTargetEmp.firstName} {deleteTargetEmp.lastName}</strong>?
-                  </p>
+        const handleConfirmDeletion = async () => {
+          if (eligibleEmps.length === 0 || isDeleting) return;
+          setIsDeleting(true);
+          try {
+            const idsToDelete = eligibleEmps.map(e => e.id);
+            if (idsToDelete.length === 1) {
+              await deleteEmployee(idsToDelete[0]);
+            } else {
+              await deleteMultipleEmployees(idsToDelete);
+            }
+            setSelectedEmpIds(prev => prev.filter(id => !idsToDelete.includes(id)));
+            setDeleteTargetEmps([]);
+          } catch (delErr) {
+            console.error('Delete action failed:', delErr);
+          } finally {
+            setIsDeleting(false);
+          }
+        };
+
+        return (
+          <div className="modal-overlay" style={{ zIndex: 1100 }}>
+            <div className="modal-content" style={{ maxWidth: '520px', borderRadius: 'var(--radius-dialog)' }}>
+              <div className="modal-header" style={{ alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{
-                    backgroundColor: '#FEF2F2',
-                    border: '1px solid #FEE2E2',
-                    color: '#991B1B',
-                    padding: '12px',
-                    borderRadius: 'var(--radius-input)',
-                    fontSize: '0.82rem'
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    backgroundColor: eligibleEmps.length > 0 ? '#FEE2E2' : '#FEF3C7',
+                    color: eligibleEmps.length > 0 ? '#EF4444' : '#F59E0B',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
                   }}>
-                    ⚠️ This will remove the employee's personal record, attendance logs, and profile assignments permanently.
+                    {eligibleEmps.length > 0 ? <Trash2 size={20} /> : <AlertCircle size={20} />}
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
+                      {isSingle
+                        ? (eligibleEmps.length > 0 ? 'Delete Employee Record' : 'Deletion Blocked by System')
+                        : `Delete ${deleteTargetEmps.length} Selected Employees`}
+                    </h3>
+                    <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--color-text-secondary)' }}>
+                      {isSingle 
+                        ? `User ID: ${deleteTargetEmps[0].employeeId}`
+                        : `${eligibleEmps.length} eligible, ${blockedEmps.length} blocked`}
+                    </p>
                   </div>
                 </div>
-              ) : (
-                <div>
+                <button 
+                  className="btn-icon" 
+                  disabled={isDeleting}
+                  onClick={() => setDeleteTargetEmps([])}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ padding: '20px 24px' }}>
+                {eligibleEmps.length > 0 && (
+                  <div style={{ marginBottom: blockedEmps.length > 0 ? '16px' : '0' }}>
+                    <p style={{ fontSize: '0.92rem', color: 'var(--color-text-primary)', marginBottom: '10px' }}>
+                      {isSingle ? (
+                        <>Are you sure you want to permanently delete <strong>{eligibleEmps[0].firstName} {eligibleEmps[0].lastName}</strong> ({eligibleEmps[0].employeeId})?</>
+                      ) : (
+                        <>Are you sure you want to delete the following <strong>{eligibleEmps.length}</strong> employee(s)?</>
+                      )}
+                    </p>
+
+                    {!isSingle && (
+                      <div style={{
+                        maxHeight: '120px',
+                        overflowY: 'auto',
+                        backgroundColor: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '10px',
+                        padding: '8px 12px',
+                        marginBottom: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        {eligibleEmps.map(e => (
+                          <div key={e.id} style={{ fontSize: '0.84rem', display: 'flex', justifyContent: 'space-between' }}>
+                            <span><strong>{e.firstName} {e.lastName}</strong> ({e.department})</span>
+                            <span style={{ fontFamily: 'monospace', color: '#64748B' }}>{e.employeeId}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FEE2E2',
+                      color: '#991B1B',
+                      padding: '12px',
+                      borderRadius: 'var(--radius-input)',
+                      fontSize: '0.82rem'
+                    }}>
+                      ⚠️ This will permanently remove the record from Supabase Cloud Database, attendance logs, and auth credentials.
+                    </div>
+                  </div>
+                )}
+
+                {blockedEmps.length > 0 && (
                   <div style={{
                     backgroundColor: '#FFFBEB',
                     border: '1px solid #FEF3C7',
@@ -667,47 +752,50 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
                     padding: '14px',
                     borderRadius: 'var(--radius-input)',
                     fontSize: '0.86rem',
-                    lineHeight: '1.5',
-                    marginBottom: '16px'
+                    lineHeight: '1.5'
                   }}>
-                    {deleteCheckResult.reason}
+                    <strong style={{ display: 'block', marginBottom: '6px' }}>
+                      ⚠️ {blockedEmps.length} employee(s) cannot be deleted due to active enterprise dependencies:
+                    </strong>
+                    <ul style={{ margin: '0 0 0 18px', padding: 0, fontSize: '0.82rem' }}>
+                      {blockedEmps.map(b => (
+                        <li key={b.emp.id} style={{ marginBottom: '4px' }}>
+                          <strong>{b.emp.firstName} {b.emp.lastName}</strong>: {b.reason}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', margin: 0 }}>
-                    To ensure enterprise data integrity, please return or reassign all company assets and tasks before removing this workforce member.
-                  </p>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div className="modal-footer" style={{ padding: '16px 24px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={() => {
-                  setDeleteTargetEmp(null);
-                  setDeleteCheckResult(null);
-                }}
-              >
-                {deleteCheckResult.canDelete ? 'Cancel' : 'Understood'}
-              </button>
-              {deleteCheckResult.canDelete && (
+              <div className="modal-footer" style={{ padding: '16px 24px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button 
                   type="button" 
-                  className="btn btn-danger" 
-                  onClick={() => {
-                    deleteEmployee(deleteTargetEmp.id);
-                    setDeleteTargetEmp(null);
-                    setDeleteCheckResult(null);
-                  }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  className="btn btn-secondary" 
+                  disabled={isDeleting}
+                  onClick={() => setDeleteTargetEmps([])}
                 >
-                  <Trash2 size={16} /> Confirm Deletion
+                  Cancel
                 </button>
-              )}
+                {eligibleEmps.length > 0 && (
+                  <button 
+                    type="button" 
+                    className="btn btn-danger" 
+                    disabled={isDeleting}
+                    onClick={handleConfirmDeletion}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Trash2 size={16} />
+                    {isDeleting 
+                      ? 'Deleting from Cloud...' 
+                      : (isSingle ? 'Confirm Deletion' : `Delete ${eligibleEmps.length} Selected`)}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

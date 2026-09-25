@@ -879,6 +879,15 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       emailStatus = 'SENT';
     }
 
+    let dbSaved = false;
+    let dbErrorMessage = '';
+
+    const assignedRoleId = 
+      newEmp.role === 'CEO' 
+        ? '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6' 
+        : (newEmp.role === 'Super Admin' ? 'c4f29eb9-d1ae-4d1e-a7ff-15908b2afd59' : undefined);
+
+    // 1. Attempt backend API first
     try {
       const token = 
         sessionStorage.getItem('vrm_auth_token') || 
@@ -907,43 +916,23 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       });
 
       if (apiRes && apiRes.ok) {
+        dbSaved = true;
         const body = await apiRes.json();
         if (body.status === 'EMAIL_FAILED') {
           emailStatus = 'FAILED';
         }
-      } else {
-        // Fallback: insert directly into Supabase Cloud Database via REST
-        const assignedRoleId = 
-          newEmp.role === 'CEO' 
-            ? '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6' 
-            : (newEmp.role === 'Super Admin' ? 'c4f29eb9-d1ae-4d1e-a7ff-15908b2afd59' : undefined);
-
-        await supabaseDirect.insertEmployee({
-          employee_id: cleanEmpCode,
-          first_name: newEmp.firstName,
-          last_name: newEmp.lastName,
-          email: primaryEmail,
-          password: targetPassword,
-          designation: newEmp.designation,
-          role_id: assignedRoleId,
-          basic_salary: newEmp.basicSalary,
-          phone: newEmp.phone,
-          status: newEmp.status,
-          attendance_method: newEmp.attendanceMethod,
-        });
       }
     } catch {
-      // Standalone/offline mode: insert directly into Supabase Cloud Database
-      try {
-        const assignedRoleId = 
-          newEmp.role === 'CEO' 
-            ? '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6' 
-            : (newEmp.role === 'Super Admin' ? 'c4f29eb9-d1ae-4d1e-a7ff-15908b2afd59' : undefined);
+      // Backend not running, proceed directly to cloud database
+    }
 
-        await supabaseDirect.insertEmployee({
+    // 2. Direct Supabase Cloud Database insert (guaranteed connectivity)
+    if (!dbSaved) {
+      try {
+        const sbRes = await supabaseDirect.insertEmployee({
           employee_id: cleanEmpCode,
           first_name: newEmp.firstName,
-          last_name: newEmp.lastName,
+          last_name: newEmp.lastName || '',
           email: primaryEmail,
           password: targetPassword,
           designation: newEmp.designation,
@@ -953,9 +942,28 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           status: newEmp.status,
           attendance_method: newEmp.attendanceMethod,
         });
-      } catch (sbErr) {
-        console.warn('Direct Supabase insertion notice:', sbErr);
+
+        if (sbRes.success) {
+          dbSaved = true;
+        } else {
+          dbErrorMessage = typeof sbRes.error === 'string' ? sbRes.error : JSON.stringify(sbRes.error);
+        }
+      } catch (sbErr: any) {
+        dbErrorMessage = sbErr?.message || 'Database connection error';
       }
+    }
+
+    // If cloud persistence failed, abort and inform user immediately
+    if (!dbSaved) {
+      setIsSubmitting(false);
+      let readableError = 'Failed to register employee into the cloud database.';
+      if (dbErrorMessage.includes('unique constraint') || dbErrorMessage.includes('duplicate')) {
+        readableError = `Employee with ID "${cleanEmpCode}" or Email "${primaryEmail}" is already registered. Please use unique values.`;
+      } else if (dbErrorMessage) {
+        readableError = `Database error: ${dbErrorMessage}`;
+      }
+      setValidationError(readableError);
+      return;
     }
 
     setEmailDeliveryStatus(emailStatus);

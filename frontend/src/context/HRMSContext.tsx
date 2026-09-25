@@ -767,7 +767,9 @@ interface HRMSContextType {
   employees: Employee[];
   addEmployee: (emp: Omit<Employee, 'id'>) => void;
   updateEmployee: (id: string, empData: Partial<Employee>) => void;
-  deleteEmployee: (id: string) => void;
+  deleteEmployee: (id: string) => Promise<{ success: boolean; message?: string }> | any;
+  deleteMultipleEmployees: (ids: string[]) => Promise<{ success: boolean; deletedCount: number; message?: string }>;
+  refreshEmployees: () => Promise<void>;
   resetEmployeeLogin: (employeeId: string) => { success: boolean; message: string; temporaryPassword?: string };
   updateEmployeeLoginStatus: (employeeId: string, status: 'ACTIVE' | 'DISABLED') => { success: boolean; message: string };
   changeEmployeePassword: (identifier: string, newPassword: string) => { success: boolean; message: string };
@@ -1173,8 +1175,9 @@ const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
 export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Auto-purge legacy mock records from browser localStorage on clean slate transition
   if (typeof window !== 'undefined') {
-    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v14';
+    const STORAGE_VERSION = 'vrm_hrms_clean_prod_v15';
     if (localStorage.getItem('vrm_hrms_data_version') !== STORAGE_VERSION) {
+      localStorage.removeItem('vrm_hrms_employees');
       localStorage.removeItem('vrm_hrms_enhanced_tasks');
       localStorage.removeItem('hrms_loan_records');
       localStorage.removeItem('vrm_hrms_loan_policies');
@@ -1314,26 +1317,26 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.getItem('token') || 
         localStorage.getItem('hrms_auth_token');
 
-      if (!token) return;
-
       let rawData: any[] = [];
-      try {
-        const res = await fetch(`${API_BASE_URL}/employees`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
+      if (token) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/employees`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            const body = await res.json();
+            if (body.success && Array.isArray(body.data)) {
+              rawData = body.data;
+            }
           }
-        });
-        if (res.ok) {
-          const body = await res.json();
-          if (body.success && Array.isArray(body.data)) {
-            rawData = body.data;
-          }
+        } catch (err) {
+          // Fallback to direct Supabase REST
         }
-      } catch (err) {
-        // Fallback to direct Supabase REST
       }
 
-      // If backend was 404 or empty, fetch directly from Supabase Cloud Database
+      // Fetch directly from Supabase Cloud Database
       if (rawData.length === 0) {
         try {
           rawData = await supabaseDirect.getEmployees();
@@ -1353,7 +1356,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             dob: d.dob || '1995-01-01',
             gender: (d.gender as any) || 'Male',
             address: d.address || 'Chennai, Tamil Nadu',
-            department: d.department || 'General',
+            department: d.department || (d.departments && d.departments.name) || 'General',
             designation: d.designation || 'Staff',
             reportingManagerId: d.reportingManagerId || d.reporting_manager_id || '',
             reportingManagerName: d.reportingManagerName || d.reporting_manager_name || '',
@@ -1397,17 +1400,84 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             password: d.password,
           }));
 
-          setEmployees(prev => {
-            const dbEmpIds = new Set(mappedFromDb.map(e => e.employeeId));
-            const retainedLocals = prev.filter(e => !dbEmpIds.has(e.employeeId));
-            return [...mappedFromDb, ...retainedLocals];
-          });
-        }
+        setEmployees(mappedFromDb);
+        try {
+          localStorage.setItem('vrm_hrms_employees', JSON.stringify(mappedFromDb));
+        } catch {}
+      }
     };
 
     syncEmployeesFromDatabase();
     return () => { isCancelled = true; };
   }, []);
+
+  const refreshEmployees = async () => {
+    try {
+      const rawData = await supabaseDirect.getEmployees();
+      if (Array.isArray(rawData) && rawData.length > 0) {
+        const mappedFromDb: Employee[] = rawData.map((d: any) => ({
+          id: d.id,
+          employeeId: d.employeeId || d.employee_id,
+          firstName: d.firstName || d.first_name || '',
+          lastName: d.lastName || d.last_name || '',
+          email: d.email || '',
+          phone: d.phone || '+91 98765 43210',
+          dob: d.dob || '1995-01-01',
+          gender: (d.gender as any) || 'Male',
+          address: d.address || 'Chennai, Tamil Nadu',
+          department: d.department || (d.departments && d.departments.name) || 'General',
+          designation: d.designation || 'Staff',
+          reportingManagerId: d.reportingManagerId || d.reporting_manager_id || '',
+          reportingManagerName: d.reportingManagerName || d.reporting_manager_name || '',
+          joiningDate: d.joiningDate || d.created_at?.split('T')[0] || '2026-01-01',
+          employmentType: (d.employmentType || d.employment_type || 'Full-Time') as any,
+          status: (d.status === 'Active' || d.status === 'Terminated' || d.status === 'On Leave') ? d.status : 'Active',
+          avatar: d.avatar || d.avatar_url || '',
+          basicSalary: Number(d.basicSalary || d.basic_salary) || 15000,
+          allowances: {
+            hra: Number(d.hra || d.allowances_hra) || 0,
+            transport: Number(d.conveyance || d.allowances_transport) || 0,
+            medical: Number(d.allowances_medical) || 0,
+            special: Number(d.allowances_special) || 0,
+            da: Number(d.da) || 0,
+            conveyance: Number(d.conveyance) || 0,
+          },
+          withPf: d.withPf ?? true,
+          bankDetails: {
+            bankName: d.bankName || d.bank_name || 'HDFC Bank',
+            accountNumber: d.accountNumber || d.account_number || '****1001',
+            ifscCode: d.ifscCode || d.ifsc_code || 'HDFC0001234',
+            branch: d.branch || 'Main Branch',
+          },
+          attendanceMethod: (d.attendanceMethod || d.attendance_method || (d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) ? 'Exempt' : 'Face Scan')) as any,
+          gpsAllowed: d.gpsAllowed ?? (d.designation === 'CEO' ? false : true),
+          faceRegistered: d.faceRegistered ?? false,
+          facePhotoUrl: d.facePhotoUrl || d.face_photo_url || '',
+          workShift: d.workShift || d.work_shift || 'SH-01',
+          documents: Array.isArray(d.documents) ? d.documents : [],
+          departmentId: d.departmentId || d.department_id,
+          designationId: d.designationId || d.designation_id,
+          branchId: d.branchId || d.branch_id,
+          role: (d.role === 'CEO' || d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) || d.role_id === '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6')
+            ? 'CEO'
+            : (d.role || (d.designation === 'HR Manager' ? 'HR Manager' : 'Employee')),
+          mustChangePassword: d.mustChangePassword ?? d.must_change_password ?? false,
+          accountStatus: d.accountStatus || d.account_status || 'ACTIVE',
+          credentialEmailStatus: d.credentialEmailStatus || d.credential_email_status || 'SENT',
+          credentialEmailSentAt: d.credentialEmailSentAt || d.credential_email_sent_at || '',
+          authUserId: d.authUserId || d.auth_id || d.id,
+          password: d.password,
+        }));
+
+        setEmployees(mappedFromDb);
+        try {
+          localStorage.setItem('vrm_hrms_employees', JSON.stringify(mappedFromDb));
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('refreshEmployees notice:', err);
+    }
+  };
 
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
   const [attendanceAuditLogs, setAttendanceAuditLogs] = useState<AttendanceAuditLog[]>(INITIAL_ATTENDANCE_AUDIT_LOGS);
@@ -4779,14 +4849,98 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setEmployees(prev => prev.map(e => (e.id === id || e.employeeId === id) ? { ...e, ...empData } : e));
   };
 
-  const deleteEmployee = (id: string): { success: boolean; message?: string } => {
+  const deleteEmployee = async (id: string): Promise<{ success: boolean; message?: string }> => {
     const check = canDeleteEmployee(id);
     if (!check.canDelete) {
       return { success: false, message: check.reason };
     }
-    setEmployees(prev => prev.filter(e => e.id !== id && e.employeeId !== id));
+
+    // 1. Delete from Supabase Cloud Database directly
+    try {
+      await supabaseDirect.deleteEmployee(id);
+    } catch (sbErr) {
+      console.warn('Direct Supabase delete notice:', sbErr);
+    }
+
+    // 2. Also attempt backend API deletion if token is active
+    try {
+      const token = sessionStorage.getItem('vrm_auth_token') || localStorage.getItem('vrm_auth_token') || localStorage.getItem('token');
+      await fetch(`${API_BASE_URL}/employees/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+    } catch {}
+
+    // 3. Update React state and local storage cache
+    setEmployees(prev => {
+      const updated = prev.filter(e => e.id !== id && e.employeeId !== id);
+      try {
+        localStorage.setItem('vrm_hrms_employees', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    addNotification({
+      title: 'Employee Removed',
+      message: `Employee record (${id}) deleted successfully.`,
+      priority: 'Normal',
+      category: 'Announcement'
+    });
+
     return { success: true };
   };
+
+  const deleteMultipleEmployees = async (ids: string[]): Promise<{ success: boolean; deletedCount: number; message?: string }> => {
+    const idsToDelete = ids.filter(id => canDeleteEmployee(id).canDelete);
+
+    if (idsToDelete.length === 0) {
+      return { success: false, deletedCount: 0, message: 'None of the selected employees can be deleted due to active dependencies.' };
+    }
+
+    // 1. Delete from Supabase directly
+    try {
+      await supabaseDirect.deleteEmployees(idsToDelete);
+    } catch (sbErr) {
+      console.warn('Batch Supabase delete notice:', sbErr);
+    }
+
+    // 2. Backend API
+    try {
+      const token = sessionStorage.getItem('vrm_auth_token') || localStorage.getItem('vrm_auth_token') || localStorage.getItem('token');
+      await Promise.allSettled(
+        idsToDelete.map(id =>
+          fetch(`${API_BASE_URL}/employees/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+          })
+        )
+      );
+    } catch {}
+
+    // 3. Update state & storage
+    const idSet = new Set(idsToDelete);
+    setEmployees(prev => {
+      const updated = prev.filter(e => !idSet.has(e.id) && !idSet.has(e.employeeId));
+      try {
+        localStorage.setItem('vrm_hrms_employees', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    addNotification({
+      title: 'Employees Removed',
+      message: `${idsToDelete.length} employee record(s) deleted successfully.`,
+      priority: 'Normal',
+      category: 'Announcement'
+    });
+
+    return { success: true, deletedCount: idsToDelete.length };
+  };
+
 
   // Helper for time calculation
   const parseTimeToMinutes = (timeStr: string | null | undefined): number => {
@@ -7088,6 +7242,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       addEmployee,
       updateEmployee,
       deleteEmployee,
+      deleteMultipleEmployees,
+      refreshEmployees,
       resetEmployeeLogin,
       updateEmployeeLoginStatus,
       changeEmployeePassword,
