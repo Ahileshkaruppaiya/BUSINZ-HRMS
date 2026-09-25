@@ -241,38 +241,8 @@ export const FaceAttendance: React.FC = () => {
     const emp = employees.find(e => e.employeeId === selectedEmpId);
     const empName = emp ? `${emp.firstName} ${emp.lastName}` : 'Employee';
 
-    // GEOFENCE LOCATION ENFORCEMENT CHECK
-    // Check if employee has an approved Field Assignment today
-    const todayFieldDuty = getTodayFieldAssignment ? getTodayFieldAssignment(selectedEmpId) : undefined;
-    let isGeofenceBlocked = false;
-    let blockReason = '';
-
-    if (todayFieldDuty && todayFieldDuty.status !== 'Cancelled') {
-      // Field Duty active: enforce site geofence or allow flexible check-in
-      if (todayFieldDuty.attendanceType === 'Site Geofence' && todayFieldDuty.siteLat && todayFieldDuty.siteLng) {
-        const distToSite = calculateDistanceMeters(userLat, userLng, todayFieldDuty.siteLat, todayFieldDuty.siteLng);
-        if (distToSite > todayFieldDuty.allowedRadiusMeters) {
-          isGeofenceBlocked = true;
-          blockReason = `🚨 Field Attendance BLOCKED: You are outside the assigned site location! (${Math.round(distToSite)}m away from ${todayFieldDuty.customerSiteName}, allowed radius is ${todayFieldDuty.allowedRadiusMeters}m).`;
-        }
-      }
-      // If Flexible Field Check-in: allowed from field location as proof!
-    } else {
-      // Normal Office Duty: Continue existing office geofence attendance
-      if (geofenceConfig.enabled && distance > geofenceConfig.radiusMeters) {
-        isGeofenceBlocked = true;
-        blockReason = `🚨 Attendance BLOCKED: Out of Geofence Boundary! ${empName} is ${distance}m away from ${geofenceConfig.officeName}. Attendance is strictly restricted to within ${geofenceConfig.radiusMeters}m.`;
-      }
-    }
-
-    if (isGeofenceBlocked) {
-      setScanResult({
-        status: 'error',
-        message: blockReason
-      });
-      setIsScanning(false);
-      return;
-    }
+    // Location tracking: determine if inside geofence boundary (permissive - never blocks attendance)
+    const isInsideGeofence = !geofenceConfig.enabled || distance <= geofenceConfig.radiusMeters;
 
     // Enforce Shift Window Validation
     const currentShiftState = getEmployeeShiftAttendanceState(selectedEmpId);
@@ -293,12 +263,12 @@ export const FaceAttendance: React.FC = () => {
       return;
     }
 
-    // Record Attendance & Add Face Log inside Geofence
+    // Record Attendance & Add Face Log
     markAttendance(selectedEmpId, 'Present', 'Face Recognition', {
       lat: userLat,
       lng: userLng,
       address: addressText,
-      inGeofence: true
+      inGeofence: isInsideGeofence
     });
 
     addFaceLog({

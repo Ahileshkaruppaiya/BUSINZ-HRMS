@@ -804,44 +804,7 @@ export const CompanyDetailsSettings: React.FC = () => {
       {/* TAB 3: ORGANIZATION STRUCTURE */}
       {activeTab === 'org' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Cloud Synchronized Status Banner */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            backgroundColor: '#F0FDFA', 
-            border: '1px solid #CCFBF1', 
-            padding: '12px 18px', 
-            borderRadius: '12px',
-            flexWrap: 'wrap',
-            gap: '10px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0F766E', fontSize: '0.88rem', fontWeight: 600 }}>
-              <span style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block', boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)' }}></span>
-              <span>{cloudSaveNotice || 'Cloud Database Sync Active — Any changes are shared live across all users & devices'}</span>
-            </div>
-            <button 
-              type="button" 
-              onClick={handleSyncSettings}
-              disabled={isSyncing}
-              style={{
-                backgroundColor: '#0E7490',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '6px 14px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <RefreshCw size={13} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} />
-              {isSyncing ? 'Syncing...' : 'Sync Cloud Data'}
-            </button>
-          </div>
+
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
             {/* Departments */}

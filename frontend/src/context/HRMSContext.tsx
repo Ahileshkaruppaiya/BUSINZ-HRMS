@@ -206,7 +206,7 @@ const INITIAL_GEOFENCE_CONFIG: GeofenceConfig = {
   officeName: '',
   centerLat: 0,
   centerLng: 0,
-  radiusMeters: 200,
+  radiusMeters: 50000,
   enforceStrictly: false
 };
 
