@@ -25,6 +25,7 @@ BEGIN;
 -- ============================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "citext";
 
 -- ============================================================
 -- 1. Helper Functions & Triggers
@@ -136,7 +137,7 @@ CREATE TABLE IF NOT EXISTS public.employees (
     employee_id         TEXT NOT NULL UNIQUE,
     first_name          TEXT NOT NULL,
     last_name           TEXT NOT NULL,
-    email               TEXT NOT NULL UNIQUE,
+    email               CITEXT NOT NULL UNIQUE,
     phone               TEXT,
     dob                 DATE,
     gender              public.hr_gender,
@@ -161,6 +162,29 @@ CREATE TABLE IF NOT EXISTS public.employees (
     account_number      TEXT,
     ifsc_code           TEXT,
     branch              TEXT,
+    pan_number          TEXT,
+    uan_number          TEXT,
+    address_line1       TEXT,
+    address_line2       TEXT,
+    city                TEXT,
+    state               TEXT,
+    country             TEXT,
+    pincode             TEXT,
+    highest_qualification TEXT,
+    degree_name         TEXT,
+    specialization      TEXT,
+    university          TEXT,
+    year_of_passing     INTEGER,
+    grade_percentage    NUMERIC(5,2),
+    experience_profile  TEXT,
+    total_experience    NUMERIC(5,2),
+    previous_company    TEXT,
+    previous_designation TEXT,
+    previous_department TEXT,
+    employment_start_date DATE,
+    employment_end_date DATE,
+    last_drawn_salary   NUMERIC(12,2),
+    previous_company_location TEXT,
     attendance_method   TEXT NOT NULL DEFAULT 'Face Scan',
     gps_allowed         BOOLEAN NOT NULL DEFAULT TRUE,
     face_registered     BOOLEAN NOT NULL DEFAULT FALSE,

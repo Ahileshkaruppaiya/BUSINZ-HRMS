@@ -35,6 +35,34 @@ export interface EmployeeRecord {
   workShift?: string;
   shiftId?: string;
   password?: string;
+  panNumber?: string;
+  uanNumber?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+  highestQualification?: string;
+  degreeName?: string;
+  specialization?: string;
+  university?: string;
+  yearOfPassing?: number;
+  gradePercentage?: number;
+  experienceProfile?: string;
+  totalExperience?: number;
+  previousCompany?: string;
+  previousDesignation?: string;
+  previousDepartment?: string;
+  employmentStartDate?: string;
+  employmentEndDate?: string;
+  lastDrawnSalary?: number;
+  previousCompanyLocation?: string;
+  currentAddress?: any;
+  educationalDetails?: any;
+  experienceDetails?: any;
+  bankDetails?: any;
+  salaryDetails?: any;
 }
 
 export interface EmployeeSalaryStructureRecord extends SalaryStructureInput {
@@ -75,6 +103,29 @@ function mapDbRowToEmployee(data: any): EmployeeRecord {
     attendanceMethod: data.attendance_method || 'Face Scan',
     workShift: data.work_shift || undefined,
     shiftId: data.shift_id || undefined,
+    panNumber: data.pan_number || undefined,
+    uanNumber: data.uan_number || undefined,
+    addressLine1: data.address_line1 || undefined,
+    addressLine2: data.address_line2 || undefined,
+    city: data.city || undefined,
+    state: data.state || undefined,
+    country: data.country || undefined,
+    pincode: data.pincode || undefined,
+    highestQualification: data.highest_qualification || undefined,
+    degreeName: data.degree_name || undefined,
+    specialization: data.specialization || undefined,
+    university: data.university || undefined,
+    yearOfPassing: data.year_of_passing || undefined,
+    gradePercentage: data.grade_percentage != null ? Number(data.grade_percentage) : undefined,
+    experienceProfile: data.experience_profile || undefined,
+    totalExperience: data.total_experience != null ? Number(data.total_experience) : undefined,
+    previousCompany: data.previous_company || undefined,
+    previousDesignation: data.previous_designation || undefined,
+    previousDepartment: data.previous_department || undefined,
+    employmentStartDate: data.employment_start_date || undefined,
+    employmentEndDate: data.employment_end_date || undefined,
+    lastDrawnSalary: data.last_drawn_salary != null ? Number(data.last_drawn_salary) : undefined,
+    previousCompanyLocation: data.previous_company_location || undefined,
   };
 }
 
@@ -369,7 +420,7 @@ export class EmployeeRepository {
       employee_id: empId,
       first_name: data.firstName || '',
       last_name: data.lastName || '',
-      email: data.email || '',
+      email: (data.email || '').toLowerCase().trim(),
       basic_salary: data.basicSalary || 0,
       designation: data.designation || 'Staff',
       department_id: deptId || null,
@@ -383,6 +434,88 @@ export class EmployeeRepository {
       credential_email_status: data.credentialEmailStatus || 'PENDING',
       password: data.password || null,
     };
+
+    // Banking & Statutory
+    const bankName = data.bankName || data.bankDetails?.bankName;
+    if (bankName !== undefined) insertPayload.bank_name = bankName;
+
+    const accountNumber = data.accountNumber || data.bankDetails?.accountNumber;
+    if (accountNumber !== undefined) insertPayload.account_number = String(accountNumber);
+
+    const ifscCode = data.ifscCode || data.bankDetails?.ifscCode;
+    if (ifscCode !== undefined) insertPayload.ifsc_code = ifscCode;
+
+    const panNumber = data.panNumber || data.salaryDetails?.panNumber || (data as any).pan;
+    if (panNumber !== undefined) insertPayload.pan_number = panNumber;
+
+    const uanNumber = data.uanNumber || data.salaryDetails?.uanNumber || (data as any).uan;
+    if (uanNumber !== undefined) insertPayload.uan_number = String(uanNumber);
+
+    // Current Address
+    const addressLine1 = data.addressLine1 || (data as any).line1 || (data as any).currentLine1 || data.currentAddress?.line1;
+    if (addressLine1 !== undefined) insertPayload.address_line1 = addressLine1;
+
+    const addressLine2 = data.addressLine2 || (data as any).line2 || (data as any).currentLine2 || data.currentAddress?.line2;
+    if (addressLine2 !== undefined) insertPayload.address_line2 = addressLine2;
+
+    const city = data.city || (data as any).currentCity || data.currentAddress?.city;
+    if (city !== undefined) insertPayload.city = city;
+
+    const state = data.state || (data as any).currentState || data.currentAddress?.state;
+    if (state !== undefined) insertPayload.state = state;
+
+    const country = data.country || (data as any).currentCountry || data.currentAddress?.country;
+    if (country !== undefined) insertPayload.country = country;
+
+    const pincode = data.pincode || (data as any).currentPincode || data.currentAddress?.pincode;
+    if (pincode !== undefined) insertPayload.pincode = String(pincode);
+
+    // Educational Qualifications
+    const highestQualification = data.highestQualification || (data as any).qualification || data.educationalDetails?.highestQualification;
+    if (highestQualification !== undefined) insertPayload.highest_qualification = highestQualification;
+
+    const degreeName = data.degreeName || (data as any).courseName || data.educationalDetails?.degreeName;
+    if (degreeName !== undefined) insertPayload.degree_name = degreeName;
+
+    const specialization = data.specialization || data.educationalDetails?.specialization;
+    if (specialization !== undefined) insertPayload.specialization = specialization;
+
+    const university = data.university || (data as any).institution || data.educationalDetails?.university;
+    if (university !== undefined) insertPayload.university = university;
+
+    const yearOfPassing = data.yearOfPassing !== undefined ? Number(data.yearOfPassing) : data.educationalDetails?.yearOfPassing ? Number(data.educationalDetails.yearOfPassing) : undefined;
+    if (yearOfPassing !== undefined && !isNaN(yearOfPassing)) insertPayload.year_of_passing = yearOfPassing;
+
+    const gradePercentage = data.gradePercentage !== undefined ? Number(data.gradePercentage) : data.educationalDetails?.gradePercentage ? Number(data.educationalDetails.gradePercentage) : undefined;
+    if (gradePercentage !== undefined && !isNaN(gradePercentage)) insertPayload.grade_percentage = gradePercentage;
+
+    // Experience Details
+    const experienceProfile = data.experienceProfile || (data as any).experienceType || data.experienceDetails?.experienceType;
+    if (experienceProfile !== undefined) insertPayload.experience_profile = experienceProfile;
+
+    const totalExperience = data.totalExperience !== undefined ? Number(data.totalExperience) : data.experienceDetails?.totalExperience ? Number(data.experienceDetails.totalExperience) : undefined;
+    if (totalExperience !== undefined && !isNaN(totalExperience)) insertPayload.total_experience = totalExperience;
+
+    const previousCompany = data.previousCompany || (data as any).previousCompanyName || data.experienceDetails?.previousCompany;
+    if (previousCompany !== undefined) insertPayload.previous_company = previousCompany;
+
+    const previousDesignation = data.previousDesignation || data.experienceDetails?.previousDesignation;
+    if (previousDesignation !== undefined) insertPayload.previous_designation = previousDesignation;
+
+    const previousDepartment = data.previousDepartment || data.experienceDetails?.previousDepartment;
+    if (previousDepartment !== undefined) insertPayload.previous_department = previousDepartment;
+
+    const employmentStartDate = data.employmentStartDate || (data as any).startDate || (data as any).expStartDate || data.experienceDetails?.startDate;
+    if (employmentStartDate !== undefined) insertPayload.employment_start_date = employmentStartDate;
+
+    const employmentEndDate = data.employmentEndDate || (data as any).endDate || (data as any).expEndDate || data.experienceDetails?.endDate;
+    if (employmentEndDate !== undefined) insertPayload.employment_end_date = employmentEndDate;
+
+    const lastDrawnSalary = data.lastDrawnSalary !== undefined ? Number(data.lastDrawnSalary) : data.experienceDetails?.lastDrawnSalary ? Number(data.experienceDetails.lastDrawnSalary) : undefined;
+    if (lastDrawnSalary !== undefined && !isNaN(lastDrawnSalary)) insertPayload.last_drawn_salary = lastDrawnSalary;
+
+    const previousCompanyLocation = data.previousCompanyLocation || (data as any).companyLocation || data.experienceDetails?.companyLocation;
+    if (previousCompanyLocation !== undefined) insertPayload.previous_company_location = previousCompanyLocation;
 
     const insertRes = await supabase.from('employees').insert(insertPayload).select('*, department:departments!employees_department_id_fkey(name)').single();
     if (insertRes.error || !insertRes.data) {
@@ -406,7 +539,7 @@ export class EmployeeRepository {
         const payload: any = {};
         if (updates.firstName !== undefined) payload.first_name = updates.firstName;
         if (updates.lastName !== undefined) payload.last_name = updates.lastName;
-        if (updates.email !== undefined) payload.email = updates.email;
+        if (updates.email !== undefined) payload.email = updates.email ? updates.email.toLowerCase().trim() : '';
         if (updates.basicSalary !== undefined) payload.basic_salary = updates.basicSalary;
         if (updates.designation !== undefined) payload.designation = updates.designation;
         if (updates.status !== undefined) payload.status = updates.status;
@@ -415,6 +548,88 @@ export class EmployeeRepository {
         if (updates.password !== undefined) payload.password = updates.password;
         if (updates.mustChangePassword !== undefined) payload.must_change_password = updates.mustChangePassword;
         if (updates.accountStatus !== undefined) payload.account_status = updates.accountStatus;
+
+        // Banking & Statutory
+        const bankName = updates.bankName || updates.bankDetails?.bankName;
+        if (bankName !== undefined) payload.bank_name = bankName;
+
+        const accountNumber = updates.accountNumber || updates.bankDetails?.accountNumber;
+        if (accountNumber !== undefined) payload.account_number = String(accountNumber);
+
+        const ifscCode = updates.ifscCode || updates.bankDetails?.ifscCode;
+        if (ifscCode !== undefined) payload.ifsc_code = ifscCode;
+
+        const panNumber = updates.panNumber || updates.salaryDetails?.panNumber || (updates as any).pan;
+        if (panNumber !== undefined) payload.pan_number = panNumber;
+
+        const uanNumber = updates.uanNumber || updates.salaryDetails?.uanNumber || (updates as any).uan;
+        if (uanNumber !== undefined) payload.uan_number = String(uanNumber);
+
+        // Address
+        const addressLine1 = updates.addressLine1 || (updates as any).line1 || (updates as any).currentLine1 || updates.currentAddress?.line1;
+        if (addressLine1 !== undefined) payload.address_line1 = addressLine1;
+
+        const addressLine2 = updates.addressLine2 || (updates as any).line2 || (updates as any).currentLine2 || updates.currentAddress?.line2;
+        if (addressLine2 !== undefined) payload.address_line2 = addressLine2;
+
+        const city = updates.city || (updates as any).currentCity || updates.currentAddress?.city;
+        if (city !== undefined) payload.city = city;
+
+        const state = updates.state || (updates as any).currentState || updates.currentAddress?.state;
+        if (state !== undefined) payload.state = state;
+
+        const country = updates.country || (updates as any).currentCountry || updates.currentAddress?.country;
+        if (country !== undefined) payload.country = country;
+
+        const pincode = updates.pincode || (updates as any).currentPincode || updates.currentAddress?.pincode;
+        if (pincode !== undefined) payload.pincode = String(pincode);
+
+        // Educational
+        const highestQualification = updates.highestQualification || (updates as any).qualification || updates.educationalDetails?.highestQualification;
+        if (highestQualification !== undefined) payload.highest_qualification = highestQualification;
+
+        const degreeName = updates.degreeName || (updates as any).courseName || updates.educationalDetails?.degreeName;
+        if (degreeName !== undefined) payload.degree_name = degreeName;
+
+        const specialization = updates.specialization || updates.educationalDetails?.specialization;
+        if (specialization !== undefined) payload.specialization = specialization;
+
+        const university = updates.university || (updates as any).institution || updates.educationalDetails?.university;
+        if (university !== undefined) payload.university = university;
+
+        const yearOfPassing = updates.yearOfPassing !== undefined ? Number(updates.yearOfPassing) : updates.educationalDetails?.yearOfPassing ? Number(updates.educationalDetails.yearOfPassing) : undefined;
+        if (yearOfPassing !== undefined && !isNaN(yearOfPassing)) payload.year_of_passing = yearOfPassing;
+
+        const gradePercentage = updates.gradePercentage !== undefined ? Number(updates.gradePercentage) : updates.educationalDetails?.gradePercentage ? Number(updates.educationalDetails.gradePercentage) : undefined;
+        if (gradePercentage !== undefined && !isNaN(gradePercentage)) payload.grade_percentage = gradePercentage;
+
+        // Experience
+        const experienceProfile = updates.experienceProfile || (updates as any).experienceType || updates.experienceDetails?.experienceType;
+        if (experienceProfile !== undefined) payload.experience_profile = experienceProfile;
+
+        const totalExperience = updates.totalExperience !== undefined ? Number(updates.totalExperience) : updates.experienceDetails?.totalExperience ? Number(updates.experienceDetails.totalExperience) : undefined;
+        if (totalExperience !== undefined && !isNaN(totalExperience)) payload.total_experience = totalExperience;
+
+        const previousCompany = updates.previousCompany || (updates as any).previousCompanyName || updates.experienceDetails?.previousCompany;
+        if (previousCompany !== undefined) payload.previous_company = previousCompany;
+
+        const previousDesignation = updates.previousDesignation || updates.experienceDetails?.previousDesignation;
+        if (previousDesignation !== undefined) payload.previous_designation = previousDesignation;
+
+        const previousDepartment = updates.previousDepartment || updates.experienceDetails?.previousDepartment;
+        if (previousDepartment !== undefined) payload.previous_department = previousDepartment;
+
+        const employmentStartDate = updates.employmentStartDate || (updates as any).startDate || (updates as any).expStartDate || updates.experienceDetails?.startDate;
+        if (employmentStartDate !== undefined) payload.employment_start_date = employmentStartDate;
+
+        const employmentEndDate = updates.employmentEndDate || (updates as any).endDate || (updates as any).expEndDate || updates.experienceDetails?.endDate;
+        if (employmentEndDate !== undefined) payload.employment_end_date = employmentEndDate;
+
+        const lastDrawnSalary = updates.lastDrawnSalary !== undefined ? Number(updates.lastDrawnSalary) : updates.experienceDetails?.lastDrawnSalary ? Number(updates.experienceDetails.lastDrawnSalary) : undefined;
+        if (lastDrawnSalary !== undefined && !isNaN(lastDrawnSalary)) payload.last_drawn_salary = lastDrawnSalary;
+
+        const previousCompanyLocation = updates.previousCompanyLocation || (updates as any).companyLocation || updates.experienceDetails?.companyLocation;
+        if (previousCompanyLocation !== undefined) payload.previous_company_location = previousCompanyLocation;
 
         if (updates.department !== undefined) {
           const { data: deptData } = await supabase

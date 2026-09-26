@@ -102,7 +102,7 @@ export const createEmployee = async (req: Request, res: Response, next: NextFunc
         success: false,
         error: {
           code: 'DUPLICATE_EMAIL',
-          message: `An employee or login account with email "${cleanEmail}" is already registered.`,
+          message: 'Email ID already exists.',
           details: [],
         },
       });
@@ -241,7 +241,25 @@ export const updateEmployee = async (req: Request, res: Response, next: NextFunc
   try {
     const id = String(req.params.id);
     const validated = updateEmployeeSchema.parse(req.body);
-    const updated = await employeeRepository.updateEmployee(id, validated);
+
+    // Validate email uniqueness if email is being updated
+    if (validated.email) {
+      const cleanEmail = validated.email.toLowerCase().trim();
+      const existing = await employeeRepository.findByEmail(cleanEmail);
+      if (existing && existing.id !== id && existing.employeeId !== id) {
+        res.status(409).json({
+          success: false,
+          error: {
+            code: 'DUPLICATE_EMAIL',
+            message: 'Email ID already exists.',
+            details: [],
+          },
+        });
+        return;
+      }
+    }
+
+    const updated = await employeeRepository.updateEmployee(id, validated as any);
 
     if (!updated) {
       res.status(404).json({

@@ -26,6 +26,7 @@ import {
   GeminiModelInfo,
 } from '../../services/geminiApiService';
 import { useHRMS } from '../../context/HRMSContext';
+import { isCeoOrHrUser } from '../../services/authService';
 import {
   Sparkles,
   RotateCcw,
@@ -604,9 +605,8 @@ export const AIAssistantWidget: React.FC = () => {
 
   const isInitialState = convState.conversationHistory.length <= 1;
 
-  // AI Assistant is strictly restricted to HR Admin and CEO (Super Admin / Management)
-  const isHrOrCeo = currentUser?.role === 'Super Admin' || currentUser?.role === 'HR Admin' || currentUser?.role === 'Management' || currentUser?.role?.toLowerCase() === 'ceo';
-  if (!isHrOrCeo) {
+  // AI Assistant is strictly restricted to CEO and HR roles (Super Admin, CEO, HR Manager, HR Admin)
+  if (!isCeoOrHrUser(currentUser)) {
     return null;
   }
 

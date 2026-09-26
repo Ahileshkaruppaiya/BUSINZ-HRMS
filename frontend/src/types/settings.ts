@@ -355,7 +355,6 @@ export type LoanPolicyType =
   | 'Advance Salary'
   | 'Employee Loan'
   | 'Emergency Loan'
-  | 'Salary Advance'
   | 'Custom Loan Type';
 
 export type LoanLimitType = 

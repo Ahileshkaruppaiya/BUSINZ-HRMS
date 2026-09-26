@@ -437,26 +437,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
             />
           )}
 
-          {/* Submit Expense Claim - Visible for Employee or Super Admin */}
-          {(isEmployeeRole || currentUser.role === 'Super Admin') && (
-            <button 
-              className="btn btn-primary btn-sm" 
-              onClick={() => {
-                setFormError('');
-                setShowModal(true);
-              }}
-              style={{
-                borderRadius: '12px',
-                padding: '10px 18px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <Plus size={16} /> Submit Expense Claim
-            </button>
-          )}
+
         </div>
       </div>
 

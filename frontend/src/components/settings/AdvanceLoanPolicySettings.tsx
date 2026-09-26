@@ -119,7 +119,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
     effectiveFrom: string;
     effectiveTo: string;
   }>({
-    policyName: 'Salary Advance',
+    policyName: 'Advance Salary',
     policyType: 'Advance Salary',
     description: 'Standard monthly advance policy for full-time employees with automated payroll EMI recovery.',
     applicableEmployees: 'ALL',
@@ -153,7 +153,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
   const openAddModal = () => {
     setEditingPolicy(null);
     setFormData({
-      policyName: 'Salary Advance',
+      policyName: 'Advance Salary',
       policyType: 'Advance Salary',
       description: 'Standard enterprise salary advance policy with predefined caps and recovery schedule.',
       applicableEmployees: 'ALL',
@@ -188,7 +188,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
   const openEditModal = (p: LoanPolicy) => {
     setEditingPolicy(p);
     setFormData({
-      policyName: p.policyName || 'Salary Advance',
+      policyName: p.policyName || 'Advance Salary',
       policyType: p.policyType || 'Advance Salary',
       description: p.description || '',
       applicableEmployees: p.applicableEmployees || 'ALL',
@@ -273,7 +273,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
         num: 1,
         name: 'Policy Name',
         value: policy.policyName,
-        example: 'Salary Advance',
+        example: 'Advance Salary',
         badgeColor: '#0E7490',
         badgeBg: '#ECFEFF',
         description: 'Official identifier for this advance compensation policy'
@@ -441,9 +441,9 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                 className="btn btn-secondary btn-sm"
                 onClick={() => {
                   createLoanPolicy({
-                    policyName: 'Salary Advance',
+                    policyName: 'Advance Salary',
                     policyType: 'Advance Salary',
-                    description: 'Standard enterprise salary advance policy with predefined caps and recovery schedule.',
+                    description: 'Standard enterprise advance salary policy with predefined caps and recovery schedule.',
                     applicableEmployees: 'ALL',
                     applicableDepartments: 'ALL',
                     applicableBranches: 'ALL',
@@ -543,7 +543,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
             No Advance Salary Policy Configured
           </h4>
           <p style={{ margin: '0 0 24px 0', fontSize: '0.88rem', color: '#64748B', maxWidth: '520px', lineHeight: 1.5 }}>
-            Configure your company's Salary Advance policy using the standardized 13 settings matrix covering eligibility, maximum loan limits, repayment months, deduction cycles, and approval workflow.
+            Configure your company's Advance Salary policy using the standardized 13 settings matrix covering eligibility, maximum loan limits, repayment months, deduction cycles, and approval workflow.
           </p>
           {isPrivileged && (
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -854,7 +854,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                         type="text"
                         className="form-control"
                         required
-                        placeholder="e.g. Salary Advance"
+                        placeholder="e.g. Advance Salary"
                         value={formData.policyName}
                         onChange={e => setFormData({ ...formData, policyName: e.target.value })}
                       />

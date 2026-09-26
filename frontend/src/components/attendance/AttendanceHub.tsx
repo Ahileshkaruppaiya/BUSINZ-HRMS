@@ -78,12 +78,14 @@ export const AttendanceHub: React.FC = () => {
   })();
 
   // Extract list of selected branches & departments
-  const selectedBranchDepts = Object.entries(filterReports.branchDepartments).flatMap(([branch, depts]) => 
+  const selectedBranchDepts = Object.entries(filterReports.branchDepartments || {}).flatMap(([branch, depts]) => 
     depts.map(dept => ({ branch, dept }))
   );
 
   // Filter count badge
   const activeFilterCount = 
+    (filterReports.branches || []).length +
+    (filterReports.departments || []).length +
     selectedBranchDepts.length + 
     filterReports.shifts.length + 
     filterReports.employmentTypes.length + 
@@ -94,7 +96,27 @@ export const AttendanceHub: React.FC = () => {
 
   // Dynamically filter employees according to active filter criteria
   const activeEmployees = baseEmployees.filter(emp => {
-    // 1. Branch & Department filter
+    // 1. Branch filter
+    if (filterReports.branches && filterReports.branches.length > 0) {
+      const empBranch = (emp.workLocation || (emp as any).branch || '').toLowerCase().trim();
+      const matchesBranch = filterReports.branches.some(b => {
+        const target = b.toLowerCase().trim();
+        return empBranch === target || empBranch.includes(target) || target.includes(empBranch);
+      });
+      if (!matchesBranch) return false;
+    }
+
+    // 2. Department filter
+    if (filterReports.departments && filterReports.departments.length > 0) {
+      const empDept = (emp.department || '').toLowerCase().trim();
+      const matchesDept = filterReports.departments.some(d => {
+        const target = d.toLowerCase().trim();
+        return empDept === target || empDept.includes(target) || target.includes(empDept);
+      });
+      if (!matchesDept) return false;
+    }
+
+    // 3. Legacy Branch & Department filter
     if (selectedBranchDepts.length > 0) {
       const match = selectedBranchDepts.some(({ dept }) => 
         emp.department.toLowerCase().includes(dept.toLowerCase()) || 
@@ -232,6 +254,28 @@ export const AttendanceHub: React.FC = () => {
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 600, color: '#475569' }}>Filtered by:</span>
+              {(filterReports.branches || []).map(branch => (
+                <span key={branch} className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  Branch: {branch}
+                  <X 
+                    size={12} 
+                    style={{ cursor: 'pointer' }} 
+                    onClick={() => setFilterReports(prev => ({ ...prev, branches: prev.branches.filter(b => b !== branch) }))} 
+                  />
+                </span>
+              ))}
+
+              {(filterReports.departments || []).map(dept => (
+                <span key={dept} className="badge badge-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  Dept: {dept}
+                  <X 
+                    size={12} 
+                    style={{ cursor: 'pointer' }} 
+                    onClick={() => setFilterReports(prev => ({ ...prev, departments: prev.departments.filter(d => d !== dept) }))} 
+                  />
+                </span>
+              ))}
+
               {selectedBranchDepts.map(({ branch, dept }) => (
                 <span key={`${branch}-${dept}`} className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   {branch}: {dept}
@@ -239,9 +283,9 @@ export const AttendanceHub: React.FC = () => {
                     size={12} 
                     style={{ cursor: 'pointer' }} 
                     onClick={() => {
-                      const currentBranchDepts = filterReports.branchDepartments[branch] || [];
+                      const currentBranchDepts = (filterReports.branchDepartments || {})[branch] || [];
                       const updated = currentBranchDepts.filter(d => d !== dept);
-                      const newBranchDepts = { ...filterReports.branchDepartments };
+                      const newBranchDepts = { ...(filterReports.branchDepartments || {}) };
                       if (updated.length === 0) delete newBranchDepts[branch];
                       else newBranchDepts[branch] = updated;
                       setFilterReports(prev => ({ ...prev, branchDepartments: newBranchDepts }));

@@ -28,6 +28,7 @@ import { Settings } from '../settings/Settings';
 import { UserProfile } from '../profile/UserProfile';
 import { TrackingModule } from '../tracking/TrackingModule';
 import { AIAssistantWidget } from '../ai/AIAssistantWidget';
+import { isCeoOrHrUser } from '../../services/authService';
 
 interface AppLayoutProps {
   onLogout?: () => void;
@@ -43,8 +44,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
   );
   const { activeModule, setActiveModule, hasPermission, currentUser } = useHRMS();
 
-  // AI Assistant restricted strictly to HR Admin and CEO (Super Admin / Management)
-  const isHrOrCeo = currentUser?.role === 'Super Admin' || currentUser?.role === 'HR Admin' || currentUser?.role === 'Management' || currentUser?.role?.toLowerCase() === 'ceo';
+  // AI Assistant restricted strictly to HR / CEO roles, and ONLY rendered on the CEO/HR Dashboard page
+  const isHrOrCeo = isCeoOrHrUser(currentUser);
+  const showChatBot = isHrOrCeo && activeModule === 'dashboard';
 
   // Quick Add modal states
   const [quickAddModal, setQuickAddModal] = useState<'employee' | 'leave' | 'task' | 'expense' | 'overtime' | 'shift' | 'advance_salary' | null>(null);
@@ -200,8 +202,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
         </main>
       </div>
 
-      {/* Multilingual AI HRMS Assistant Floating Widget (HR & CEO only) */}
-      {isHrOrCeo && <AIAssistantWidget />}
+      {/* Multilingual AI HRMS Assistant Floating Widget (CEO & HR on dashboard page only) */}
+      {showChatBot && <AIAssistantWidget />}
     </div>
   );
 };

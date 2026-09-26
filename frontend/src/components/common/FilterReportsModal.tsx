@@ -3,17 +3,21 @@ import { X, Check } from 'lucide-react';
 import { useHRMS } from '../../context/HRMSContext';
 
 export interface FilterReportsState {
-  branchDepartments: { [branch: string]: string[] };
+  branches: string[];
+  departments: string[];
   shifts: string[];
   employmentTypes: string[];
   modesOfWork: string[];
+  branchDepartments?: { [branch: string]: string[] };
 }
 
 export const initialFilterReportsState: FilterReportsState = {
-  branchDepartments: {},
+  branches: [],
+  departments: [],
   shifts: [],
   employmentTypes: [],
-  modesOfWork: []
+  modesOfWork: [],
+  branchDepartments: {}
 };
 
 interface FilterReportsModalProps {
@@ -24,7 +28,7 @@ interface FilterReportsModalProps {
   onReset: () => void;
 }
 
-type FilterTab = 'branch_dept' | 'shift' | 'employment_type' | 'mode_of_work';
+type FilterTab = 'branch' | 'department' | 'shift' | 'employment_type' | 'mode_of_work';
 
 export const FilterReportsModal: React.FC<FilterReportsModalProps> = ({
   isOpen,
@@ -33,9 +37,37 @@ export const FilterReportsModal: React.FC<FilterReportsModalProps> = ({
   onApply,
   onReset
 }) => {
-  const { branches, shifts } = useHRMS();
-  const [activeTab, setActiveTab] = useState<FilterTab>('branch_dept');
+  const { 
+    branches, 
+    companyBranches, 
+    departments, 
+    shifts, 
+    employmentTypes, 
+    orgStructure 
+  } = useHRMS();
+  const [activeTab, setActiveTab] = useState<FilterTab>('branch');
   const [localFilters, setLocalFilters] = useState<FilterReportsState>(currentFilters);
+
+  // Dynamic Branch Options sourced directly from Settings (Company Details & Organization)
+  const branchOptions = useMemo(() => {
+    const list = [
+      ...(companyBranches || []).map(b => b.branchName?.trim()),
+      ...(branches || []).map(b => b.name?.trim()),
+      ...(orgStructure?.workLocations || []).map(l => l?.trim())
+    ].filter(Boolean);
+
+    return Array.from(new Map(list.map(name => [name.toLowerCase(), name])).values());
+  }, [companyBranches, branches, orgStructure]);
+
+  // Dynamic Department Options sourced directly from Settings (Organization)
+  const departmentOptions = useMemo(() => {
+    const list = [
+      ...(departments || []).map(d => d.name?.trim()),
+      ...(orgStructure?.departments || []).map(d => d?.trim())
+    ].filter(Boolean);
+
+    return Array.from(new Map(list.map(name => [name.toLowerCase(), name])).values());
+  }, [departments, orgStructure]);
 
   // Dynamic Shift Options sourced directly from Company Shifts in HRMSContext
   const shiftOptions = useMemo(() => {
@@ -45,65 +77,49 @@ export const FilterReportsModal: React.FC<FilterReportsModalProps> = ({
     return [];
   }, [shifts]);
 
-  // Sync state when modal opens, preserving only valid shifts for this company
+  const employmentTypeOptions = useMemo(() => {
+    const names = [
+      ...(orgStructure?.employmentTypes || []),
+      ...(employmentTypes || []).filter(t => t.status !== 'Inactive').map(t => t.name)
+    ]
+      .map(name => name.trim())
+      .filter(Boolean);
+
+    const uniqueNames = Array.from(new Map(names.map(name => [name.toLowerCase(), name])).values());
+    return uniqueNames.length > 0 ? uniqueNames : ['Full-Time', 'Intern', 'Provisional'];
+  }, [orgStructure, employmentTypes]);
+
+  // Sync state when modal opens, preserving only valid settings-backed options
   useEffect(() => {
     if (isOpen) {
+      const validBranches = (currentFilters.branches || []).filter(b => branchOptions.includes(b));
+      const validDepartments = (currentFilters.departments || []).filter(d => departmentOptions.includes(d));
       const validShifts = (currentFilters.shifts || []).filter(s => shiftOptions.includes(s));
+      const validEmploymentTypes = (currentFilters.employmentTypes || []).filter(t => employmentTypeOptions.includes(t));
+      const validModesOfWork = (currentFilters.modesOfWork || []).filter(m => modeOfWorkOptions.includes(m));
       setLocalFilters({
         ...currentFilters,
-        shifts: validShifts
+        branches: validBranches,
+        departments: validDepartments,
+        shifts: validShifts,
+        employmentTypes: validEmploymentTypes,
+        modesOfWork: validModesOfWork,
+        branchDepartments: currentFilters.branchDepartments || {}
       });
     }
-  }, [isOpen, currentFilters, shiftOptions]);
+  }, [isOpen, currentFilters, branchOptions, departmentOptions, shiftOptions, employmentTypeOptions]);
 
   if (!isOpen) return null;
 
-  // Master Branch & Department Data sourced dynamically from Organization module in HRMSContext
-  const branchData: { [branch: string]: string[] } = branches.reduce((acc, b) => {
-    acc[b.name] = b.departments;
-    return acc;
-  }, {} as { [branch: string]: string[] });
-
-  const employmentTypeOptions = [
-    'Full-Time',
-    'Intern',
-    'Provisional'
-  ];
-
   const modeOfWorkOptions = [
     'Work From Office (WFO)',
-    'Work From Home (WFH)',
-    'Hybrid',
     'On Field / Travel'
   ];
 
-  // Helper to toggle department in branch
-  const toggleBranchDept = (branch: string, dept: string) => {
-    setLocalFilters(prev => {
-      const currentBranchDepts = prev.branchDepartments[branch] || [];
-      const exists = currentBranchDepts.includes(dept);
-      const updated = exists 
-        ? currentBranchDepts.filter(d => d !== dept)
-        : [...currentBranchDepts, dept];
-
-      const newBranchDepts = { ...prev.branchDepartments };
-      if (updated.length === 0) {
-        delete newBranchDepts[branch];
-      } else {
-        newBranchDepts[branch] = updated;
-      }
-
-      return {
-        ...prev,
-        branchDepartments: newBranchDepts
-      };
-    });
-  };
-
   // Helper to toggle simple array options
-  const toggleArrayItem = (key: 'shifts' | 'employmentTypes' | 'modesOfWork', item: string) => {
+  const toggleArrayItem = (key: 'branches' | 'departments' | 'shifts' | 'employmentTypes' | 'modesOfWork', item: string) => {
     setLocalFilters(prev => {
-      const currentList = prev[key];
+      const currentList = prev[key] || [];
       const exists = currentList.includes(item);
       return {
         ...prev,
@@ -114,39 +130,30 @@ export const FilterReportsModal: React.FC<FilterReportsModalProps> = ({
 
   // Select All / Deselect All logic for active tab
   const handleSelectAll = () => {
-    if (activeTab === 'branch_dept') {
-      // Check if all are already selected
-      const totalPossible = Object.entries(branchData).reduce((acc, [, depts]) => acc + depts.length, 0);
-      const totalSelected = Object.values(localFilters.branchDepartments).reduce((acc, depts) => acc + depts.length, 0);
-
-      if (totalSelected === totalPossible) {
-        // Deselect all
-        setLocalFilters(prev => ({ ...prev, branchDepartments: {} }));
-      } else {
-        // Select all
-        const allSelected: { [branch: string]: string[] } = {};
-        Object.entries(branchData).forEach(([branch, depts]) => {
-          allSelected[branch] = [...depts];
-        });
-        setLocalFilters(prev => ({ ...prev, branchDepartments: allSelected }));
-      }
+    if (activeTab === 'branch') {
+      const allSelected = (localFilters.branches || []).length === branchOptions.length && branchOptions.length > 0;
+      setLocalFilters(prev => ({ ...prev, branches: allSelected ? [] : [...branchOptions] }));
+    } else if (activeTab === 'department') {
+      const allSelected = (localFilters.departments || []).length === departmentOptions.length && departmentOptions.length > 0;
+      setLocalFilters(prev => ({ ...prev, departments: allSelected ? [] : [...departmentOptions] }));
     } else if (activeTab === 'shift') {
-      const allSelected = localFilters.shifts.length === shiftOptions.length;
+      const allSelected = (localFilters.shifts || []).length === shiftOptions.length && shiftOptions.length > 0;
       setLocalFilters(prev => ({ ...prev, shifts: allSelected ? [] : [...shiftOptions] }));
     } else if (activeTab === 'employment_type') {
-      const allSelected = localFilters.employmentTypes.length === employmentTypeOptions.length;
+      const allSelected = (localFilters.employmentTypes || []).length === employmentTypeOptions.length && employmentTypeOptions.length > 0;
       setLocalFilters(prev => ({ ...prev, employmentTypes: allSelected ? [] : [...employmentTypeOptions] }));
     } else if (activeTab === 'mode_of_work') {
-      const allSelected = localFilters.modesOfWork.length === modeOfWorkOptions.length;
+      const allSelected = (localFilters.modesOfWork || []).length === modeOfWorkOptions.length && modeOfWorkOptions.length > 0;
       setLocalFilters(prev => ({ ...prev, modesOfWork: allSelected ? [] : [...modeOfWorkOptions] }));
     }
   };
 
   // Active counts for tab badges
-  const branchDeptCount = Object.values(localFilters.branchDepartments).reduce((acc, depts) => acc + depts.length, 0);
-  const shiftCount = localFilters.shifts.length;
-  const empTypeCount = localFilters.employmentTypes.length;
-  const modeCount = localFilters.modesOfWork.length;
+  const branchCount = (localFilters.branches || []).length;
+  const departmentCount = (localFilters.departments || []).length;
+  const shiftCount = (localFilters.shifts || []).length;
+  const empTypeCount = (localFilters.employmentTypes || []).length;
+  const modeCount = (localFilters.modesOfWork || []).length;
 
   const handleApply = () => {
     onApply(localFilters);
@@ -183,11 +190,19 @@ export const FilterReportsModal: React.FC<FilterReportsModalProps> = ({
             <div className="filter-sidebar-title">Filter By</div>
 
             <button 
-              className={`filter-nav-item ${activeTab === 'branch_dept' ? 'active' : ''}`}
-              onClick={() => setActiveTab('branch_dept')}
+              className={`filter-nav-item ${activeTab === 'branch' ? 'active' : ''}`}
+              onClick={() => setActiveTab('branch')}
             >
-              <span>Branch & Department</span>
-              {branchDeptCount > 0 && <span className="filter-nav-count-badge">{branchDeptCount}</span>}
+              <span>Branch</span>
+              {branchCount > 0 && <span className="filter-nav-count-badge">{branchCount}</span>}
+            </button>
+
+            <button 
+              className={`filter-nav-item ${activeTab === 'department' ? 'active' : ''}`}
+              onClick={() => setActiveTab('department')}
+            >
+              <span>Department</span>
+              {departmentCount > 0 && <span className="filter-nav-count-badge">{departmentCount}</span>}
             </button>
 
             <button 
@@ -221,7 +236,8 @@ export const FilterReportsModal: React.FC<FilterReportsModalProps> = ({
             {/* Header with Title and Select All */}
             <div className="filter-content-header">
               <span className="filter-content-title">
-                {activeTab === 'branch_dept' && 'Branches & Department'}
+                {activeTab === 'branch' && 'Branch'}
+                {activeTab === 'department' && 'Department'}
                 {activeTab === 'shift' && 'Shift'}
                 {activeTab === 'employment_type' && 'Employment Type'}
                 {activeTab === 'mode_of_work' && 'Mode of Work'}
@@ -235,60 +251,96 @@ export const FilterReportsModal: React.FC<FilterReportsModalProps> = ({
               </button>
             </div>
 
-            {/* TAB 1: Branch & Department */}
-            {activeTab === 'branch_dept' && (
-              <div>
-                {Object.keys(branchData).length === 0 ? (
-                  <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
-                    No branches configured. Please add branches in the Organization module.
+            {/* TAB 1: Branch */}
+            {activeTab === 'branch' && (
+              <div className="filter-items-list" style={{ gap: '10px' }}>
+                {branchOptions.length === 0 ? (
+                  <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
+                    No branches configured in Settings. Please add branches under Company Details or Organization Settings.
                   </div>
                 ) : (
-                  Object.entries(branchData).map(([branch, depts], branchIdx) => (
-                    <div key={branch} className="filter-group">
-                      <h3 className="filter-group-header">{branch}</h3>
-                      <div className="filter-items-list" style={{ gap: '10px' }}>
-                        {depts.map((dept) => {
-                          const isChecked = (localFilters.branchDepartments[branch] || []).includes(dept);
-                          return (
-                            <div 
-                              key={dept} 
-                              onClick={() => toggleBranchDept(branch, dept)}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                padding: '4px 0',
-                                cursor: 'pointer',
-                                userSelect: 'none'
-                              }}
-                            >
-                              <div style={{
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '3px',
-                                border: isChecked ? '1.5px solid #0E7490' : '1.5px solid #64748b',
-                                backgroundColor: isChecked ? '#0E7490' : '#ffffff',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifySelf: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
-                                transition: 'all 0.15s ease'
-                              }}>
-                                {isChecked && <Check size={13} color="#ffffff" strokeWidth={3} />}
-                              </div>
-                              <span style={{ fontSize: '0.94rem', color: isChecked ? '#0f172a' : '#334155', fontWeight: isChecked ? 600 : 400 }}>
-                                {dept}
-                              </span>
-                            </div>
-                          );
-                        })}
+                  branchOptions.map((branch) => {
+                    const isChecked = (localFilters.branches || []).includes(branch);
+                    return (
+                      <div 
+                        key={branch} 
+                        onClick={() => toggleArrayItem('branches', branch)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '4px 0',
+                          cursor: 'pointer',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <div style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '3px',
+                          border: isChecked ? '1.5px solid #0E7490' : '1.5px solid #64748b',
+                          backgroundColor: isChecked ? '#0E7490' : '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          transition: 'all 0.15s ease'
+                        }}>
+                          {isChecked && <Check size={13} color="#ffffff" strokeWidth={3} />}
+                        </div>
+                        <span style={{ fontSize: '0.94rem', color: isChecked ? '#0f172a' : '#334155', fontWeight: isChecked ? 600 : 400 }}>
+                          {branch}
+                        </span>
                       </div>
-                      {branchIdx < Object.keys(branchData).length - 1 && (
-                        <div className="filter-divider"></div>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: Department */}
+            {activeTab === 'department' && (
+              <div className="filter-items-list" style={{ gap: '10px' }}>
+                {departmentOptions.length === 0 ? (
+                  <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.88rem' }}>
+                    No departments configured in Settings. Please add departments under Organization Settings.
+                  </div>
+                ) : (
+                  departmentOptions.map((dept) => {
+                    const isChecked = (localFilters.departments || []).includes(dept);
+                    return (
+                      <div 
+                        key={dept} 
+                        onClick={() => toggleArrayItem('departments', dept)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '4px 0',
+                          cursor: 'pointer',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <div style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '3px',
+                          border: isChecked ? '1.5px solid #0E7490' : '1.5px solid #64748b',
+                          backgroundColor: isChecked ? '#0E7490' : '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          transition: 'all 0.15s ease'
+                        }}>
+                          {isChecked && <Check size={13} color="#ffffff" strokeWidth={3} />}
+                        </div>
+                        <span style={{ fontSize: '0.94rem', color: isChecked ? '#0f172a' : '#334155', fontWeight: isChecked ? 600 : 400 }}>
+                          {dept}
+                        </span>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             )}

@@ -63,8 +63,8 @@ export const SPECIAL_PERMISSIONS_CATALOG: SpecialPermissionItem[] = [
   { key: 'assign_tasks', label: 'Assign Tasks', category: 'Tasks', description: 'Delegate tasks to team members or departments' },
   { key: 'view_all_tasks', label: 'View All Tasks', category: 'Tasks', description: 'Global task board visibility across all departments' },
 
-  // Salary Advance
-  { key: 'approve_salary_advance', label: 'Approve Salary Advance', category: 'Advance Salary', description: 'Authorize loan & advance applications up to policy cap' },
+  // Advance Salary
+  { key: 'approve_salary_advance', label: 'Approve Advance Salary', category: 'Advance Salary', description: 'Authorize loan & advance applications up to policy cap' },
 
   // Location & Tracking
   { key: 'view_gps_location', label: 'View GPS Location', category: 'Tracking', description: 'View current coordinates and check-in positions' },

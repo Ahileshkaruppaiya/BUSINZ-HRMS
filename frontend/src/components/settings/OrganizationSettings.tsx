@@ -841,8 +841,13 @@ export const OrganizationSettings: React.FC = () => {
                   <input
                     type="text"
                     required
-                    value={desigForm.title}
-                    onChange={e => setDesigForm({ ...desigForm, title: e.target.value })}
+                    value={desigForm.title.replace(/[0-9]/g, '')}
+                    onChange={e => setDesigForm({ ...desigForm, title: e.target.value.replace(/[0-9]/g, '') })}
+                    onKeyDown={e => {
+                      if (/^[0-9]$/.test(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
                     placeholder="e.g. Senior Project Manager"
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.88rem' }}
                   />

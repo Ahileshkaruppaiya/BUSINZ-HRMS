@@ -110,7 +110,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await authService.forgotPassword(identifier.trim());
+      const res = await authService.forgotPassword(identifier.trim().toLowerCase());
 
       // Always show standard privacy notice
       setInfoMessage(res.message);

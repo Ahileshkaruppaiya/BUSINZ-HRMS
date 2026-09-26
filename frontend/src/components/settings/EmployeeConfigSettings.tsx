@@ -54,7 +54,7 @@ export const EmployeeConfigSettings: React.FC = () => {
     name: '',
     code: '',
     mandatory: true,
-    maxSizeMb: 5,
+    maxSizeMb: 1,
     allowedFormats: ['PDF', 'JPG', 'PNG']
   });
 
@@ -132,7 +132,7 @@ export const EmployeeConfigSettings: React.FC = () => {
       name: '',
       code: '',
       mandatory: true,
-      maxSizeMb: 5,
+      maxSizeMb: 1,
       allowedFormats: ['PDF', 'JPG', 'PNG']
     });
     setIsDocModalOpen(true);

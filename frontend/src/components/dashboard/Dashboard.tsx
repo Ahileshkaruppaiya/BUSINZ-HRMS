@@ -52,6 +52,10 @@ export const Dashboard: React.FC = () => {
     currentUser.designation === 'CEO' || 
     (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) || 
     currentUser.employeeId === 'EMP-000';
+  const isAccountsUser = 
+    currentUser.role === 'Finance Manager' ||
+    (currentUser.department && (currentUser.department.toLowerCase().includes('accounts') || currentUser.department.toLowerCase().includes('finance'))) ||
+    (currentUser.designation && (currentUser.designation.toLowerCase().includes('account') || currentUser.designation.toLowerCase().includes('finance')));
   const isEmployee = currentUser.role === 'Employee' && !isCEO;
   const [profileModalEmployee, setProfileModalEmployee] = useState<Employee | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<AttendanceCategoryType | null>(null);
@@ -237,11 +241,13 @@ export const Dashboard: React.FC = () => {
   const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
   const [filterReports, setFilterReports] = useState<FilterReportsState>(initialFilterReportsState);
 
-  const selectedBranchDepts = Object.entries(filterReports.branchDepartments).flatMap(([branch, depts]) => 
+  const selectedBranchDepts = Object.entries(filterReports.branchDepartments || {}).flatMap(([branch, depts]) => 
     depts.map(dept => ({ branch, dept }))
   );
 
   const activeFilterCount = 
+    (filterReports.branches || []).length +
+    (filterReports.departments || []).length +
     selectedBranchDepts.length + 
     filterReports.shifts.length + 
     filterReports.employmentTypes.length + 
@@ -255,6 +261,24 @@ export const Dashboard: React.FC = () => {
       emp.designation === 'Super Administrator'
     ) {
       return false;
+    }
+    // Dynamic Branch Filter
+    if (filterReports.branches && filterReports.branches.length > 0) {
+      const empBranch = (emp.workLocation || (emp as any).branch || '').toLowerCase().trim();
+      const matchesBranch = filterReports.branches.some(b => {
+        const target = b.toLowerCase().trim();
+        return empBranch === target || empBranch.includes(target) || target.includes(empBranch);
+      });
+      if (!matchesBranch) return false;
+    }
+    // Dynamic Department Filter
+    if (filterReports.departments && filterReports.departments.length > 0) {
+      const empDept = (emp.department || '').toLowerCase().trim();
+      const matchesDept = filterReports.departments.some(d => {
+        const target = d.toLowerCase().trim();
+        return empDept === target || empDept.includes(target) || target.includes(empDept);
+      });
+      if (!matchesDept) return false;
     }
     if (selectedBranchDepts.length > 0) {
       const match = selectedBranchDepts.some(({ dept }) => 
@@ -517,6 +541,26 @@ export const Dashboard: React.FC = () => {
         <div className="card" style={{ padding: '10px 16px', marginBottom: '20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '0.82rem' }}>
             <span style={{ fontWeight: 700, color: '#475569' }}>Active Filters ({activeFilterCount}):</span>
+            {(filterReports.branches || []).map(branch => (
+              <span key={branch} className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                Branch: {branch}
+                <X 
+                  size={12} 
+                  style={{ cursor: 'pointer' }} 
+                  onClick={() => setFilterReports(prev => ({ ...prev, branches: prev.branches.filter(b => b !== branch) }))} 
+                />
+              </span>
+            ))}
+            {(filterReports.departments || []).map(dept => (
+              <span key={dept} className="badge badge-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                Dept: {dept}
+                <X 
+                  size={12} 
+                  style={{ cursor: 'pointer' }} 
+                  onClick={() => setFilterReports(prev => ({ ...prev, departments: prev.departments.filter(d => d !== dept) }))} 
+                />
+              </span>
+            ))}
             {selectedBranchDepts.map(({ branch, dept }) => (
               <span key={`${branch}-${dept}`} className="badge badge-info" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 {branch}: {dept}
@@ -524,9 +568,9 @@ export const Dashboard: React.FC = () => {
                   size={12} 
                   style={{ cursor: 'pointer' }} 
                   onClick={() => {
-                    const currentBranchDepts = filterReports.branchDepartments[branch] || [];
+                    const currentBranchDepts = (filterReports.branchDepartments || {})[branch] || [];
                     const updated = currentBranchDepts.filter(d => d !== dept);
-                    const newBranchDepts = { ...filterReports.branchDepartments };
+                    const newBranchDepts = { ...(filterReports.branchDepartments || {}) };
                     if (updated.length === 0) delete newBranchDepts[branch];
                     else newBranchDepts[branch] = updated;
                     setFilterReports(prev => ({ ...prev, branchDepartments: newBranchDepts }));
@@ -792,8 +836,8 @@ export const Dashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Employee Shift Check-In & Window Status Card */}
-      {isEmployee && (
+      {/* Employee Shift Check-In & Window Status Card (Hidden for Accounts site) */}
+      {isEmployee && !isAccountsUser && (
         <div style={{ marginBottom: '20px' }}>
           <ShiftCheckInCard onOpenFaceAttendance={() => setActiveModule('face_attendance')} />
         </div>

@@ -133,6 +133,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  const isHRorAdmin = 
+    currentUser.role === 'Super Admin' || 
+    currentUser.role === 'Admin' || 
+    currentUser.role === 'CEO' || 
+    currentUser.role === 'HR Admin' || 
+    currentUser.role === 'HR Manager' || 
+    currentUser.role === 'HR' || 
+    currentUser.role === 'Management' || 
+    currentUser.role === 'ERP Administrator' ||
+    (currentUser.department && (currentUser.department.toLowerCase() === 'hr' || currentUser.department.toLowerCase() === 'human resources')) ||
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('hr')) ||
+    currentUser.designation === 'CEO' ||
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo'));
+
+  const isAccountsStaff = 
+    currentUser.role === 'Finance Manager' ||
+    (currentUser.department && (currentUser.department.toLowerCase().includes('accounts') || currentUser.department.toLowerCase().includes('finance'))) ||
+    (currentUser.designation && (currentUser.designation.toLowerCase().includes('account') || currentUser.designation.toLowerCase().includes('finance')));
+
   // Standardized VRM Enterprise Sidebar Menu
   const menuStructure: MenuItem[] = [
     // Organization & Staffing
@@ -144,13 +163,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'attendance', label: 'Attendance Management', icon: CalendarCheck, section: 'TIME & ATTENDANCE' },
     { 
       id: 'leaves', 
-      label: currentUser.role === 'Employee' ? 'Leave Request' : 'Leave Management', 
+      label: (currentUser.role === 'Employee' && !isHRorAdmin) ? 'Leave Request' : 'Leave Management', 
       icon: CalendarDays, 
       section: 'TIME & ATTENDANCE' 
     },
     { 
       id: 'shifts', 
-      label: currentUser.role === 'Employee' ? 'My Shift' : 'Shift Management', 
+      label: (currentUser.role === 'Employee' && !isHRorAdmin) ? 'My Shift' : 'Shift Management', 
       icon: Clock, 
       section: 'TIME & ATTENDANCE' 
     },
@@ -159,13 +178,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'tracking', label: 'Tracking', icon: MapPin, section: 'WORKFLOW & OPS' },
     { 
       id: 'performance', 
-      label: currentUser.role === 'Employee' ? 'My Performance' : 'Performance', 
+      label: (currentUser.role === 'Employee' && !isHRorAdmin) ? 'My Performance' : 'Performance', 
       icon: TrendingUp, 
       section: 'WORKFLOW & OPS' 
     },
     { 
       id: 'recruitment', 
-      label: currentUser.role === 'Employee' ? 'Referral Portal' : 'Recruitment', 
+      label: (currentUser.role === 'Employee' && !isHRorAdmin) ? 'Referral Portal' : 'Recruitment', 
       icon: Briefcase, 
       section: 'WORKFLOW & OPS' 
     },
@@ -175,7 +194,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'payroll', label: 'Payroll', icon: CreditCard, section: 'FINANCE & PAYROLL' },
     { 
       id: 'advance_salary', 
-      label: currentUser.role === 'Employee' ? 'My Advance Salary' : 'Advance Salary Management', 
+      label: (currentUser.role === 'Employee' && !isHRorAdmin && !isAccountsStaff) ? 'My Advance Salary' : 'Advance Salary Management', 
       icon: Banknote, 
       section: 'FINANCE & PAYROLL' 
     },
@@ -183,7 +202,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // Workspace & Reports
     { 
       id: 'assets', 
-      label: currentUser.role === 'Employee' ? 'My Assets' : 'Asset Management', 
+      label: (currentUser.role === 'Employee' && !isHRorAdmin) ? 'My Assets' : 'Asset Management', 
       icon: Laptop, 
       section: 'WORKSPACE & REPORTS' 
     },

@@ -1,11 +1,15 @@
 import { z } from 'zod';
 export const loginSchema = z.union([
     z.object({
-        identifier: z.string().min(1, 'User ID or Email is required'),
+        identifier: z.preprocess((val) => (typeof val === 'string' ? val.trim().toLowerCase() : val), z.string().min(1, 'User ID or Email is required')),
         password: z.string().min(1, 'Password is required'),
     }),
     z.object({
-        email: z.string().email('Invalid email address format'),
+        email: z.preprocess((val) => (typeof val === 'string' ? val.trim().toLowerCase() : val), z.string({ required_error: 'Email ID is required.' })
+            .min(1, 'Email ID is required.')
+            .refine((val) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(val), {
+            message: 'Please enter a valid email ID.',
+        })),
         password: z.string().min(1, 'Password is required'),
     }),
 ]);
@@ -25,10 +29,10 @@ export const updateAccountStatusSchema = z.object({
     }),
 });
 export const forgotPasswordSchema = z.object({
-    email_or_employee_id: z.string().min(1, 'Registered Email or Employee ID is required'),
+    email_or_employee_id: z.preprocess((val) => (typeof val === 'string' ? val.trim().toLowerCase() : val), z.string().min(1, 'Registered Email or Employee ID is required')),
 });
 export const verifyResetOtpSchema = z.object({
-    email_or_employee_id: z.string().min(1, 'Registered Email or Employee ID is required'),
+    email_or_employee_id: z.preprocess((val) => (typeof val === 'string' ? val.trim().toLowerCase() : val), z.string().min(1, 'Registered Email or Employee ID is required')),
     otp: z.string().length(6, 'Verification code must be exactly 6 digits'),
 });
 export const resetPasswordSchema = z

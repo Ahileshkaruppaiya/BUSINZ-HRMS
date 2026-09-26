@@ -28,15 +28,28 @@ export const RecruitmentPipeline: React.FC = () => {
     reviewReferral, 
     addEmployee, 
     currentUser,
-    employees 
+    employees,
+    hasPermission 
   } = useHRMS();
 
-  // Strict Role Scoping:
-  // 1. Candidate referral is submitted ONLY by Employees.
-  // 2. Acceptance / rejection of referrals is performed ONLY by HR and CEO.
-  const isEmployeeRole = currentUser.role === 'Employee' || currentUser.role === 'Assignee';
-  const isHrOrCeo = currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin' || currentUser.role === 'Management';
-  const canReferCandidate = isEmployeeRole;
+  // Strict Role Scoping: HR & CEO manage recruitment pipeline and post jobs
+  const isHrOrCeo = 
+    currentUser.role === 'Super Admin' || 
+    currentUser.role === 'Admin' || 
+    currentUser.role === 'CEO' || 
+    currentUser.role === 'HR Admin' || 
+    currentUser.role === 'HR Manager' || 
+    currentUser.role === 'HR' || 
+    currentUser.role === 'Management' || 
+    currentUser.role === 'ERP Administrator' ||
+    (currentUser.department && (currentUser.department.toLowerCase() === 'hr' || currentUser.department.toLowerCase() === 'human resources')) ||
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('hr')) ||
+    currentUser.designation === 'CEO' ||
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) ||
+    (typeof hasPermission === 'function' && (hasPermission('recruitment', 'create') || hasPermission('recruitment', 'view')));
+
+  const isEmployeeRole = (currentUser.role === 'Employee' || currentUser.role === 'Assignee') && !isHrOrCeo;
+  const canReferCandidate = isEmployeeRole || isHrOrCeo;
   const canAcceptReferral = isHrOrCeo;
   const canPostJob = isHrOrCeo;
   const canApprovePipeline = isHrOrCeo;
@@ -200,22 +213,31 @@ export const RecruitmentPipeline: React.FC = () => {
           </p>
         </div>
         <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* REFER CANDIDATE BUTTON - Strictly for Employee Role */}
-          {canReferCandidate && (
+          {canPostJob && (
             <button 
               className="btn btn-primary btn-sm" 
-              onClick={() => setShowReferralModal(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+              onClick={() => setShowAddJobModal(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '12px',
+                padding: '9px 18px',
+                fontWeight: 700
+              }}
             >
-              <UserPlus size={16} /> Refer Candidate
+              <Plus size={16} /> Create Job Opening
             </button>
           )}
 
-
-
-          {canPostJob && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddJobModal(true)}>
-              <Plus size={16} /> Post Job Opening
+          {/* REFER CANDIDATE BUTTON */}
+          {canReferCandidate && (
+            <button 
+              className={`btn ${canPostJob ? 'btn-secondary' : 'btn-primary'} btn-sm`} 
+              onClick={() => setShowReferralModal(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, borderRadius: '12px', padding: '9px 18px' }}
+            >
+              <UserPlus size={16} /> Refer Candidate
             </button>
           )}
         </div>
@@ -673,37 +695,85 @@ export const RecruitmentPipeline: React.FC = () => {
 
       {/* TAB 3: ACTIVE JOB OPENINGS */}
       {activeTab === 'jobs' && (
-        <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
-          {jobOpenings.map(j => (
-            <div key={j.id} className="card" style={{ marginBottom: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>{j.title}</h4>
-                <span className="status-pill active" style={{ fontSize: '0.65rem' }}>{j.status}</span>
+        <div>
+          {canPostJob && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
+                  Company Job Openings ({jobOpenings.length})
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#64748B' }}>
+                  Manage published job vacancies and track applicant counts
+                </p>
               </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>{j.description}</p>
-              <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                <div><strong>Department:</strong> {j.department}</div>
-                <div><strong>Salary:</strong> {j.salaryRange}</div>
-                <div><strong>Experience:</strong> {j.experience}</div>
-                <div><strong>Applicants:</strong> {j.applicantsCount} Candidates</div>
-              </div>
+              <button 
+                className="btn btn-primary btn-sm"
+                onClick={() => setShowAddJobModal(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  borderRadius: '10px',
+                  padding: '8px 16px',
+                  fontWeight: 700
+                }}
+              >
+                <Plus size={16} /> Create Job Opening
+              </button>
+            </div>
+          )}
 
-              {canReferCandidate && (
-                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
-                  <button
-                    onClick={() => {
-                      setReferralForm({ ...referralForm, jobId: j.id });
-                      setShowReferralModal(true);
-                    }}
-                    className="btn btn-secondary btn-sm"
-                    style={{ width: '100%', fontSize: '0.75rem', fontWeight: 700 }}
-                  >
-                    <UserPlus size={14} /> Refer for this Role
-                  </button>
-                </div>
+          {jobOpenings.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '50px 24px', borderRadius: '16px' }}>
+              <Briefcase size={42} style={{ opacity: 0.3, margin: '0 auto 12px', display: 'block', color: '#0E7490' }} />
+              <h4 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>No Job Openings Published</h4>
+              <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#64748B' }}>
+                Create new job postings to start receiving employee candidate referrals and applications.
+              </p>
+              {canPostJob && (
+                <button 
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setShowAddJobModal(true)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, borderRadius: '10px', padding: '9px 18px' }}
+                >
+                  <Plus size={16} /> Create Job Opening
+                </button>
               )}
             </div>
-          ))}
+          ) : (
+            <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+              {jobOpenings.map(j => (
+                <div key={j.id} className="card" style={{ marginBottom: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>{j.title}</h4>
+                    <span className="status-pill active" style={{ fontSize: '0.65rem' }}>{j.status}</span>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>{j.description}</p>
+                  <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '10px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    <div><strong>Department:</strong> {j.department}</div>
+                    <div><strong>Salary:</strong> {j.salaryRange}</div>
+                    <div><strong>Experience:</strong> {j.experience}</div>
+                    <div><strong>Applicants:</strong> {j.applicantsCount} Candidates</div>
+                  </div>
+
+                  {canReferCandidate && (
+                    <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
+                      <button
+                        onClick={() => {
+                          setReferralForm({ ...referralForm, jobId: j.id });
+                          setShowReferralModal(true);
+                        }}
+                        className="btn btn-secondary btn-sm"
+                        style={{ width: '100%', fontSize: '0.75rem', fontWeight: 700 }}
+                      >
+                        <UserPlus size={14} /> Refer for this Role
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

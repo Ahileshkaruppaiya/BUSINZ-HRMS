@@ -25,10 +25,25 @@ import { StandardFloatingActionBar } from '../common/StandardFloatingActionBar';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
 export const AssetManagement: React.FC = () => {
-  const { assets, addAsset, assignAsset, deleteAsset, employees, currentUser } = useHRMS();
+  const { assets, addAsset, assignAsset, deleteAsset, employees, currentUser, hasPermission } = useHRMS();
 
-  const isEmployeeRole = currentUser.role === 'Employee' || currentUser.role === 'Assignee';
-  const canManageAssets = currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin';
+  const isHRorAdmin = 
+    currentUser.role === 'Super Admin' || 
+    currentUser.role === 'Admin' || 
+    currentUser.role === 'CEO' || 
+    currentUser.role === 'HR Admin' || 
+    currentUser.role === 'HR Manager' || 
+    currentUser.role === 'HR' || 
+    currentUser.role === 'Management' || 
+    currentUser.role === 'ERP Administrator' ||
+    (currentUser.department && (currentUser.department.toLowerCase() === 'hr' || currentUser.department.toLowerCase() === 'human resources')) || 
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('hr')) ||
+    currentUser.designation === 'CEO' ||
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) ||
+    (typeof hasPermission === 'function' && (hasPermission('assets', 'create') || hasPermission('assets', 'edit')));
+
+  const canManageAssets = isHRorAdmin;
+  const isEmployeeRole = (currentUser.role === 'Employee' || currentUser.role === 'Assignee') && !isHRorAdmin;
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -195,8 +210,16 @@ export const AssetManagement: React.FC = () => {
                 setAddForm(prev => ({ ...prev, assetTag: randomTag }));
                 setShowAddModal(true);
               }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '12px',
+                padding: '9px 18px',
+                fontWeight: 700
+              }}
             >
-              <Plus size={16} /> Add Corporate Asset
+              <Plus size={16} /> Create Asset
             </button>
           </div>
         )}
@@ -445,10 +468,22 @@ export const AssetManagement: React.FC = () => {
                       ? 'No corporate devices or hardware currently assigned to your profile.' 
                       : 'No corporate assets found matching current filters.'}
                   </div>
-                  {isEmployeeRole && (
+                  {isEmployeeRole ? (
                     <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>
                       Contact IT Administration or HR if you require an equipment allocation.
                     </div>
+                  ) : canManageAssets && (
+                    <button 
+                      className="btn btn-primary btn-sm" 
+                      style={{ marginTop: '14px', display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '10px', padding: '8px 18px', fontWeight: 700 }}
+                      onClick={() => {
+                        const randomTag = `AST-${Math.floor(Math.random() * 900 + 100)}`;
+                        setAddForm(prev => ({ ...prev, assetTag: randomTag }));
+                        setShowAddModal(true);
+                      }}
+                    >
+                      <Plus size={15} /> Create Asset
+                    </button>
                   )}
                 </td>
               </tr>

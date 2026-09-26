@@ -47,7 +47,14 @@ export const INITIAL_SHIFT_REQUESTS: ShiftRequest[] = [];
 // ----------------------------------------------------------------------------
 // 3. DEPARTMENTS (8 Standard Enterprise Departments)
 // ----------------------------------------------------------------------------
-export const INITIAL_DEPTS: DepartmentItem[] = [];
+export const INITIAL_DEPTS: DepartmentItem[] = [
+  { id: 'dept-ceo', name: 'CEO', code: 'CEO', headName: 'Chief Executive Officer', headId: '', employeeCount: 0, budget: 0 },
+  { id: 'dept-hr', name: 'HR', code: 'HR', headName: 'HR Manager', headId: '', employeeCount: 0, budget: 0 },
+  { id: 'dept-accounts', name: 'Accounts', code: 'ACCT', headName: 'Accounts Manager', headId: '', employeeCount: 0, budget: 0 },
+  { id: 'dept-ops', name: 'Operations', code: 'OPS', headName: 'Operations Lead', headId: '', employeeCount: 0, budget: 0 },
+  { id: 'dept-sales', name: 'Sales & Marketing', code: 'SALES', headName: 'Sales Head', headId: '', employeeCount: 0, budget: 0 },
+  { id: 'dept-it', name: 'IT & Engineering', code: 'IT', headName: 'Tech Lead', headId: '', employeeCount: 0, budget: 0 }
+];
 
 // ----------------------------------------------------------------------------
 // 4. ATTENDANCE & BIOMETRIC LOGS (Clean Slate)

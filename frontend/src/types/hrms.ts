@@ -86,7 +86,7 @@ export interface Employee {
   reportingManagerId: string;
   reportingManagerName: string;
   joiningDate: string;
-  employmentType: 'Full-Time' | 'Part-Time' | 'Contract' | 'Intern' | 'Provisional';
+  employmentType: string;
   status: 'Active' | 'On Leave' | 'Terminated';
   avatar: string;
   basicSalary: number;
@@ -1151,4 +1151,3 @@ export interface PolicyVersion {
   effectiveTo?: string;            // 'YYYY-MM-DD'
   snapshot: unknown;
 }
-

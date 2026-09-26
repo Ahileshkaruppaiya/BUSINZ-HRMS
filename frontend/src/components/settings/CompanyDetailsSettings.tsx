@@ -898,10 +898,19 @@ export const CompanyDetailsSettings: React.FC = () => {
                 <input
                   type="text"
                   placeholder="Add new designation..."
-                  value={newDesig}
-                  onChange={e => setNewDesig(e.target.value)}
+                  value={newDesig.replace(/[0-9]/g, '')}
+                  onChange={e => setNewDesig(e.target.value.replace(/[0-9]/g, ''))}
+                  onKeyDown={e => { 
+                    if (/^[0-9]$/.test(e.key)) {
+                      e.preventDefault();
+                      return;
+                    }
+                    if (e.key === 'Enter') { 
+                      e.preventDefault(); 
+                      handleAddDesig(); 
+                    } 
+                  }}
                   className="form-control form-control-sm"
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddDesig(); } }}
                 />
                 <button className="btn btn-primary btn-sm" onClick={handleAddDesig}>Add</button>
               </div>

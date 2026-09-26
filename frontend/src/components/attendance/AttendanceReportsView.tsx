@@ -93,6 +93,8 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
+    count += (activeFilters.branches || []).length;
+    count += (activeFilters.departments || []).length;
     const branchDepts = activeFilters.branchDepartments || {};
     Object.values(branchDepts).forEach(depts => {
       count += depts.length;
@@ -128,7 +130,27 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
   // Filtered employees based on Scope Filters
   const filteredEmployees = useMemo(() => {
     return employees.filter(emp => {
-      // Scope filters: branch / department
+      // Scope filters: branch
+      if (activeFilters.branches && activeFilters.branches.length > 0) {
+        const empBranch = (emp.workLocation || (emp as any).branch || '').toLowerCase().trim();
+        const matchesBranch = activeFilters.branches.some(b => {
+          const target = b.toLowerCase().trim();
+          return empBranch === target || empBranch.includes(target) || target.includes(empBranch);
+        });
+        if (!matchesBranch) return false;
+      }
+
+      // Scope filters: department
+      if (activeFilters.departments && activeFilters.departments.length > 0) {
+        const empDept = (emp.department || '').toLowerCase().trim();
+        const matchesDept = activeFilters.departments.some(d => {
+          const target = d.toLowerCase().trim();
+          return empDept === target || empDept.includes(target) || target.includes(empDept);
+        });
+        if (!matchesDept) return false;
+      }
+
+      // Legacy Scope filters: branch / department
       const branchDepts = activeFilters.branchDepartments || {};
       const activeBranches = Object.keys(branchDepts);
       if (activeBranches.length > 0) {
@@ -187,7 +209,29 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
   // Filtered Leave Requests based on Scope Filters, Search Query, and Date Range
   const filteredLeaveRequests = useMemo(() => {
     return leaveRequests.filter(l => {
-      // Scope filters: branch / department
+      // Scope filters: branch
+      if (activeFilters.branches && activeFilters.branches.length > 0) {
+        const leaveBranch = ((l as any).workLocation || (l as any).branch || '').toLowerCase().trim();
+        if (leaveBranch) {
+          const matchesBranch = activeFilters.branches.some(b => {
+            const target = b.toLowerCase().trim();
+            return leaveBranch === target || leaveBranch.includes(target) || target.includes(leaveBranch);
+          });
+          if (!matchesBranch) return false;
+        }
+      }
+
+      // Scope filters: department
+      if (activeFilters.departments && activeFilters.departments.length > 0) {
+        const leaveDept = (l.department || '').toLowerCase().trim();
+        const matchesDept = activeFilters.departments.some(d => {
+          const target = d.toLowerCase().trim();
+          return leaveDept === target || leaveDept.includes(target) || target.includes(leaveDept);
+        });
+        if (!matchesDept) return false;
+      }
+
+      // Legacy Scope filters: branch / department
       const branchDepts = activeFilters.branchDepartments || {};
       const activeBranches = Object.keys(branchDepts);
       if (activeBranches.length > 0) {

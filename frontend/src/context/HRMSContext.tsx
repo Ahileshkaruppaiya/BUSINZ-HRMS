@@ -290,6 +290,46 @@ const DEFAULT_PERMISSIONS: PermissionMatrix = {
     assets: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
     settings: ['view', 'edit'],
   },
+  'HR': {
+    dashboard: ['view', 'export'],
+    employees: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    face_attendance: ['view', 'create', 'edit', 'export'],
+    attendance: ['view', 'create', 'edit', 'approve', 'export'],
+    gps_geofence: ['view', 'create', 'edit', 'approve', 'export'],
+    leaves: ['view', 'create', 'edit', 'approve', 'export'],
+    shifts: ['view', 'create', 'edit', 'approve', 'export'],
+    performance: ['view', 'create', 'edit', 'approve', 'export'],
+    tasks: ['view', 'create', 'edit', 'export'],
+    recruitment: ['view', 'create', 'edit', 'approve', 'export'],
+    finance: ['view', 'create', 'edit', 'approve', 'export'],
+    notifications: ['view', 'create'],
+    payroll: ['view', 'create', 'edit', 'approve', 'export'],
+    advance_salary: ['view', 'create', 'edit', 'approve', 'export'],
+    reports: ['view', 'export'],
+    organization: ['view', 'create', 'edit', 'export'],
+    assets: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    settings: ['view', 'edit'],
+  },
+  'Admin': {
+    dashboard: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    employees: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    face_attendance: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    attendance: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    gps_geofence: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    leaves: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    shifts: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    performance: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    tasks: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    recruitment: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    finance: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    notifications: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    payroll: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    advance_salary: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    reports: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    organization: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    assets: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+    settings: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+  },
   'Department Manager': {
     dashboard: ['view'],
     employees: ['view'],
@@ -598,11 +638,11 @@ export const INITIAL_EMPLOYEE_CONFIG: EmployeeConfigSettings = {
     { id: 'cf5', label: 'Bank IFSC Code', fieldName: 'bankIfsc', fieldType: 'text', category: 'Payroll', required: true }
   ],
   documentTypes: [
-    { id: 'dt1', name: 'Updated Resume / CV', code: 'RESUME', mandatory: true, maxSizeMb: 5, allowedFormats: ['PDF', 'DOCX'] },
-    { id: 'dt2', name: 'Aadhaar / National ID Card', code: 'GOVT_ID', mandatory: true, maxSizeMb: 5, allowedFormats: ['PDF', 'JPG', 'PNG'] },
-    { id: 'dt3', name: 'Income Tax PAN Card', code: 'PAN_CARD', mandatory: true, maxSizeMb: 5, allowedFormats: ['PDF', 'JPG', 'PNG'] },
-    { id: 'dt4', name: 'Highest Degree / Marksheet', code: 'DEGREE', mandatory: true, maxSizeMb: 10, allowedFormats: ['PDF'] },
-    { id: 'dt5', name: 'Previous Relieving / Experience Certificate', code: 'RELIEVING', mandatory: false, maxSizeMb: 5, allowedFormats: ['PDF'] }
+    { id: 'dt1', name: 'Updated Resume / CV', code: 'RESUME', mandatory: true, maxSizeMb: 1, allowedFormats: ['PDF', 'DOCX'] },
+    { id: 'dt2', name: 'Aadhaar / National ID Card', code: 'GOVT_ID', mandatory: true, maxSizeMb: 1, allowedFormats: ['PDF', 'JPG', 'PNG'] },
+    { id: 'dt3', name: 'Income Tax PAN Card', code: 'PAN_CARD', mandatory: true, maxSizeMb: 1, allowedFormats: ['PDF', 'JPG', 'PNG'] },
+    { id: 'dt4', name: 'Highest Degree / Marksheet', code: 'DEGREE', mandatory: true, maxSizeMb: 1, allowedFormats: ['PDF'] },
+    { id: 'dt5', name: 'Previous Relieving / Experience Certificate', code: 'RELIEVING', mandatory: false, maxSizeMb: 1, allowedFormats: ['PDF'] }
   ]
 };
 
@@ -2533,7 +2573,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
-  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [departments, setDepartments] = useState<DepartmentItem[]>(INITIAL_DEPTS);
   const [designations, setDesignations] = useState<DesignationItem[]>([]);
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [assets, setAssets] = useState<AssetItem[]>([]);
@@ -3496,7 +3536,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       };
       const blankOrg: OrganizationStructure = {
         departments: ['Administration', 'Human Resources', 'Operations', 'Finance & Accounts', 'Sales & Marketing', 'IT & Engineering'],
-        designations: ['Managing Director', 'Department Head', 'Team Lead', 'Senior Associate', 'Staff Executive', 'Trainee'],
+        designations: [],
         employmentTypes: ['Full-Time Regular', 'Contractual Basis', 'Probationary', 'Internship'],
         workLocations: ['Main Head Office', 'Branch Office 1'],
         reportingManagers: [],
@@ -4388,10 +4428,18 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const isHrOrCeo = 
       currentUser.role === 'CEO' ||
       currentUser.role === 'Super Admin' ||
+      currentUser.role === 'Admin' ||
       currentUser.role === 'HR Manager' ||
       currentUser.role === 'HR Admin' ||
+      currentUser.role === 'HR' ||
+      (currentUser.department && (currentUser.department.toLowerCase() === 'hr' || currentUser.department.toLowerCase() === 'human resources')) ||
+      (currentUser.designation && currentUser.designation.toLowerCase().includes('hr')) ||
       (currentUser as any).designation?.toLowerCase().includes('ceo') ||
       (currentUser as any).designation?.toLowerCase().includes('managing director');
+
+    if (module === 'assets' || module === 'recruitment') {
+      if (isHrOrCeo) return true;
+    }
 
     if (module === 'payroll' || module === 'finance' || module === 'advance_salary') {
       if (action === 'approve') {
@@ -4527,8 +4575,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ? empData.employeeId.trim()
       : generateNextEmployeeId(employees, rawPrefix, digits, startNum);
 
+    const cleanEmail = (empData.email || empData.personalEmail || '').trim().toLowerCase();
     const newEmp: Employee = {
       ...empData,
+      email: cleanEmail,
+      personalEmail: cleanEmail,
       id: newId,
       employeeId: newId,
       authUserId: empData.authUserId || `usr-${Date.now()}`,
@@ -4543,7 +4594,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       employee_id: newEmp.employeeId,
       first_name: newEmp.firstName,
       last_name: newEmp.lastName,
-      email: newEmp.email,
+      email: cleanEmail,
       password: newEmp.password,
       designation: newEmp.designation,
       basic_salary: newEmp.basicSalary,
@@ -4658,8 +4709,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateEmployee = (id: string, empData: Partial<Employee>) => {
-    setEmployees(prev => prev.map(e => (e.id === id || e.employeeId === id) ? { ...e, ...empData } : e));
-    const dbUpdates = employeeToDbUpdates(empData);
+    const normalizedEmpData = { ...empData };
+    if (normalizedEmpData.email !== undefined) {
+      normalizedEmpData.email = normalizedEmpData.email ? normalizedEmpData.email.trim().toLowerCase() : '';
+    }
+    if (normalizedEmpData.personalEmail !== undefined) {
+      normalizedEmpData.personalEmail = normalizedEmpData.personalEmail ? normalizedEmpData.personalEmail.trim().toLowerCase() : '';
+    }
+    setEmployees(prev => prev.map(e => (e.id === id || e.employeeId === id) ? { ...e, ...normalizedEmpData } : e));
+    const dbUpdates = employeeToDbUpdates(normalizedEmpData);
     if (Object.keys(dbUpdates).length > 0) {
       supabaseDirect.updateEmployee(id, dbUpdates).then(res => {
         if (!res.success) {
@@ -6713,15 +6771,50 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addDesignation = (desig: Omit<DesignationItem, 'id'>) => {
+    const cleanTitle = desig.title.replace(/[0-9]/g, '').trim();
+    if (!cleanTitle) return;
     const newDesig: DesignationItem = {
       ...desig,
+      title: cleanTitle,
       id: `DSG-${Date.now()}`
     };
-    setDesignations(prev => [...prev, newDesig]);
+    setDesignations(prev => {
+      const next = [...prev.filter(d => d.title.toLowerCase() !== cleanTitle.toLowerCase()), newDesig];
+      supabaseDirect.saveCompanySetting('designations_data', next);
+      return next;
+    });
+    setOrgStructure(prev => {
+      const currentList = prev.designations || [];
+      if (currentList.some(t => t.toLowerCase() === cleanTitle.toLowerCase())) return prev;
+      const updated = {
+        ...prev,
+        designations: [...currentList, cleanTitle]
+      };
+      supabaseDirect.saveCompanySetting('org_structure', updated);
+      return updated;
+    });
   };
 
   const updateDesignation = (id: string, updates: Partial<DesignationItem>) => {
-    setDesignations(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+    const cleanTitle = updates.title ? updates.title.replace(/[0-9]/g, '').trim() : undefined;
+    setDesignations(prev => {
+      const oldItem = prev.find(d => d.id === id);
+      const oldTitle = oldItem?.title;
+      const next = prev.map(d => d.id === id ? { ...d, ...updates, ...(cleanTitle ? { title: cleanTitle } : {}) } : d);
+      supabaseDirect.saveCompanySetting('designations_data', next);
+      if (oldTitle && cleanTitle && oldTitle !== cleanTitle) {
+        setOrgStructure(orgPrev => {
+          const updated = {
+            ...orgPrev,
+            designations: (orgPrev.designations || []).map(t => t === oldTitle ? cleanTitle : t)
+          };
+          supabaseDirect.saveCompanySetting('org_structure', updated);
+          return updated;
+        });
+        setEmployees(empPrev => empPrev.map(emp => emp.designation === oldTitle ? { ...emp, designation: cleanTitle } : emp));
+      }
+      return next;
+    });
   };
 
   const deleteDesignation = (id: string): { success: boolean; message?: string } => {
@@ -6729,7 +6822,22 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!check.canDelete) {
       return { success: false, message: check.reason };
     }
-    setDesignations(prev => prev.filter(d => d.id !== id));
+    const target = designations.find(d => d.id === id);
+    setDesignations(prev => {
+      const next = prev.filter(d => d.id !== id);
+      supabaseDirect.saveCompanySetting('designations_data', next);
+      return next;
+    });
+    if (target?.title) {
+      setOrgStructure(prev => {
+        const next = {
+          ...prev,
+          designations: (prev.designations || []).filter(t => t !== target.title)
+        };
+        supabaseDirect.saveCompanySetting('org_structure', next);
+        return next;
+      });
+    }
     return { success: true };
   };
 
@@ -6773,14 +6881,48 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       id: `et-${Date.now()}`
     };
     setEmploymentTypes(prev => [...prev, newType]);
+    setOrgStructure(prev => {
+      if (prev.employmentTypes.some(t => t.toLowerCase() === newType.name.toLowerCase())) return prev;
+      const updated = { ...prev, employmentTypes: [...prev.employmentTypes, newType.name] };
+      supabaseDirect.saveCompanySetting('org_structure', updated);
+      return updated;
+    });
   };
 
   const updateEmploymentType = (id: string, updates: Partial<EmploymentTypeItem>) => {
-    setEmploymentTypes(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    setEmploymentTypes(prev => {
+      const existing = prev.find(t => t.id === id);
+      const next = prev.map(t => t.id === id ? { ...t, ...updates } : t);
+      if (existing && updates.name && updates.name !== existing.name) {
+        setOrgStructure(orgPrev => {
+          const updated = {
+            ...orgPrev,
+            employmentTypes: orgPrev.employmentTypes.map(t => t === existing.name ? updates.name! : t)
+          };
+          supabaseDirect.saveCompanySetting('org_structure', updated);
+          return updated;
+        });
+        setEmployees(empPrev => empPrev.map(emp => emp.employmentType === existing.name ? { ...emp, employmentType: updates.name! } : emp));
+      }
+      return next;
+    });
   };
 
   const deleteEmploymentType = (id: string) => {
-    setEmploymentTypes(prev => prev.filter(t => t.id !== id));
+    setEmploymentTypes(prev => {
+      const existing = prev.find(t => t.id === id);
+      if (existing) {
+        setOrgStructure(orgPrev => {
+          const updated = {
+            ...orgPrev,
+            employmentTypes: orgPrev.employmentTypes.filter(t => t !== existing.name)
+          };
+          supabaseDirect.saveCompanySetting('org_structure', updated);
+          return updated;
+        });
+      }
+      return prev.filter(t => t.id !== id);
+    });
   };
 
   const addEmployeeCategory = (cat: Omit<EmployeeCategoryItem, 'id'>) => {
@@ -7427,6 +7569,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               if (d.name && !deptNames.includes(d.name)) deptNames.push(d.name);
             });
           }
+          // Ensure standard enterprise departments: CEO, HR, Accounts
+          ['CEO', 'HR', 'Accounts'].forEach(std => {
+            if (!deptNames.some(d => d.toLowerCase() === std.toLowerCase())) {
+              deptNames.unshift(std);
+            }
+          });
           const mergedOrg: OrganizationStructure = {
             departments: deptNames,
             designations: Array.isArray(cloudOrg.designations) ? cloudOrg.designations : [],
@@ -7447,16 +7595,25 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             budget: 0
           })));
         } else if (Array.isArray(cloudDepts) && cloudDepts.length > 0) {
-          setOrgStructure(prev => ({ ...prev, departments: cloudDepts.map(d => d.name) }));
-          setDepartments(cloudDepts.map(d => ({
-            id: d.id,
-            name: d.name,
-            code: d.code,
-            headName: 'Unassigned',
-            headId: d.head_id || '',
-            employeeCount: 0,
-            budget: d.budget || 0
-          })));
+          const loadedNames = cloudDepts.map(d => d.name);
+          ['CEO', 'HR', 'Accounts'].forEach(std => {
+            if (!loadedNames.some(d => d.toLowerCase() === std.toLowerCase())) {
+              loadedNames.unshift(std);
+            }
+          });
+          setOrgStructure(prev => ({ ...prev, departments: loadedNames }));
+          setDepartments(loadedNames.map(name => {
+            const match = cloudDepts.find((d: any) => d.name.toLowerCase() === name.toLowerCase());
+            return {
+              id: match?.id || `dept-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+              name,
+              code: match?.code || name.substring(0, 4).toUpperCase(),
+              headName: 'Unassigned',
+              headId: match?.head_id || '',
+              employeeCount: 0,
+              budget: match?.budget || 0
+            };
+          }));
         }
 
         // Company Details & Branches

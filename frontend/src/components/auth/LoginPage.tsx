@@ -85,7 +85,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setLoginError(null);
     setIsLoading(true);
 
-    const cleanIdentifier = identifier.trim();
+    const cleanIdentifier = identifier.trim().toLowerCase();
 
     try {
       const { user: userData } = await authService.login(cleanIdentifier, password);

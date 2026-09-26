@@ -52,6 +52,11 @@ export const resolveEmployeeRole = (row: any): Role => {
   const d = (row.designation || '').trim().toLowerCase();
   const roleId = row.role_id || '';
 
+  // Explicit Employee role priority: standard employees always retain Employee role
+  if (r === 'Employee') {
+    return 'Employee';
+  }
+
   if (
     r === 'CEO' || 
     d === 'ceo' || 
@@ -67,7 +72,7 @@ export const resolveEmployeeRole = (row: any): Role => {
   if (r === 'HR Manager' || r === 'HR Admin' || d.includes('hr manager') || d.includes('hr admin') || roleId === '778f15fb-584e-4452-9768-eb305fd09966') {
     return 'HR Manager';
   }
-  if (r === 'Finance Manager' || d.includes('finance') || d.includes('accounts') || roleId === 'd89d1984-d3ff-4d30-9f0e-3cda85b32e0a') {
+  if (r === 'Finance Manager' || roleId === 'd89d1984-d3ff-4d30-9f0e-3cda85b32e0a') {
     return 'Finance Manager';
   }
   if (r === 'Department Manager' || r === 'Department Head' || roleId === 'eba38dd1-c2c8-4ca9-9cb4-e64292100d09') {
@@ -75,6 +80,47 @@ export const resolveEmployeeRole = (row: any): Role => {
   }
   if (r) return normalizeRole(r);
   return 'Employee';
+};
+
+export const isCeoOrHrUser = (user?: any): boolean => {
+  if (!user) return false;
+  const role = (user.role || '').trim();
+  const designation = (user.designation || '').trim().toLowerCase();
+  const department = (user.department || '').trim().toLowerCase();
+  const empId = (user.employeeId || '').trim();
+
+  // CEO / Super Admin / Management / Managing Director
+  if (
+    role === 'Super Admin' ||
+    role === 'CEO' ||
+    role === 'Management' ||
+    role === 'ERP Administrator' ||
+    role === 'Admin' ||
+    designation === 'ceo' ||
+    designation.includes('chief executive') ||
+    designation.includes('managing director') ||
+    designation.includes('director') ||
+    empId === 'EMP-000'
+  ) {
+    return true;
+  }
+
+  // HR Admin / HR Manager / HR Staff
+  if (
+    role === 'HR Admin' ||
+    role === 'HR Manager' ||
+    role === 'HR' ||
+    designation.includes('hr') ||
+    designation.includes('human resource') ||
+    department === 'hr' ||
+    department.includes('human resource') ||
+    empId === 'EMP-006' || // Pavithra S (HR Manager)
+    empId === 'EMP-008'
+  ) {
+    return true;
+  }
+
+  return false;
 };
 
 export const toAppUser = (user: AuthUser): User => ({
@@ -137,7 +183,7 @@ export const authService = {
       const response = await safeFetch(`${getApiBase()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
+        body: JSON.stringify({ identifier: cleanId, password: cleanPass }),
       });
 
       if (response.ok) {
@@ -335,7 +381,7 @@ export const authService = {
     simulatedOtp?: string;
     employeeName?: string;
   }> {
-    const cleanId = emailOrEmployeeId.trim();
+    const cleanId = emailOrEmployeeId.trim().toLowerCase();
 
     try {
       const response = await safeFetch(`${getApiBase()}/auth/forgot-password`, {
