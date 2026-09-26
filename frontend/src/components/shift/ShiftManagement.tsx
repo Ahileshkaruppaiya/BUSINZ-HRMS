@@ -13,21 +13,18 @@ import {
   Check, 
   UserCheck, 
   Calendar,
-  AlertCircle,
-  Home
+  AlertCircle
 } from 'lucide-react';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
 interface ShiftManagementProps {
   openAddModal?: boolean;
   onCloseQuickAdd?: () => void;
-  onOpenWfhRequest?: () => void;
 }
 
 export const ShiftManagement: React.FC<ShiftManagementProps> = ({
   openAddModal = false,
-  onCloseQuickAdd,
-  onOpenWfhRequest
+  onCloseQuickAdd
 }) => {
   const { 
     shifts, 
@@ -316,14 +313,9 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
             </button>
           )}
           {isEmployee && (
-            <>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowSwapModal(true)}>
-                <ArrowRightLeft size={16} /> Request Shift Swap
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={onOpenWfhRequest}>
-                <Home size={16} /> Work From Home Request
-              </button>
-            </>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowSwapModal(true)}>
+              <ArrowRightLeft size={16} /> Request Shift Swap
+            </button>
           )}
         </div>
       </div>
@@ -399,8 +391,9 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
       )}
 
       {/* Active System Shifts Section */}
-      <div style={{ marginBottom: '28px' }}>
-        {shifts.length > 0 ? (
+      {!isEmployee && (
+        <div style={{ marginBottom: '28px' }}>
+          {shifts.length > 0 ? (
           <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
             {shifts.map(s => (
               <div 
@@ -493,14 +486,15 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
               </div>
             ))}
           </div>
-        ) : (
-          <div className="card" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
-            <Clock size={36} style={{ margin: '0 auto 12px', color: '#94A3B8' }} />
-            <h4 style={{ margin: '0 0 6px', color: '#1E293B', fontWeight: 600 }}>No Shifts Configured</h4>
-            <p style={{ margin: 0, fontSize: '0.88rem' }}>Click "+ Add New Shift" above to manually define your company working shifts.</p>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="card" style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
+              <Clock size={36} style={{ margin: '0 auto 12px', color: '#94A3B8' }} />
+              <h4 style={{ margin: '0 0 6px', color: '#1E293B', fontWeight: 600 }}>No Shifts Configured</h4>
+              <p style={{ margin: 0, fontSize: '0.88rem' }}>Click "+ Add New Shift" above to manually define your company working shifts.</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Shift Swap Requests Section */}
       <div className="card" style={{ marginTop: '28px', borderRadius: '16px', overflow: 'hidden' }}>

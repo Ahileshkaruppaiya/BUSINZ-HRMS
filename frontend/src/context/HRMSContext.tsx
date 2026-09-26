@@ -5034,10 +5034,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         days_count: finalDaysCount,
         reason: req.reason,
         status: 'Pending',
-      }).then(res => {
-        if (res.data?.id) {
-          setLeaveRequests(curr => curr.map(l => l.id === tempLeaveId ? { ...l, id: res.data.id } : l));
-        }
+      }).catch(err => {
+        console.warn('[HRMSContext] leave request cloud insert notice:', err);
       });
     }
 
@@ -7438,7 +7436,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Synchronize Leaves (DB table primary, settings fallback)
       if (Array.isArray(rawLeaves) && rawLeaves.length > 0) {
-        setLeaveRequests(rawLeaves.map((l: any) => ({
+        const mappedLeaves = rawLeaves.map((l: any) => ({
           id: l.id,
           employeeId: l.employee?.employee_id || l.employee_id,
           employeeName: l.employee ? `${l.employee.first_name || ''} ${l.employee.last_name || ''}`.trim() : 'Staff',
@@ -7452,9 +7450,27 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           appliedDate: l.applied_date || l.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
           approvedBy: l.approved_by,
           comment: l.comment
-        })));
+        }));
+        const leaveKey = (l: LeaveRequest) => [
+          l.employeeId,
+          l.leaveType,
+          l.startDate,
+          l.endDate,
+          l.reason || '',
+          l.status || 'Pending'
+        ].join('|').toLowerCase();
+        setLeaveRequests(prev => {
+          const dbIds = new Set(mappedLeaves.map((l: LeaveRequest) => l.id));
+          const dbKeys = new Set(mappedLeaves.map((l: LeaveRequest) => leaveKey(l)));
+          const localOnlyLeaves = prev.filter(l => (
+            String(l.id).startsWith('LR-') &&
+            !dbIds.has(l.id) &&
+            !dbKeys.has(leaveKey(l))
+          ));
+          return [...localOnlyLeaves, ...mappedLeaves];
+        });
       } else {
-        setLeaveRequests([]);
+        setLeaveRequests(prev => (isInitial ? [] : prev));
       }
 
       // Synchronize Assets (DB table primary, settings fallback)

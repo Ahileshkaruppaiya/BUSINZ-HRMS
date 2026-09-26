@@ -53,6 +53,19 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
   const isManagerRole = currentUser.role === 'Department Manager';
   const isPrivileged = currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin' || currentUser.role === 'HR Manager' || currentUser.role === 'CEO' || currentUser.role === 'Management';
   const canApprove = hasPermission('leaves', 'approve');
+  const currentEmployee = employees.find(emp => {
+    const fullName = `${emp.firstName} ${emp.lastName}`.trim().toLowerCase();
+    return (
+      Boolean(currentUser.employeeId && emp.employeeId === currentUser.employeeId) ||
+      Boolean(currentUser.id && (emp.id === currentUser.id || emp.employeeId === currentUser.id || (emp as any).authUserId === currentUser.id)) ||
+      Boolean(currentUser.email && emp.email?.toLowerCase() === currentUser.email.toLowerCase()) ||
+      Boolean(currentUser.name && fullName === currentUser.name.trim().toLowerCase())
+    );
+  });
+  const currentEmployeeId = currentEmployee?.employeeId || currentUser.employeeId || currentUser.id || 'EMP-001';
+  const currentEmployeeName = currentEmployee
+    ? `${currentEmployee.firstName} ${currentEmployee.lastName}`.trim()
+    : (currentUser.name || 'Staff Member');
 
   // Multi-row selection state
   const [selectedLeaveIds, setSelectedLeaveIds] = useState<string[]>([]);
@@ -78,14 +91,18 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
 
   // Role-based data scoping for leave applications
   const roleScopedLeaves = isEmployeeRole
-    ? leaveRequests.filter(l => l.employeeId === (currentUser.employeeId || 'EMP-001'))
+    ? leaveRequests.filter(l => (
+        l.employeeId === currentEmployeeId ||
+        l.employeeId === currentEmployee?.id ||
+        l.employeeName?.trim().toLowerCase() === currentEmployeeName.trim().toLowerCase()
+      ))
     : isManagerRole
     ? leaveRequests.filter(l => l.department === currentUser.department)
     : leaveRequests;
 
   const [showWfhModal, setShowWfhModal] = useState<boolean>(false);
   const [wfhForm, setWfhForm] = useState({
-    employeeId: currentUser.employeeId || 'EMP-001',
+    employeeId: currentEmployeeId,
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     reason: ''
@@ -106,13 +123,13 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
 
   const handleWfhSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const targetEmpId = isEmployeeRole ? (currentUser.employeeId || 'EMP-001') : wfhForm.employeeId;
-    const emp = employees.find(e => e.employeeId === targetEmpId) || employees[0];
+    const targetEmpId = isEmployeeRole ? currentEmployeeId : wfhForm.employeeId;
+    const emp = employees.find(e => e.employeeId === targetEmpId || e.id === targetEmpId) || currentEmployee || employees[0];
 
     applyLeave({
       employeeId: targetEmpId,
-      employeeName: `${emp.firstName} ${emp.lastName}`,
-      department: emp.department,
+      employeeName: emp ? `${emp.firstName} ${emp.lastName}`.trim() : currentEmployeeName,
+      department: emp?.department || currentUser.department || 'General',
       leaveType: 'Work From Home',
       startDate: wfhForm.startDate,
       endDate: wfhForm.endDate,
@@ -150,7 +167,7 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
   }, [displayedLeaves, currentPage, pageSize]);
 
   const [form, setForm] = useState({
-    employeeId: currentUser.employeeId || 'EMP-001',
+    employeeId: currentEmployeeId,
     leaveType: leavePolicies[0]?.name || 'Casual Leave (CL)',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
@@ -182,14 +199,15 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
   }, [openWfhModal]);
 
   React.useEffect(() => {
-    if (currentUser.employeeId) {
-      setForm(prev => ({ ...prev, employeeId: currentUser.employeeId || 'EMP-001' }));
+    if (currentEmployeeId) {
+      setForm(prev => ({ ...prev, employeeId: currentEmployeeId }));
+      setWfhForm(prev => ({ ...prev, employeeId: currentEmployeeId }));
     }
-  }, [currentUser]);
+  }, [currentEmployeeId]);
 
   // Live Dynamic Sandwich Calculation for the active application modal
   const liveCalculation: SandwichCalculationResult | null = useMemo(() => {
-    const targetEmpId = isEmployeeRole ? (currentUser.employeeId || 'EMP-001') : form.employeeId;
+    const targetEmpId = isEmployeeRole ? currentEmployeeId : form.employeeId;
     if (!targetEmpId || !form.startDate || !form.endDate) return null;
 
     try {
@@ -207,13 +225,13 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const targetEmpId = isEmployeeRole ? (currentUser.employeeId || 'EMP-001') : form.employeeId;
-    const emp = employees.find(e => e.employeeId === targetEmpId) || employees[0];
+    const targetEmpId = isEmployeeRole ? currentEmployeeId : form.employeeId;
+    const emp = employees.find(e => e.employeeId === targetEmpId || e.id === targetEmpId) || currentEmployee || employees[0];
     
     applyLeave({
       employeeId: targetEmpId,
-      employeeName: `${emp.firstName} ${emp.lastName}`,
-      department: emp.department,
+      employeeName: emp ? `${emp.firstName} ${emp.lastName}`.trim() : currentEmployeeName,
+      department: emp?.department || currentUser.department || 'General',
       leaveType: form.leaveType,
       startDate: form.startDate,
       endDate: form.endDate,

@@ -125,16 +125,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
       case 'leaves':
         return <LeaveManagement openApplyModal={quickAddModal === 'leave'} openWfhModal={quickAddModal === 'wfh'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'shifts':
-        return (
-          <ShiftManagement
-            openAddModal={quickAddModal === 'shift'}
-            onCloseQuickAdd={() => setQuickAddModal(null)}
-            onOpenWfhRequest={() => {
-              setQuickAddModal('wfh');
-              setActiveModule('leaves');
-            }}
-          />
-        );
+        return <ShiftManagement openAddModal={quickAddModal === 'shift'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'overtime':
         return <OvertimeManagementModule openRequestModal={quickAddModal === 'overtime'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'performance':
