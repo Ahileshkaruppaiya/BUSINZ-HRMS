@@ -49,7 +49,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
   const showChatBot = isHrOrCeo && activeModule === 'dashboard';
 
   // Quick Add modal states
-  const [quickAddModal, setQuickAddModal] = useState<'employee' | 'leave' | 'task' | 'expense' | 'overtime' | 'shift' | 'advance_salary' | null>(null);
+  const [quickAddModal, setQuickAddModal] = useState<'employee' | 'leave' | 'wfh' | 'task' | 'expense' | 'overtime' | 'shift' | 'advance_salary' | null>(null);
 
   // Monitor viewport resize for responsive mobile detection
   useEffect(() => {
@@ -123,9 +123,18 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
       case 'gps_geofence':
         return <GpsGeofencePortal />;
       case 'leaves':
-        return <LeaveManagement openApplyModal={quickAddModal === 'leave'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
+        return <LeaveManagement openApplyModal={quickAddModal === 'leave'} openWfhModal={quickAddModal === 'wfh'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'shifts':
-        return <ShiftManagement openAddModal={quickAddModal === 'shift'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
+        return (
+          <ShiftManagement
+            openAddModal={quickAddModal === 'shift'}
+            onCloseQuickAdd={() => setQuickAddModal(null)}
+            onOpenWfhRequest={() => {
+              setQuickAddModal('wfh');
+              setActiveModule('leaves');
+            }}
+          />
+        );
       case 'overtime':
         return <OvertimeManagementModule openRequestModal={quickAddModal === 'overtime'} onCloseQuickAdd={() => setQuickAddModal(null)} />;
       case 'performance':

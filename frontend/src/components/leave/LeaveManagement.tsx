@@ -28,10 +28,11 @@ import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils
 
 interface LeaveManagementProps {
   openApplyModal?: boolean;
+  openWfhModal?: boolean;
   onCloseQuickAdd?: () => void;
 }
 
-export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal, onCloseQuickAdd }) => {
+export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal, openWfhModal, onCloseQuickAdd }) => {
   const { 
     leaveRequests, 
     applyLeave, 
@@ -120,6 +121,7 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
     });
 
     setShowWfhModal(false);
+    if (onCloseQuickAdd) onCloseQuickAdd();
     setWfhForm(prev => ({
       ...prev,
       startDate: new Date().toISOString().split('T')[0],
@@ -174,6 +176,10 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
   React.useEffect(() => {
     if (openApplyModal) setShowModal(true);
   }, [openApplyModal]);
+
+  React.useEffect(() => {
+    if (openWfhModal) setShowWfhModal(true);
+  }, [openWfhModal]);
 
   React.useEffect(() => {
     if (currentUser.employeeId) {
@@ -1200,7 +1206,10 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
               </div>
               <button 
                 type="button"
-                onClick={() => setShowWfhModal(false)}
+                onClick={() => {
+                  setShowWfhModal(false);
+                  if (onCloseQuickAdd) onCloseQuickAdd();
+                }}
                 style={{
                   width: '30px',
                   height: '30px',
@@ -1321,7 +1330,10 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => setShowWfhModal(false)}
+                  onClick={() => {
+                    setShowWfhModal(false);
+                    if (onCloseQuickAdd) onCloseQuickAdd();
+                  }}
                   style={{ borderRadius: '10px', padding: '8px 18px' }}
                 >
                   Cancel

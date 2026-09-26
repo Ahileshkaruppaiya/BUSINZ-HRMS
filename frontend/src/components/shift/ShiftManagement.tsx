@@ -13,18 +13,21 @@ import {
   Check, 
   UserCheck, 
   Calendar,
-  AlertCircle 
+  AlertCircle,
+  Home
 } from 'lucide-react';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
 interface ShiftManagementProps {
   openAddModal?: boolean;
   onCloseQuickAdd?: () => void;
+  onOpenWfhRequest?: () => void;
 }
 
 export const ShiftManagement: React.FC<ShiftManagementProps> = ({
   openAddModal = false,
-  onCloseQuickAdd
+  onCloseQuickAdd,
+  onOpenWfhRequest
 }) => {
   const { 
     shifts, 
@@ -313,9 +316,14 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
             </button>
           )}
           {isEmployee && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowSwapModal(true)}>
-              <ArrowRightLeft size={16} /> Request Shift Swap
-            </button>
+            <>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowSwapModal(true)}>
+                <ArrowRightLeft size={16} /> Request Shift Swap
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={onOpenWfhRequest}>
+                <Home size={16} /> Work From Home Request
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -358,13 +366,6 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
                   Your official rostered timings for workdays
                 </p>
               </div>
-              <button 
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowSwapModal(true)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <ArrowRightLeft size={14} /> Request Change
-              </button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
@@ -514,11 +515,6 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
                 : 'Track the status of your submitted shift swap requests.'}
             </p>
           </div>
-          {isEmployee && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowSwapModal(true)}>
-              <Plus size={14} /> New Request
-            </button>
-          )}
         </div>
 
         {displayedShiftRequests.length === 0 ? (

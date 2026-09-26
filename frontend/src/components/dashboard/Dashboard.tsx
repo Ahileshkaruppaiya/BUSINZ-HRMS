@@ -5,7 +5,6 @@ import { EmployeeProfile } from '../employees/EmployeeProfile';
 import { AttendanceCategoryModal, AttendanceCategoryType } from './AttendanceCategoryModal';
 import { TodayAttendanceCard } from './TodayAttendanceCard';
 import { EmployeeMonthlyAttendanceCard } from './EmployeeMonthlyAttendanceCard';
-import { ShiftCheckInCard } from '../attendance/ShiftCheckInCard';
 import { Employee, LeaveRequest, TaskItem, HolidayItem } from '../../types/hrms';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { 
@@ -52,10 +51,6 @@ export const Dashboard: React.FC = () => {
     currentUser.designation === 'CEO' || 
     (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) || 
     currentUser.employeeId === 'EMP-000';
-  const isAccountsUser = 
-    currentUser.role === 'Finance Manager' ||
-    (currentUser.department && (currentUser.department.toLowerCase().includes('accounts') || currentUser.department.toLowerCase().includes('finance'))) ||
-    (currentUser.designation && (currentUser.designation.toLowerCase().includes('account') || currentUser.designation.toLowerCase().includes('finance')));
   const isEmployee = currentUser.role === 'Employee' && !isCEO;
   const [profileModalEmployee, setProfileModalEmployee] = useState<Employee | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<AttendanceCategoryType | null>(null);
@@ -835,13 +830,6 @@ export const Dashboard: React.FC = () => {
           </>
         )}
       </div>
-
-      {/* Employee Shift Check-In & Window Status Card (Hidden for Accounts site) */}
-      {isEmployee && !isAccountsUser && (
-        <div style={{ marginBottom: '20px' }}>
-          <ShiftCheckInCard onOpenFaceAttendance={() => setActiveModule('face_attendance')} />
-        </div>
-      )}
 
       {/* Second Row Widgets (ControlRoom Uniform Grid: Same Size All Boxes) */}
       <div className="dashboard-widget-grid">
