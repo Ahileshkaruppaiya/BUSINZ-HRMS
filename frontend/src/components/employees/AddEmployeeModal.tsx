@@ -57,10 +57,120 @@ interface UploadedDoc {
   uploadDate: string;
 }
 
+const CURRENT_YEAR = new Date().getFullYear();
 const PASSING_YEARS = Array.from(
-  { length: (new Date().getFullYear() + 4) - 1960 + 1 },
-  (_, i) => String((new Date().getFullYear() + 4) - i)
+  { length: CURRENT_YEAR - 1960 + 1 },
+  (_, i) => String(CURRENT_YEAR - i)
 );
+
+export const HIGHEST_QUALIFICATION_OPTIONS = ['UG', 'PG', 'Diploma', 'Others'] as const;
+
+export const DEGREE_OPTIONS_BY_QUALIFICATION: Record<string, string[]> = {
+  UG: [
+    'B.E / B.Tech (Engineering / Technology)',
+    'B.Sc / BCA (Science / Computer Apps)',
+    'B.Com / B.A / BBA (Commerce / Arts / Admin)',
+    'B.Arch / B.Des (Architecture / Design)',
+    'B.Pharm / Medical (Pharmacy / Medicine)',
+    'Other UG Degree'
+  ],
+  PG: [
+    'M.E / M.Tech (Master of Engineering)',
+    'MBA (Master of Business Admin)',
+    'MCA (Master of Computer Apps)',
+    'M.Sc / M.Com / M.A (Post Graduate)',
+    'Ph.D / Doctorate Research',
+    'Other PG Degree'
+  ],
+  Diploma: [
+    'Diploma (Polytechnic / Technical)',
+    'Diploma in Mechanical Engineering',
+    'Diploma in Civil Engineering',
+    'Diploma in Electrical & Electronics (EEE)',
+    'Diploma in Electronics & Communication (ECE)',
+    'Diploma in Computer Engineering / IT',
+    'Other Diploma'
+  ],
+  Others: [
+    'ITI Certification',
+    '12th Standard / HSC',
+    '10th Standard / SSLC',
+    'Vocational Training / Certificate',
+    'Other Equivalent Qualification'
+  ]
+};
+
+export const ALL_DEGREE_OPTIONS: string[] = Array.from(
+  new Set(Object.values(DEGREE_OPTIONS_BY_QUALIFICATION).flat())
+);
+
+export const normalizeQualification = (qual?: string): string => {
+  if (!qual) return 'UG';
+  const q = qual.trim();
+  if (['UG', 'PG', 'Diploma', 'Others'].includes(q)) return q;
+  if (/B\.E|B\.Tech|B\.Sc|BCA|B\.Com|B\.A|BBA|UG|Bachelor/i.test(q)) return 'UG';
+  if (/M\.E|M\.Tech|MBA|MCA|M\.Sc|M\.Com|M\.A|Ph\.D|Doctorate|PG|Master/i.test(q)) return 'PG';
+  if (/Diploma|Polytechnic/i.test(q)) return 'Diploma';
+  return 'Others';
+};
+
+// Real-time Keystroke Format Filters
+const allowControlKeys = (e: React.KeyboardEvent) => {
+  return (
+    ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Enter', 'Home', 'End'].includes(e.key) ||
+    e.ctrlKey || e.metaKey || e.altKey
+  );
+};
+
+const handleLettersOnlyKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z\s]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleDigitsOnlyKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[0-9]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleDecimalKeyDown = (currentVal: string) => (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (e.key === '.' && !currentVal.includes('.')) return;
+  if (!/^[0-9]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleUniversityKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z\s&.\-]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleAddressLineKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z0-9\s,.\-/#]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleAlphanumericKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z0-9]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleCompanyKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z0-9\s&.\-()]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
 
 export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ 
   isOpen, 
@@ -80,7 +190,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     businessSettings,
     employeeConfig,
     resetEmployeeLogin,
-    payrollSettingsConfig
+    payrollSettingsConfig,
+    employmentTypes,
+    orgStructure,
+    currentUser,
+    companyBranches
   } = useHRMS();
 
   // Dynamic salary components configured in Settings → Payroll Settings
@@ -91,6 +205,75 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const activeDeductions = useMemo(() => {
     return (payrollSettingsConfig?.components || []).filter(c => c.active && c.type === 'DEDUCTION');
   }, [payrollSettingsConfig]);
+
+  const employmentTypeOptions = useMemo(() => {
+    const names = [
+      ...(orgStructure?.employmentTypes || []),
+      ...(employmentTypes || []).filter(t => t.status !== 'Inactive').map(t => t.name)
+    ]
+      .map(name => name.trim())
+      .filter(Boolean);
+
+    const uniqueNames = Array.from(new Map(names.map(name => [name.toLowerCase(), name])).values());
+    return uniqueNames.length > 0 ? uniqueNames : ['Full-Time', 'Intern', 'Provisional'];
+  }, [orgStructure, employmentTypes]);
+
+  const defaultEmploymentType = employmentTypeOptions[0] || 'Full-Time';
+  const workLocationOptions = useMemo(() => {
+    const options = [
+      ...(companyBranches || []).map(branch => ({
+        value: branch.branchName?.trim(),
+        label: `${branch.branchName?.trim()}${branch.address?.city ? ` (${branch.address.city})` : ''}`
+      })),
+      ...(branches || []).map(branch => ({
+        value: branch.name?.trim(),
+        label: `${branch.name?.trim()}${branch.location ? ` (${branch.location})` : ''}`
+      })),
+      ...(orgStructure?.workLocations || []).map(location => ({
+        value: location.trim(),
+        label: location.trim()
+      }))
+    ].filter(option => option.value);
+
+    return Array.from(new Map(options.map(option => [option.value.toLowerCase(), option])).values());
+  }, [companyBranches, branches, orgStructure]);
+
+  const defaultWorkLocation = workLocationOptions[0]?.value || '';
+
+  // Dynamic designations configured in Settings → Organization Settings / Company Details
+  const dynamicDesignations = useMemo(() => {
+    const list = [
+      ...(orgStructure?.designations || []),
+      ...(designations || []).map(d => d.title)
+    ]
+      .map(t => t.replace(/[0-9]/g, '').trim())
+      .filter(t => Boolean(t) && t.toLowerCase() !== 'managing director' && t.toLowerCase() !== 'ceo');
+
+    return Array.from(new Set(list));
+  }, [orgStructure, designations]);
+  const getCreatorReportingManager = () => {
+    const currentEmployee = employees.find(emp => {
+      const fullName = `${emp.firstName} ${emp.lastName}`.trim().toLowerCase();
+      return (
+        Boolean(currentUser?.employeeId && emp.employeeId === currentUser.employeeId) ||
+        Boolean(currentUser?.id && (emp.id === currentUser.id || (emp as any).authUserId === currentUser.id)) ||
+        Boolean(currentUser?.email && emp.email?.toLowerCase() === currentUser.email.toLowerCase()) ||
+        Boolean(currentUser?.name && fullName === currentUser.name.toLowerCase().trim())
+      );
+    });
+
+    const name = currentEmployee
+      ? `${currentEmployee.firstName} ${currentEmployee.lastName}`.trim()
+      : (currentUser?.name || '');
+
+    return {
+      id: currentEmployee?.employeeId || currentUser?.employeeId || currentUser?.id || '',
+      name,
+      designation: currentEmployee?.designation || currentUser?.designation || currentUser?.role || ''
+    };
+  };
+
+  const creatorReportingManager = getCreatorReportingManager();
   const [step, setStep] = useState<number>(1);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [createdEmployee, setCreatedEmployee] = useState<Employee | null>(null);
@@ -124,7 +307,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   // Auto-initialize components from Payroll Settings when modal opens
   useEffect(() => {
     if (isOpen && activeEarnings.length > 0 && Object.keys(formData.customComponents || {}).length === 0) {
-      handleCtcChange(formData.monthlyCtc || 15000);
+      handleCtcChange(String(formData.monthlyCtc || 15000));
     }
   }, [isOpen, activeEarnings]);
 
@@ -164,18 +347,17 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     dob: '',
     phone: '',
     personalEmail: '',
-    companyEmail: '',
     password: '',
     maritalStatus: '' as 'Single' | 'Married' | 'Divorced' | 'Widowed' | '',
 
     // 2. Employment Information
     joiningDate: new Date().toISOString().split('T')[0],
-    department: departments[0]?.name || 'HR',
-    designation: designations[0]?.title || 'HR Manager',
-    employmentType: 'Full-Time' as Employee['employmentType'],
-    reportingManagerId: employees[0]?.employeeId || 'EMP-000',
-    reportingManagerName: employees[0] ? `${employees[0].firstName} ${employees[0].lastName}`.trim() : 'Velmurugan',
-    workLocation: branches[0]?.name || 'Chennai HQ',
+    department: departments.find(d => !['ceo'].includes(d.name.toLowerCase()))?.name || 'Accounts',
+    designation: dynamicDesignations[0] || '',
+    employmentType: defaultEmploymentType,
+    reportingManagerId: creatorReportingManager.id,
+    reportingManagerName: creatorReportingManager.name,
+    workLocation: defaultWorkLocation,
     status: 'Active' as Employee['status'],
 
     // 3. Address & Emergency Contact
@@ -198,8 +380,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     emergencyAltMobile: '',
 
     // 4. Educational Details
-    qualification: 'B.E / B.Tech',
-    degreeName: '',
+    qualification: 'UG',
+    degreeName: 'B.E / B.Tech (Engineering / Technology)',
     specialization: '',
     university: '',
     yearOfPassing: '',
@@ -240,7 +422,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
     // 6. Attendance & Shift
     attendanceMethod: 'Face Scan' as Employee['attendanceMethod'],
-    shift: shifts[0]?.shiftName || '',
+    shift: shifts[0]?.shiftName || 'General Day Shift',
     weeklyOff: weeklySchedules[0]?.name || 'Sunday',
     holidayCalendar: holidayPolicies[0]?.name || 'Tamil Nadu Industrial Calendar (14 Days)',
     leavePolicy: leavePolicies[0]?.name || 'Standard 18 Casual + 12 Medical + 10 Earned',
@@ -255,15 +437,110 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   };
 
   const [formData, setFormData] = useState(defaultFormData);
+  const [salaryInputDrafts, setSalaryInputDrafts] = useState<Record<string, string>>({});
   const [documents, setDocuments] = useState<UploadedDoc[]>([]);
+  const [isCustomDesignation, setIsCustomDesignation] = useState<boolean>(false);
+  const [isCustomDegree, setIsCustomDegree] = useState<boolean>(false);
 
-  // Sync official email and username when names change
+  // Maximum allowed DOB date for 18+ requirement
+  const maxDobDate = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 18);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  const isCEO = formData.department?.toUpperCase() === 'CEO' || formData.role === 'CEO' || formData.designation?.toUpperCase() === 'CEO';
+
+  const salaryInputValue = (key: string, value: number) => (
+    Object.prototype.hasOwnProperty.call(salaryInputDrafts, key) ? salaryInputDrafts[key] : value
+  );
+
+  const setSalaryDraft = (key: string, rawValue: string) => {
+    setSalaryInputDrafts(prev => {
+      const next = { ...prev };
+      if (rawValue === '') {
+        next[key] = '';
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
+  };
+
+  const allSteps = [
+    { num: 1, label: 'Personal', fullTitle: 'Basic Personal Information', icon: User },
+    { num: 2, label: 'Employment', fullTitle: 'Employment & Role Details', icon: Briefcase },
+    { num: 3, label: 'Address', fullTitle: 'Address & Emergency Contacts', icon: MapPin },
+    { num: 4, label: 'Education', fullTitle: 'Educational Background & Qualifications', icon: GraduationCap },
+    { num: 5, label: 'Experience', fullTitle: 'Previous Work Experience & History', icon: Award, exemptForCEO: true },
+    { num: 6, label: 'Salary', fullTitle: 'Salary, Compensation & Bank Details', icon: CreditCard, exemptForCEO: true },
+    { num: 7, label: 'Attendance', fullTitle: 'Attendance Mode & Work Shifts', icon: Clock, exemptForCEO: true },
+    { num: 8, label: 'Documents', fullTitle: 'Employee Documents & Verification', icon: FolderPlus, exemptForCEO: true },
+    { num: 9, label: 'Review', fullTitle: 'Comprehensive Onboarding Review', icon: CheckCheck }
+  ];
+
+  const stepsList = isCEO ? allSteps.filter(s => !s.exemptForCEO) : allSteps;
+  const currentStepIndex = Math.max(0, stepsList.findIndex(s => s.num === step));
+  const currentStep = stepsList[currentStepIndex] || stepsList[0];
+
+  const standardDeptOptions = [
+    { id: 'dept-ceo', name: 'CEO' },
+    { id: 'dept-hr', name: 'HR' },
+    { id: 'dept-accounts', name: 'Accounts' }
+  ];
+  const allDepartmentOptions = [...standardDeptOptions];
+  departments.forEach(d => {
+    if (!allDepartmentOptions.some(opt => opt.name.toLowerCase() === d.name.toLowerCase())) {
+      allDepartmentOptions.push(d);
+    }
+  });
+
+  const getDepartmentAccessProfile = (deptName: string) => {
+    const normalizedDept = deptName.trim().toLowerCase();
+    const isCeoDept = normalizedDept === 'ceo' || normalizedDept.includes('ceo');
+    const isHrDept = normalizedDept === 'hr' || normalizedDept.includes('human resource');
+    const isAccountsDept = normalizedDept === 'accounts' || normalizedDept.includes('account') || normalizedDept.includes('finance');
+
+    if (isCeoDept) {
+      return {
+        department: 'CEO',
+        role: 'CEO' as Role,
+        designation: 'CEO',
+        permissions: ['Dashboard', 'Employees', 'Attendance', 'Leaves', 'Payroll', 'Finance', 'Tasks', 'Settings']
+      };
+    }
+
+    if (isHrDept) {
+      return {
+        department: deptName,
+        role: 'HR Manager' as Role,
+        designation: 'HR Manager',
+        permissions: ['Dashboard', 'Employees', 'Attendance', 'Leaves', 'Payroll', 'Finance', 'Tasks']
+      };
+    }
+
+    if (isAccountsDept) {
+      return {
+        department: deptName,
+        role: 'Employee' as Role,
+        designation: 'Accounts Executive',
+        permissions: ['Dashboard', 'Attendance', 'Leaves', 'Payroll', 'Finance', 'Advance Salary', 'Tasks']
+      };
+    }
+
+    return {
+      department: deptName,
+      role: 'Employee' as Role,
+      designation: '',
+      permissions: ['Dashboard', 'Attendance', 'Leaves', 'Tasks']
+    };
+  };
+
+  // Sync official username when names change
   useEffect(() => {
     if (formData.firstName && formData.lastName) {
-      const generatedEmail = `${formData.firstName.toLowerCase().replace(/\s+/g, '')}.${formData.lastName.toLowerCase().replace(/\s+/g, '')}@businz.com`;
       setFormData(prev => ({
         ...prev,
-        companyEmail: prev.companyEmail || generatedEmail,
         officialUsername: prev.officialUsername || `${formData.firstName.toLowerCase()}.${formData.lastName.toLowerCase()}`
       }));
     }
@@ -274,43 +551,119 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       setFormData(prev => ({
         ...prev,
         role: 'CEO',
-        department: 'Management',
+        department: 'CEO',
         designation: 'CEO',
+        reportingManagerName: 'Self / Board of Directors',
+        reportingManagerId: 'OWNER-001',
         attendanceMethod: 'Exempt',
         gpsAllowed: false,
+        monthlyCtc: 0,
+        basicSalary: 0,
         permissions: ['Dashboard', 'Employees', 'Attendance', 'Leaves', 'Payroll', 'Finance', 'Tasks', 'Settings']
       }));
     } else if (selectedRole === 'HR Manager' || selectedRole === 'HR Admin') {
+      const manager = getCreatorReportingManager();
       setFormData(prev => ({
         ...prev,
         role: selectedRole,
-        department: 'HR',
+        department: prev.department === 'CEO' ? 'HR' : prev.department,
         designation: 'HR Manager',
+        reportingManagerName: manager.name,
+        reportingManagerId: manager.id,
         attendanceMethod: 'Face Scan',
         gpsAllowed: true,
         permissions: ['Dashboard', 'Employees', 'Attendance', 'Leaves', 'Payroll', 'Finance', 'Tasks']
       }));
     } else if (selectedRole === 'Finance Manager') {
+      const manager = getCreatorReportingManager();
       setFormData(prev => ({
         ...prev,
         role: 'Finance Manager',
-        department: 'Accounts',
+        department: prev.department === 'CEO' ? 'Accounts' : prev.department,
         designation: 'Finance Manager',
+        reportingManagerName: manager.name,
+        reportingManagerId: manager.id,
         attendanceMethod: 'Face Scan',
         gpsAllowed: true,
         permissions: ['Dashboard', 'Payroll', 'Finance', 'Tasks']
       }));
     } else {
+      const manager = getCreatorReportingManager();
       setFormData(prev => ({
         ...prev,
         role: 'Employee',
-        department: prev.department === 'Management' ? 'Operations' : prev.department,
-        designation: prev.designation === 'CEO' ? 'Staff Employee' : prev.designation,
+        department: prev.department === 'CEO' ? 'Operations' : prev.department,
+        designation: prev.designation === 'CEO' ? (designations[0]?.title || 'Staff Employee') : prev.designation,
+        reportingManagerName: manager.name,
+        reportingManagerId: manager.id,
         attendanceMethod: prev.attendanceMethod === 'Exempt' ? 'Face Scan' : prev.attendanceMethod,
         gpsAllowed: true,
         permissions: ['Dashboard', 'Attendance', 'Leaves', 'Tasks']
       }));
     }
+  };
+
+  const handleDepartmentSelectionChange = (deptName: string) => {
+    const accessProfile = getDepartmentAccessProfile(deptName);
+    const isAccountsDept = deptName.toLowerCase().includes('account') || deptName.toLowerCase().includes('finance');
+
+    if (accessProfile.role === 'CEO') {
+      setFormData(prev => ({
+        ...prev,
+        department: accessProfile.department,
+        role: accessProfile.role,
+        designation: accessProfile.designation,
+        reportingManagerName: 'Self / Board of Directors',
+        reportingManagerId: 'OWNER-001',
+        attendanceMethod: 'Exempt',
+        gpsAllowed: false,
+        monthlyCtc: 0,
+        basicSalary: 0,
+        permissions: accessProfile.permissions
+      }));
+    } else if (accessProfile.role === 'HR Manager') {
+      const manager = getCreatorReportingManager();
+      setFormData(prev => ({
+        ...prev,
+        department: accessProfile.department,
+        role: accessProfile.role,
+        designation: accessProfile.designation,
+        reportingManagerName: manager.name,
+        reportingManagerId: manager.id,
+        attendanceMethod: 'Face Scan',
+        gpsAllowed: true,
+        permissions: accessProfile.permissions
+      }));
+    } else if (accessProfile.role === 'Finance Manager' || isAccountsDept) {
+      const manager = getCreatorReportingManager();
+      setFormData(prev => ({
+        ...prev,
+        department: accessProfile.department,
+        role: accessProfile.role,
+        designation: prev.designation === 'CEO' || prev.designation === 'HR Manager' || prev.designation === 'Managing Director' || !prev.designation ? accessProfile.designation : prev.designation,
+        reportingManagerName: manager.name,
+        reportingManagerId: manager.id,
+        attendanceMethod: 'Face Scan',
+        gpsAllowed: true,
+        permissions: accessProfile.permissions
+      }));
+    } else {
+      const manager = getCreatorReportingManager();
+      setFormData(prev => ({
+        ...prev,
+        department: accessProfile.department,
+        role: accessProfile.role,
+        designation: prev.designation === 'CEO' || prev.designation === 'HR Manager' || prev.designation === 'Finance Manager' || prev.designation === 'Managing Director'
+          ? (dynamicDesignations[0] || '')
+          : prev.designation,
+        reportingManagerName: manager.name,
+        reportingManagerId: manager.id,
+        attendanceMethod: prev.attendanceMethod === 'Exempt' ? 'Face Scan' : prev.attendanceMethod,
+        gpsAllowed: true,
+        permissions: accessProfile.permissions
+      }));
+    }
+    if (validationError) setValidationError(null);
   };
 
   // Sync permanent address when sameAsCurrent is toggled
@@ -332,12 +685,14 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setStep(1);
+      setSalaryInputDrafts({});
       const nextAutoId = generateNextEmployeeId(
         employees,
         employeeConfig?.idFormatPrefix || businessSettings?.employeeCodePrefix || 'EMP',
         employeeConfig?.idFormatDigits || 3,
         employeeConfig?.idStartingNumber || 1
       );
+      const manager = getCreatorReportingManager();
       setFormData({
         ...defaultFormData,
         employeeId: nextAutoId,
@@ -345,7 +700,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         lastName: '',
         phone: '',
         personalEmail: '',
-        password: 'Password@123',
+        password: '',
         currentLine1: '',
         currentLine2: '',
         currentCity: '',
@@ -359,7 +714,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         emergencyName: '',
         emergencyMobile: '',
         emergencyAltMobile: '',
-        department: departments[0]?.name || 'HR'
+        department: departments[0]?.name || 'HR',
+        reportingManagerId: manager.id,
+        reportingManagerName: manager.name,
+        workLocation: defaultWorkLocation,
+        shift: shifts[0]?.shiftName || defaultFormData.shift
       });
       setDocuments([]);
       setIsSuccess(false);
@@ -368,8 +727,118 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   }, [isOpen]);
 
   const handleChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    let sanitizedValue = value;
+
+    // Names & Alphabet-only fields
+    if (['firstName', 'lastName', 'emergencyName', 'currentCity', 'permanentCity', 'currentState', 'permanentState', 'currentCountry', 'permanentCountry'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s]/g, '') : value;
+    }
+
+    // Address Lines (Letters, numbers, spaces, and , . - / #)
+    if (['currentLine1', 'currentLine2', 'permanentLine1', 'permanentLine2'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '') : value;
+    }
+
+    // Pincode (Exactly digits, max 6)
+    if (field === 'currentPincode' || field === 'permanentPincode') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/\D/g, '').slice(0, 6) : value;
+    }
+
+    // University (Letters, spaces, and &, -, . strictly - no digits/symbols)
+    if (field === 'university') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s&.\-]/g, '') : value;
+    }
+
+    // Degree Name
+    if (field === 'degreeName') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9\s&.\-()/]/g, '') : value;
+    }
+
+    // Specialization (Letters, spaces, and &, -, . ONLY - strictly no digits)
+    if (field === 'specialization') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s&.\-]/g, '') : value;
+    }
+
+    // Grade / Percentage (0 to 100, decimal allowed)
+    if (field === 'gradePercentage') {
+      if (typeof value === 'string') {
+        let val = value.replace(/[^0-9.]/g, '');
+        const parts = val.split('.');
+        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+        if (parseFloat(val) > 100) val = '100';
+        sanitizedValue = val;
+      }
+    }
+
+    // Total Experience (non-negative decimal allowed e.g. 2.5)
+    if (field === 'totalExperience' || field === 'relevantExperience') {
+      if (typeof value === 'string') {
+        let val = value.replace(/[^0-9.]/g, '');
+        const parts = val.split('.');
+        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+        sanitizedValue = val;
+      } else if (typeof value === 'number') {
+        sanitizedValue = Math.max(0, value).toString();
+      }
+    }
+
+    // Previous Company & Location
+    if (field === 'previousCompany' || field === 'previousCompanyLocation') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9\s&.\-(),/]/g, '') : value;
+    }
+
+    // Designation & Previous Designation
+    if (field === 'designation') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[0-9]/g, '') : value;
+    }
+    if (field === 'previousDesignation') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9\s&.\-()]/g, '') : value;
+    }
+
+    // Last Drawn Salary (decimal positive)
+    if (field === 'lastDrawnSalary') {
+      if (typeof value === 'string') {
+        let val = value.replace(/[^0-9.]/g, '');
+        const parts = val.split('.');
+        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+        sanitizedValue = val;
+      }
+    }
+
+    // Bank Name (letters, spaces, &, -, ()) - not numeric-only
+    if (field === 'bankName') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s&.\-()]/g, '') : value;
+    }
+
+    // Account Number (digits only, max 18)
+    if (field === 'accountNumber') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/\D/g, '').slice(0, 18) : value;
+    }
+
+    // IFSC Code (alphanumeric uppercase, max 11)
+    if (field === 'ifscCode') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 11) : value;
+    }
+
+    // PAN Number (alphanumeric uppercase, max 10)
+    if (field === 'panNumber') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10) : value;
+    }
+
+    // UAN Number (digits only, max 12)
+    if (field === 'uanNumber') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/\D/g, '').slice(0, 12) : value;
+    }
+
+    setFormData(prev => ({ ...prev, [field]: sanitizedValue }));
     if (validationError) setValidationError(null);
+  };
+
+  const handleQualificationChange = (newQual: string) => {
+    setIsCustomDegree(false);
+    const defaultDeg = DEGREE_OPTIONS_BY_QUALIFICATION[newQual]?.[0] || 'B.E / B.Tech (Engineering / Technology)';
+    handleChange('qualification', newQual);
+    handleChange('degreeName', defaultDeg);
   };
 
   const validateCurrentStep = (currStep: number): string | null => {
@@ -379,7 +848,13 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       if (isDuplicateId) return `Employee ID "${formData.employeeId}" is already registered. Please provide a unique ID.`;
 
       if (!formData.firstName.trim()) return 'First Name is mandatory.';
+      if (!/^[a-zA-Z\s]+$/.test(formData.firstName.trim())) {
+        return 'First Name must contain letters and spaces only. Numbers and symbols are not allowed.';
+      }
       if (!formData.lastName.trim()) return 'Last Name is mandatory.';
+      if (!/^[a-zA-Z\s]+$/.test(formData.lastName.trim())) {
+        return 'Last Name must contain letters and spaces only. Numbers and symbols are not allowed.';
+      }
       if (!formData.gender) return 'Gender is mandatory. Please select an option.';
 
       if (!formData.dob) return 'Date of Birth is mandatory.';
@@ -388,27 +863,25 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       const today = new Date();
       if (birthDate >= today) return 'Date of Birth must be in the past.';
       const ageInYears = (today.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-      if (ageInYears < 14) return 'Employee must be at least 14 years of age.';
+      if (ageInYears < 18) {
+        return 'Employee must be at least 18 years of age. Date of Birth indicating below 18 is not allowed.';
+      }
 
       if (!formData.phone.trim()) return 'Mobile Phone number is mandatory.';
       const digits = formData.phone.replace(/\D/g, '');
       if (digits.length !== 10) return 'Please enter a valid 10-digit mobile phone number.';
 
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!formData.personalEmail.trim()) {
-        return 'Personal Email ID is mandatory.';
+      const cleanEmail = formData.personalEmail.trim().toLowerCase();
+      if (!cleanEmail) {
+        return 'Email ID is required.';
       }
-      if (!emailRegex.test(formData.personalEmail.trim())) {
-        return 'Please enter a valid personal email format.';
+      const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+      if (!emailRegex.test(cleanEmail) || /\s/.test(formData.personalEmail)) {
+        return 'Please enter a valid email ID.';
       }
-      if (formData.companyEmail) {
-        if (!emailRegex.test(formData.companyEmail.trim())) {
-          return 'Please enter a valid company email format.';
-        }
-        const isDuplicateEmail = employees.some(e => e.email.toLowerCase() === formData.companyEmail.trim().toLowerCase());
-        if (isDuplicateEmail) {
-          return `Company email "${formData.companyEmail}" is already registered for another employee.`;
-        }
+      const isDuplicateEmail = employees.some(e => e.email.toLowerCase().trim() === cleanEmail);
+      if (isDuplicateEmail) {
+        return 'Email ID already exists.';
       }
 
       if (!formData.maritalStatus) return 'Marital Status is mandatory. Please select an option.';
@@ -417,35 +890,61 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       if (formData.password.trim().length < 6) return 'Password must be at least 6 characters.';
     }
 
+    const accessProfile = getDepartmentAccessProfile(formData.department);
+    const isCEOEmp = accessProfile.role === 'CEO' || formData.designation?.toUpperCase() === 'CEO';
+
     if (currStep === 2) {
       if (!formData.joiningDate) return 'Date of Joining is mandatory.';
       if (!formData.department.trim()) return 'Department selection is mandatory.';
       if (!formData.designation.trim()) return 'Designation is mandatory.';
+      if (/[0-9]/.test(formData.designation)) {
+        return 'Designation must only contain alphabetic characters (no numbers allowed).';
+      }
       if (!formData.employmentType) return 'Employment Type is mandatory.';
-      if (!formData.reportingManagerName?.trim()) return 'Reporting Manager is mandatory.';
+      if (!isCEOEmp && !formData.reportingManagerName?.trim()) return 'Reporting Manager is mandatory.';
       if (!formData.workLocation.trim()) return 'Work Location / Branch is mandatory.';
-      if (!formData.status) return 'Employee Status is mandatory.';
     }
 
     if (currStep === 3) {
       if (!formData.currentLine1.trim()) return 'Current Address Line 1 is mandatory.';
       if (!formData.currentCity.trim()) return 'Current City is mandatory.';
+      if (!/^[a-zA-Z\s]+$/.test(formData.currentCity.trim())) {
+        return 'City must contain letters and spaces only.';
+      }
       if (!formData.currentState.trim()) return 'Current State is mandatory.';
+      if (!/^[a-zA-Z\s]+$/.test(formData.currentState.trim())) {
+        return 'State must contain letters and spaces only.';
+      }
       if (!formData.currentCountry.trim()) return 'Current Country is mandatory.';
+      if (!/^[a-zA-Z\s]+$/.test(formData.currentCountry.trim())) {
+        return 'Country must contain letters and spaces only.';
+      }
       if (!formData.currentPincode.trim()) return 'Current Pincode is mandatory.';
       const currPinDigits = formData.currentPincode.replace(/\D/g, '');
-      if (currPinDigits.length !== 6) return 'Current Pincode must be a 6-digit number.';
+      if (currPinDigits.length !== 6) return 'Pincode must be exactly 6 digits.';
 
       if (!formData.sameAsCurrent) {
         if (!formData.permanentLine1.trim()) return 'Permanent Address Line 1 is mandatory when "Same as Current Address" is not checked.';
         if (!formData.permanentCity.trim()) return 'Permanent City is mandatory when "Same as Current Address" is not checked.';
+        if (!/^[a-zA-Z\s]+$/.test(formData.permanentCity.trim())) {
+          return 'Permanent City must contain letters and spaces only.';
+        }
         if (!formData.permanentState.trim()) return 'Permanent State is mandatory when "Same as Current Address" is not checked.';
+        if (!/^[a-zA-Z\s]+$/.test(formData.permanentState.trim())) {
+          return 'Permanent State must contain letters and spaces only.';
+        }
         if (!formData.permanentCountry.trim()) return 'Permanent Country is mandatory when "Same as Current Address" is not checked.';
+        if (!/^[a-zA-Z\s]+$/.test(formData.permanentCountry.trim())) {
+          return 'Permanent Country must contain letters and spaces only.';
+        }
         if (!formData.permanentPincode.trim()) return 'Permanent Pincode is mandatory when "Same as Current Address" is not checked.';
         const permPinDigits = formData.permanentPincode.replace(/\D/g, '');
-        if (permPinDigits.length !== 6) return 'Permanent Pincode must be a 6-digit number.';
+        if (permPinDigits.length !== 6) return 'Permanent Pincode must be exactly 6 digits.';
       }
       if (!formData.emergencyName.trim()) return 'Emergency Contact Name is mandatory.';
+      if (!/^[a-zA-Z\s]+$/.test(formData.emergencyName.trim())) {
+        return 'Emergency Contact Name must contain letters and spaces only.';
+      }
       if (!formData.emergencyRelationship.trim()) return 'Emergency Contact Relationship is mandatory.';
       if (!formData.emergencyMobile.trim()) return 'Emergency Contact Number is mandatory.';
       const emergencyDigits = formData.emergencyMobile.replace(/\D/g, '');
@@ -457,41 +956,99 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     }
 
     if (currStep === 4) {
+      if (isCEOEmp) return null; // Educational background optional for Business Owner / CEO
       if (!formData.qualification.trim()) return 'Highest Qualification is mandatory.';
       if (!formData.degreeName.trim()) return 'Degree / Course Name is mandatory.';
+      if (!formData.specialization.trim()) return 'Specialization is mandatory.';
+      if (!/^[a-zA-Z\s&.\-]+$/.test(formData.specialization.trim())) {
+        return 'Specialization must contain valid characters (letters and spaces only).';
+      }
       if (!formData.university.trim()) return 'University / Institution is mandatory.';
+      if (!/^[a-zA-Z\s&.\-]+$/.test(formData.university.trim())) {
+        return 'University must contain valid characters (letters and spaces only).';
+      }
       if (!formData.yearOfPassing.trim()) return 'Year of Passing is mandatory.';
+      const yop = parseInt(formData.yearOfPassing.trim(), 10);
+      if (isNaN(yop) || yop < 1900 || yop > CURRENT_YEAR) {
+        return 'Year of passing must be a 4-digit year and cannot be in the future.';
+      }
+      if (formData.gradePercentage.trim()) {
+        const gp = parseFloat(formData.gradePercentage.trim());
+        if (isNaN(gp) || gp < 0 || gp > 100) {
+          return 'Grade / Percentage must be a valid number between 0 and 100.';
+        }
+      }
     }
 
     if (currStep === 5) {
+      if (isCEOEmp) return null; // Experience history exempt for Business Owner / CEO
       if (formData.experienceType === 'Experienced') {
         if (!formData.totalExperience.trim()) return 'Total Experience is mandatory for experienced candidates.';
+        const expNum = parseFloat(formData.totalExperience.trim());
+        if (isNaN(expNum) || expNum < 0) {
+          return 'Total experience must be a non-negative number.';
+        }
         if (!formData.previousCompany.trim()) return 'Previous Company Name is mandatory for experienced candidates.';
         if (!formData.previousDesignation.trim()) return 'Previous Designation is mandatory for experienced candidates.';
+        if (formData.expStartDate && formData.expEndDate) {
+          if (new Date(formData.expEndDate) < new Date(formData.expStartDate)) {
+            return 'Employment end date cannot be earlier than start date.';
+          }
+        }
+        if (formData.lastDrawnSalary.trim()) {
+          const sal = parseFloat(formData.lastDrawnSalary.trim());
+          if (isNaN(sal) || sal <= 0) {
+            return 'Last drawn salary must be a positive number.';
+          }
+        }
       }
     }
 
     if (currStep === 6) {
+      if (isCEOEmp) return null; // Salary is not applicable for Business Owner / CEO
       if (!formData.monthlyCtc || Number(formData.monthlyCtc) <= 0) return 'Total Monthly CTC must be greater than zero.';
       if (!formData.basicSalary || Number(formData.basicSalary) <= 0) return 'Basic Salary must be greater than zero.';
       if (formData.da < 0 || formData.conveyance < 0 || formData.hra < 0) {
         return 'Salary components cannot be negative.';
       }
       if (!formData.bankName.trim()) return 'Bank Name is mandatory.';
+      if (!/[a-zA-Z]/.test(formData.bankName.trim())) {
+        return 'Bank name must contain letters and cannot be numeric-only.';
+      }
       if (!formData.accountNumber.trim()) return 'Bank Account Number is mandatory.';
+      if (!/^[0-9]{9,18}$/.test(formData.accountNumber.trim())) {
+        return 'Account number must be between 9 and 18 digits.';
+      }
       if (!formData.ifscCode.trim()) return 'IFSC Code is mandatory.';
+      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifscCode.trim().toUpperCase())) {
+        return 'Invalid IFSC format.';
+      }
       if (!formData.panNumber.trim()) return 'PAN Card Number is mandatory.';
-      if (formData.panNumber.trim().length !== 10) return 'PAN Card number must be 10 characters (e.g. ABCDE1234F).';
+      if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(formData.panNumber.trim().toUpperCase())) {
+        return 'Invalid PAN format.';
+      }
+      if (formData.uanNumber && formData.uanNumber.trim()) {
+        if (!/^[0-9]{12}$/.test(formData.uanNumber.trim())) {
+          return 'UAN must be exactly 12 digits.';
+        }
+      }
     }
 
     if (currStep === 7) {
+      if (isCEOEmp) return null; // Attendance method exempt for Business Owner / CEO
       if (!formData.attendanceMethod) return 'Primary Attendance Verification Method is mandatory.';
+    }
+
+    if (currStep === 8) {
+      if (isCEOEmp) return null; // Documents exempt for Business Owner / CEO
     }
 
     return null;
   };
 
-  const handleCtcChange = (value: number) => {
+  const handleCtcChange = (rawValue: string) => {
+    setSalaryDraft('monthlyCtc', rawValue);
+    const value = rawValue === '' ? 0 : Number(rawValue);
     const ctc = Math.max(0, value);
     const breakdown = calculateSalaryBreakdown(ctc, activeEarnings);
     setFormData(prev => ({
@@ -505,7 +1062,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     }));
   };
 
-  const handleCustomCompChange = (comp: SalaryComponentConfig, value: number) => {
+  const handleCustomCompChange = (comp: SalaryComponentConfig, rawValue: string) => {
+    setSalaryDraft(`component:${comp.code}`, rawValue);
+    const value = rawValue === '' ? 0 : Number(rawValue);
     const num = Math.max(0, value);
     setFormData(prev => {
       const customVals = { ...(prev.customComponents || {}), [comp.code]: num };
@@ -531,7 +1090,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     });
   };
 
-  const handleSalaryChange = (field: 'basicSalary' | 'da' | 'conveyance' | 'hra', value: number) => {
+  const handleSalaryChange = (field: 'basicSalary' | 'da' | 'conveyance' | 'hra', rawValue: string) => {
+    setSalaryDraft(field, rawValue);
+    const value = rawValue === '' ? 0 : Number(rawValue);
     const num = Math.max(0, value);
     setFormData(prev => {
       const updated = { ...prev, [field]: num };
@@ -637,6 +1198,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     const file = e.target.files?.[0];
     if (!file || !activeUploadCategory) return;
 
+    if (file.size > 1 * 1024 * 1024) {
+      setValidationError(`Document "${file.name}" exceeds the maximum allowed size of 1 MB (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a file up to 1 MB.`);
+      return;
+    }
+
     const sizeInKb = Math.round(file.size / 1024);
     const sizeFormatted = sizeInKb > 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${sizeInKb} KB`;
 
@@ -660,17 +1226,19 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     setStep(1);
     setIsSuccess(false);
     setCreatedEmployee(null);
+    setSalaryInputDrafts({});
     onClose();
   };
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
 
-    for (let s = 1; s <= 9; s++) {
-      const err = validateCurrentStep(s);
+    for (const stepItem of stepsList) {
+      if (stepItem.num === 9) continue;
+      const err = validateCurrentStep(stepItem.num);
       if (err) {
         setValidationError(err);
-        setStep(s);
+        setStep(stepItem.num);
         const scrollTarget = document.querySelector('.onboarding-body');
         if (scrollTarget) {
           scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
@@ -681,7 +1249,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
     setIsSubmitting(true);
 
-    const primaryEmail = (formData.companyEmail.trim() || formData.personalEmail.trim()).toLowerCase();
+    const primaryEmail = formData.personalEmail.trim().toLowerCase();
     const cleanEmpCode = (formData.employeeId.trim() || generateNextEmployeeId(
       employees,
       employeeConfig?.idFormatPrefix || businessSettings?.employeeCodePrefix || 'EMP',
@@ -690,9 +1258,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     ));
 
     // STEP 1: Validate that employee email does not already exist
-    const isDuplicateEmail = employees.some(e => e.email.toLowerCase() === primaryEmail);
+    const isDuplicateEmail = employees.some(e => e.email.toLowerCase().trim() === primaryEmail);
     if (isDuplicateEmail) {
-      setValidationError(`An employee with email "${primaryEmail}" is already registered.`);
+      setValidationError('Email ID already exists.');
       setStep(1);
       setIsSubmitting(false);
       return;
@@ -709,7 +1277,12 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
     // STEP 3 & 4: Set employee initial portal login password (defaults to Password@123)
     const targetPassword = formData.password.trim() || 'Password@123';
-    const targetEmail = (formData.personalEmail.trim() || formData.companyEmail.trim() || primaryEmail).toLowerCase();
+    const targetEmail = primaryEmail;
+
+    const accessProfile = getDepartmentAccessProfile(formData.department);
+    const resolvedRole = accessProfile.role;
+    const resolvedPermissions = accessProfile.permissions;
+    const isCEOEmp = accessProfile.role === 'CEO' || formData.designation?.toUpperCase() === 'CEO';
 
     const newEmp: Employee = {
       id: cleanEmpCode,
@@ -725,17 +1298,17 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       dob: formData.dob,
       gender: formData.gender,
       address: `${formData.currentLine1}, ${formData.currentCity}, ${formData.currentState} - ${formData.currentPincode}`,
-      department: formData.department,
-      designation: formData.designation,
-      role: formData.role,
-      reportingManagerId: formData.reportingManagerId,
-      reportingManagerName: formData.reportingManagerName,
+      department: isCEOEmp ? 'CEO' : (formData.department || accessProfile.department),
+      designation: isCEOEmp ? 'CEO' : (formData.designation || accessProfile.designation || dynamicDesignations[0] || ''),
+      role: isCEOEmp ? 'CEO' : resolvedRole,
+      reportingManagerId: isCEOEmp ? 'OWNER-001' : formData.reportingManagerId,
+      reportingManagerName: isCEOEmp ? 'Self / Board of Directors' : formData.reportingManagerName,
       joiningDate: formData.joiningDate,
       employmentType: formData.employmentType,
       status: formData.status,
       avatar: formData.avatar || '',
-      basicSalary: Number(formData.basicSalary),
-      allowances: {
+      basicSalary: isCEOEmp ? 0 : Number(formData.basicSalary),
+      allowances: isCEOEmp ? { hra: 0, da: 0, conveyance: 0, transport: 0, medical: 0, special: 0 } : {
         hra: Number(formData.hra),
         da: Number(formData.da),
         conveyance: Number(formData.conveyance),
@@ -744,18 +1317,23 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         special: 0,
         ...(formData.customComponents || {})
       },
-      withPf: formData.withPf,
-      bankDetails: {
+      withPf: isCEOEmp ? false : formData.withPf,
+      bankDetails: isCEOEmp ? {
+        bankName: formData.bankName || 'N/A',
+        accountNumber: formData.accountNumber || 'N/A',
+        ifscCode: formData.ifscCode || 'N/A',
+        branch: formData.branch || 'N/A'
+      } : {
         bankName: formData.bankName,
         accountNumber: formData.accountNumber,
         ifscCode: formData.ifscCode,
         branch: formData.branch
       },
-      attendanceMethod: formData.role === 'CEO' ? 'Exempt' : formData.attendanceMethod,
-      gpsAllowed: formData.role === 'CEO' ? false : formData.gpsAllowed,
-      faceRegistered: formData.role === 'CEO' ? false : (formData.attendanceMethod === 'Face Scan'),
-      workShift: formData.role === 'CEO' ? 'Executive (Exempt)' : formData.shift,
-      documents: documents.map(d => ({
+      attendanceMethod: isCEOEmp ? 'Exempt' : formData.attendanceMethod,
+      gpsAllowed: isCEOEmp ? false : formData.gpsAllowed,
+      faceRegistered: isCEOEmp ? false : (formData.attendanceMethod === 'Face Scan'),
+      workShift: isCEOEmp ? 'Executive (Exempt)' : formData.shift,
+      documents: isCEOEmp ? [] : documents.map(d => ({
         name: d.name,
         type: d.type,
         url: '#',
@@ -765,8 +1343,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       credentialEmailSentAt: new Date().toISOString(),
 
       // Extended Structured Data
-      personalEmail: formData.personalEmail,
-      companyEmail: formData.companyEmail,
+      personalEmail: primaryEmail,
       maritalStatus: (formData.maritalStatus || undefined) as Employee['maritalStatus'],
       workLocation: formData.workLocation,
       currentAddress: {
@@ -842,9 +1419,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         leavePolicy: formData.leavePolicy
       },
       systemAccess: {
-        role: formData.role,
+        role: isCEOEmp ? 'CEO' : resolvedRole,
         status: formData.accountStatus,
-        permissions: formData.permissions,
+        permissions: resolvedPermissions,
         sendInvite: formData.sendInvite
       }
     };
@@ -897,7 +1474,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           password: targetPassword,
           department: newEmp.department,
           designation: newEmp.designation,
-          role: formData.role,
+          role: newEmp.role,
           basicSalary: newEmp.basicSalary,
           grossSalary: newEmp.salaryDetails?.monthlyCtc || newEmp.basicSalary * 2.5
         })
@@ -965,17 +1542,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     setIsSuccess(true);
   };
 
-  const stepsList = [
-    { num: 1, label: 'Personal', fullTitle: 'Basic Personal Information', icon: User },
-    { num: 2, label: 'Employment', fullTitle: 'Employment & Role Details', icon: Briefcase },
-    { num: 3, label: 'Address', fullTitle: 'Address & Emergency Contacts', icon: MapPin },
-    { num: 4, label: 'Education', fullTitle: 'Educational Background & Qualifications', icon: GraduationCap },
-    { num: 5, label: 'Experience', fullTitle: 'Previous Work Experience & History', icon: Award },
-    { num: 6, label: 'Salary', fullTitle: 'Salary, Compensation & Bank Details', icon: CreditCard },
-    { num: 7, label: 'Attendance', fullTitle: 'Attendance Mode & Work Shifts', icon: Clock },
-    { num: 8, label: 'Documents', fullTitle: 'Employee Documents & Verification', icon: FolderPlus },
-    { num: 9, label: 'Review', fullTitle: 'Comprehensive Onboarding Review', icon: CheckCheck }
-  ];
 
   // Success Celebration Screen
   if (isSuccess && createdEmployee) {
@@ -1217,7 +1783,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           <div>
             <h2>Add New Employee</h2>
             <p style={{ fontSize: '0.78rem', color: '#64748B', margin: 0, fontWeight: 500 }}>
-              Step {step} of 9 — {stepsList[step - 1]?.fullTitle}
+              Step {currentStepIndex + 1} of {stepsList.length} — {currentStep?.fullTitle}
             </p>
           </div>
         </div>
@@ -1240,22 +1806,23 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       {/* Horizontal Stepper Progress Container */}
       <div className="onboarding-stepper-container">
         <div className="onboarding-stepper-bar">
-          {stepsList.map(s => {
+          {stepsList.map((s, idx) => {
             const IconComp = s.icon;
             const isActive = step === s.num;
-            const isCompleted = step > s.num;
+            const isCompleted = currentStepIndex > idx;
 
             return (
               <div 
                 key={s.num} 
                 className={`onboarding-step-pill ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
                 onClick={() => {
-                  if (s.num > step) {
-                    for (let i = 1; i < s.num; i++) {
-                      const err = validateCurrentStep(i);
+                  if (idx > currentStepIndex) {
+                    for (let i = 0; i < idx; i++) {
+                      const pastStep = stepsList[i].num;
+                      const err = validateCurrentStep(pastStep);
                       if (err) {
                         setValidationError(err);
-                        setStep(i);
+                        setStep(pastStep);
                         const scrollTarget = document.querySelector('.onboarding-body');
                         if (scrollTarget) {
                           scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1271,10 +1838,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
                   }
                 }}
-                title={`Step ${s.num}: ${s.fullTitle}`}
+                title={`Step ${idx + 1}: ${s.fullTitle}`}
               >
                 <div className="onboarding-step-badge">
-                  {isCompleted ? '✓' : s.num}
+                  {isCompleted ? '✓' : idx + 1}
                 </div>
                 <IconComp size={14} />
                 <span>{s.label}</span>
@@ -1285,7 +1852,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         <div className="onboarding-progress-track">
           <div 
             className="onboarding-progress-fill" 
-            style={{ width: `${(step / 9) * 100}%` }}
+            style={{ width: `${((currentStepIndex + 1) / stepsList.length) * 100}%` }}
           />
         </div>
       </div>
@@ -1321,8 +1888,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             </div>
 
             {/* Hidden decoy fields to intercept browser credential autofill */}
-            <input type="text" style={{ display: 'none' }} tabIndex={-1} aria-hidden="true" autoComplete="off" />
-            <input type="password" style={{ display: 'none' }} tabIndex={-1} aria-hidden="true" autoComplete="new-password" />
+            <input type="text" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, zIndex: -1, pointerEvents: 'none' }} tabIndex={-1} aria-hidden="true" autoComplete="off" />
+            <input type="password" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, zIndex: -1, pointerEvents: 'none' }} tabIndex={-1} aria-hidden="true" autoComplete="new-password" />
 
             <div className="form-row" style={{ marginBottom: '18px' }}>
               <div className="form-group">
@@ -1434,8 +2001,13 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   name="hrms_add_emp_fname"
                   autoComplete="off"
                   className="form-control" 
-                  value={formData.firstName} 
-                  onChange={e => handleChange('firstName', e.target.value)}
+                  value={formData.firstName.replace(/[^a-zA-Z\s]/g, '')} 
+                  onChange={e => handleChange('firstName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                  onKeyDown={e => {
+                    if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault();
+                    }
+                  }}
                   placeholder="Enter First Name" 
                   required 
                 />
@@ -1447,8 +2019,13 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   name="hrms_add_emp_lname"
                   autoComplete="off"
                   className="form-control" 
-                  value={formData.lastName} 
-                  onChange={e => handleChange('lastName', e.target.value)}
+                  value={formData.lastName.replace(/[^a-zA-Z\s]/g, '')} 
+                  onChange={e => handleChange('lastName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                  onKeyDown={e => {
+                    if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault();
+                    }
+                  }}
                   placeholder="Enter Last Name" 
                   required 
                 />
@@ -1476,7 +2053,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   className="form-control" 
                   value={formData.dob} 
                   onChange={e => handleChange('dob', e.target.value)} 
-                  max={new Date().toISOString().split('T')[0]}
+                  max={maxDobDate}
                   required 
                 />
               </div>
@@ -1535,7 +2112,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 </div>
               </div>
               <div className="form-group">
-                <label className="form-label">Personal Email ID <span style={{ color: '#EF4444' }}>*</span></label>
+                <label className="form-label">Email ID <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="email" 
                   name="employee_personal_email"
@@ -1543,8 +2120,19 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   autoComplete="off"
                   className="form-control" 
                   value={formData.personalEmail} 
-                  onChange={e => handleChange('personalEmail', e.target.value)}
-                  placeholder="rahul.personal@gmail.com" 
+                  onChange={e => {
+                    const cleanEmail = e.target.value.toLowerCase().replace(/\s/g, '');
+                    handleChange('personalEmail', cleanEmail);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === ' ') {
+                      e.preventDefault();
+                    }
+                  }}
+                  onBlur={() => {
+                    handleChange('personalEmail', (formData.personalEmail || '').trim().toLowerCase());
+                  }}
+                  placeholder="e.g. rahul@gmail.com" 
                   required
                 />
               </div>
@@ -1574,6 +2162,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     name="employee_portal_new_password"
                     id="employee_portal_new_password"
                     autoComplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    readOnly
+                    onFocus={e => e.target.removeAttribute('readOnly')}
                     className="form-control" 
                     style={{ paddingRight: '42px' }}
                     value={formData.password} 
@@ -1614,35 +2206,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               <span>2. Employment & Department Details</span>
             </div>
 
-            {/* System Role & Permissions Profile */}
-            <div style={{ padding: '16px 18px', backgroundColor: '#ECFEFF', border: '1.5px solid #0E7490', borderRadius: '12px', marginBottom: '18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <label className="form-label" style={{ fontWeight: 800, color: '#0E7490', fontSize: '0.9rem', margin: 0 }}>
-                  Organizational System Role & Access Privilege *
-                </label>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, backgroundColor: '#0E7490', color: '#FFFFFF', padding: '2px 8px', borderRadius: '99px' }}>
-                  {formData.role}
-                </span>
-              </div>
-              <select
-                className="form-control"
-                value={formData.role}
-                onChange={e => handleRoleSelectionChange(e.target.value as Role)}
-                style={{ fontWeight: 700, borderColor: '#0E7490', backgroundColor: '#FFFFFF' }}
-              >
-                <option value="Employee">Staff Employee (Standard Attendance & Assigned Tasks)</option>
-                <option value="CEO">CEO (Executive Head - Full Approvals & Authority, Attendance & Task Exempt)</option>
-                <option value="HR Manager">HR Manager (People Operations - Full Approvals, Attendance & Tasks Enabled)</option>
-                <option value="Finance Manager">Accounts / Finance Manager (Salary & Expense Viewer with Download Access)</option>
-              </select>
-              <div style={{ fontSize: '0.76rem', color: '#0E7490', marginTop: '6px', fontWeight: 600 }}>
-                {formData.role === 'CEO' && 'CEO is exempt from daily attendance punches and task assignments. Has full assign, comment & approval authority.'}
-                {formData.role === 'HR Manager' && 'HR has full attendance records, assigned tasks, and company-wide approval authority.'}
-                {formData.role === 'Finance Manager' && 'Accounts Department views all employee salaries, payroll, approved advances, and claims with full download access.'}
-                {formData.role === 'Employee' && 'Standard staff employee with regular biometric attendance and task management.'}
-              </div>
-            </div>
-
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Date of Joining *</label>
@@ -1659,10 +2222,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <select 
                   className="form-control" 
                   value={formData.department} 
-                  onChange={e => handleChange('department', e.target.value)}
+                  onChange={e => handleDepartmentSelectionChange(e.target.value)}
                   required
                 >
-                  {departments.map(d => (
+                  {allDepartmentOptions.map(d => (
                     <option key={d.id} value={d.name}>{d.name}</option>
                   ))}
                 </select>
@@ -1671,17 +2234,53 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Designation / Role Title *</label>
+                <label className="form-label">Designation *</label>
                 <select 
                   className="form-control" 
-                  value={formData.designation} 
-                  onChange={e => handleChange('designation', e.target.value)}
+                  value={isCustomDesignation ? 'CUSTOM_INPUT' : formData.designation} 
+                  onChange={e => {
+                    if (e.target.value === 'CUSTOM_INPUT') {
+                      setIsCustomDesignation(true);
+                      handleChange('designation', '');
+                    } else {
+                      setIsCustomDesignation(false);
+                      handleChange('designation', e.target.value.replace(/[0-9]/g, ''));
+                    }
+                  }}
                   required
                 >
-                  {designations.map(d => (
-                    <option key={d.id} value={d.title}>{d.title} ({d.level})</option>
-                  ))}
+                  {isCEO ? (
+                    <option value="CEO">CEO (Chief Executive Officer)</option>
+                  ) : (
+                    <>
+                      {dynamicDesignations.length === 0 ? (
+                        <option value="">No designations in Settings yet</option>
+                      ) : (
+                        dynamicDesignations.map(title => (
+                          <option key={title} value={title}>{title}</option>
+                        ))
+                      )}
+                      <option value="CUSTOM_INPUT">+ Other / Custom Designation...</option>
+                    </>
+                  )}
                 </select>
+                {isCustomDesignation && !isCEO && (
+                  <div style={{ marginTop: '8px' }}>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Type Designation Title"
+                      value={formData.designation.replace(/[0-9]/g, '')}
+                      onChange={e => handleChange('designation', e.target.value.replace(/[0-9]/g, ''))}
+                      onKeyDown={e => {
+                        if (/^[0-9]$/.test(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      required
+                    />
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Employment Type *</label>
@@ -1690,9 +2289,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   value={formData.employmentType} 
                   onChange={e => handleChange('employmentType', e.target.value)}
                 >
-                  <option value="Full-Time">Full Time</option>
-                  <option value="Intern">Intern</option>
-                  <option value="Provisional">Provisional</option>
+                  {employmentTypeOptions.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1700,22 +2299,24 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Reporting Manager *</label>
-                <select 
-                  className="form-control" 
-                  value={formData.reportingManagerName} 
-                  onChange={e => {
-                    const selEmp = employees.find(emp => `${emp.firstName} ${emp.lastName}`.trim() === e.target.value);
-                    handleChange('reportingManagerName', e.target.value);
-                    if (selEmp) handleChange('reportingManagerId', selEmp.employeeId);
-                  }}
-                  required
-                >
-                  {employees.map(emp => (
-                    <option key={emp.id} value={`${emp.firstName} ${emp.lastName}`.trim()}>
-                      {emp.firstName} {emp.lastName} ({emp.designation})
-                    </option>
-                  ))}
-                </select>
+                {isCEO ? (
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    value="Self / Board of Directors" 
+                    disabled 
+                    style={{ backgroundColor: '#F8FAFC', color: '#0F172A', fontWeight: 700 }}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    className="form-control" 
+                    value={`${formData.reportingManagerName || creatorReportingManager.name}${creatorReportingManager.designation ? ` (${creatorReportingManager.designation})` : ''}`}
+                    disabled
+                    style={{ backgroundColor: '#F8FAFC', color: '#0F172A', fontWeight: 700 }}
+                    required
+                  />
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Work Location / Branch *</label>
@@ -1724,28 +2325,19 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   value={formData.workLocation} 
                   onChange={e => handleChange('workLocation', e.target.value)}
                   required
+                  disabled={workLocationOptions.length === 0}
                 >
-                  {branches.map(b => (
-                    <option key={b.id} value={b.name}>{b.name} ({b.location})</option>
-                  ))}
+                  {workLocationOptions.length === 0 ? (
+                    <option value="">No branches configured in Settings</option>
+                  ) : (
+                    workLocationOptions.map(location => (
+                      <option key={location.value} value={location.value}>{location.label}</option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Employee Status *</label>
-                <select 
-                  className="form-control" 
-                  value={formData.status} 
-                  onChange={e => handleChange('status', e.target.value)}
-                >
-                  <option value="Active">Active</option>
-                  <option value="On Leave">Probation</option>
-                  <option value="Terminated">Notice Period</option>
-                </select>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1762,7 +2354,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <input 
                     className="form-control" 
                     value={formData.currentLine1} 
-                    onChange={e => handleChange('currentLine1', e.target.value)}
+                    onChange={e => handleChange('currentLine1', e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, ''))}
+                    onKeyDown={handleAddressLineKeyDown}
                     placeholder="Door / Flat No., Street Name" 
                     required 
                   />
@@ -1772,7 +2365,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <input 
                     className="form-control" 
                     value={formData.currentLine2} 
-                    onChange={e => handleChange('currentLine2', e.target.value)}
+                    onChange={e => handleChange('currentLine2', e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, ''))}
+                    onKeyDown={handleAddressLineKeyDown}
                     placeholder="Apartment, Landmark, Area" 
                   />
                 </div>
@@ -1780,19 +2374,57 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               <div className="form-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                 <div className="form-group">
                   <label className="form-label">City *</label>
-                  <input className="form-control" value={formData.currentCity} onChange={e => handleChange('currentCity', e.target.value)} />
+                  <input 
+                    type="text"
+                    autoComplete="off"
+                    className="form-control" 
+                    value={formData.currentCity} 
+                    onChange={e => handleChange('currentCity', e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                    onKeyDown={handleLettersOnlyKeyDown}
+                    placeholder="City (Letters only)"
+                    required
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">State *</label>
-                  <input className="form-control" value={formData.currentState} onChange={e => handleChange('currentState', e.target.value)} />
+                  <input 
+                    type="text"
+                    autoComplete="off"
+                    className="form-control" 
+                    value={formData.currentState} 
+                    onChange={e => handleChange('currentState', e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                    onKeyDown={handleLettersOnlyKeyDown}
+                    placeholder="State (Letters only)"
+                    required
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Country *</label>
-                  <input className="form-control" value={formData.currentCountry} onChange={e => handleChange('currentCountry', e.target.value)} />
+                  <input 
+                    type="text"
+                    autoComplete="off"
+                    className="form-control" 
+                    value={formData.currentCountry} 
+                    onChange={e => handleChange('currentCountry', e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                    onKeyDown={handleLettersOnlyKeyDown}
+                    placeholder="Country (Letters only)"
+                    required
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Pincode *</label>
-                  <input className="form-control" value={formData.currentPincode} onChange={e => handleChange('currentPincode', e.target.value)} />
+                  <input 
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="off"
+                    className="form-control" 
+                    value={formData.currentPincode} 
+                    onChange={e => handleChange('currentPincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    onKeyDown={handleDigitsOnlyKeyDown}
+                    placeholder="6-digit Pincode"
+                    required
+                  />
                 </div>
               </div>
             </div>
@@ -1820,7 +2452,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       <input 
                         className="form-control" 
                         value={formData.permanentLine1} 
-                        onChange={e => handleChange('permanentLine1', e.target.value)} 
+                        onChange={e => handleChange('permanentLine1', e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, ''))} 
+                        onKeyDown={handleAddressLineKeyDown}
                         placeholder="House / Flat No, Street Name"
                         required
                       />
@@ -1830,7 +2463,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       <input 
                         className="form-control" 
                         value={formData.permanentLine2} 
-                        onChange={e => handleChange('permanentLine2', e.target.value)} 
+                        onChange={e => handleChange('permanentLine2', e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, ''))} 
+                        onKeyDown={handleAddressLineKeyDown}
                         placeholder="Apartment, Landmark, Area"
                       />
                     </div>
@@ -1844,8 +2478,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                         autoComplete="off"
                         className="form-control" 
                         value={formData.permanentCity} 
-                        onChange={e => handleChange('permanentCity', e.target.value)} 
-                        placeholder="Enter City"
+                        onChange={e => handleChange('permanentCity', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} 
+                        onKeyDown={handleLettersOnlyKeyDown}
+                        placeholder="City (Letters only)"
                         required
                       />
                     </div>
@@ -1857,8 +2492,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                         autoComplete="off"
                         className="form-control" 
                         value={formData.permanentState} 
-                        onChange={e => handleChange('permanentState', e.target.value)} 
-                        placeholder="Enter State"
+                        onChange={e => handleChange('permanentState', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} 
+                        onKeyDown={handleLettersOnlyKeyDown}
+                        placeholder="State (Letters only)"
                         required
                       />
                     </div>
@@ -1870,8 +2506,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                         autoComplete="off"
                         className="form-control" 
                         value={formData.permanentCountry} 
-                        onChange={e => handleChange('permanentCountry', e.target.value)} 
-                        placeholder="Enter Country"
+                        onChange={e => handleChange('permanentCountry', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} 
+                        onKeyDown={handleLettersOnlyKeyDown}
+                        placeholder="Country (Letters only)"
                         required
                       />
                     </div>
@@ -1880,11 +2517,14 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       <input 
                         type="text"
                         name="hrms_add_perm_pincode"
+                        inputMode="numeric"
+                        maxLength={6}
                         autoComplete="off"
                         className="form-control" 
                         value={formData.permanentPincode} 
-                        onChange={e => handleChange('permanentPincode', e.target.value)} 
-                        placeholder="Enter Pincode"
+                        onChange={e => handleChange('permanentPincode', e.target.value.replace(/\D/g, '').slice(0, 6))} 
+                        onKeyDown={handleDigitsOnlyKeyDown}
+                        placeholder="6-digit Pincode"
                         required
                       />
                     </div>
@@ -1909,7 +2549,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     data-lpignore="true"
                     className="form-control" 
                     value={formData.emergencyName} 
-                    onChange={e => handleChange('emergencyName', e.target.value)}
+                    onChange={e => handleChange('emergencyName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                    onKeyDown={handleLettersOnlyKeyDown}
                     placeholder="Enter Emergency Contact Name" 
                     required 
                   />
@@ -2056,50 +2697,98 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <select 
                   className="form-control" 
                   value={formData.qualification} 
-                  onChange={e => handleChange('qualification', e.target.value)}
+                  onChange={e => handleQualificationChange(e.target.value)}
                   required
                 >
-                  <option value="B.E / B.Tech">B.E / B.Tech (Engineering / Technology)</option>
-                  <option value="M.E / M.Tech">M.E / M.Tech (Master of Engineering)</option>
-                  <option value="Diploma">Diploma (Polytechnic / Technical)</option>
-                  <option value="MBA">MBA (Master of Business Admin)</option>
-                  <option value="MCA">MCA (Master of Computer Apps)</option>
-                  <option value="B.Sc / BCA">B.Sc / BCA (Science / Computer Apps)</option>
-                  <option value="B.Com / B.A / BBA">B.Com / B.A / BBA (Commerce / Arts / Admin)</option>
-                  <option value="M.Sc / M.Com / M.A">M.Sc / M.Com / M.A (Post Graduate)</option>
-                  <option value="Ph.D / Doctorate">Ph.D / Doctorate Research</option>
-                  <option value="ITI">ITI Certification</option>
-                  <option value="12th / HSC">12th Standard / HSC</option>
-                  <option value="10th Standard">10th Standard / SSLC</option>
-                  <option value="Other">Other Equivalent Qualification</option>
+                  <option value="UG">UG</option>
+                  <option value="PG">PG</option>
+                  <option value="Diploma">Diploma</option>
+                  <option value="Others">Others</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Degree / Course Name *</label>
-                <input 
-                  type="text"
-                  name="hrms_add_degree_name"
-                  autoComplete="off"
-                  className="form-control" 
-                  value={formData.degreeName} 
-                  onChange={e => handleChange('degreeName', e.target.value)}
-                  placeholder="Enter Degree / Course Name" 
-                  required 
-                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Degree / Course Name *</label>
+                  {isCustomDegree ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomDegree(false);
+                        const defaultDeg = DEGREE_OPTIONS_BY_QUALIFICATION[formData.qualification]?.[0] || 'B.E / B.Tech (Engineering / Technology)';
+                        handleChange('degreeName', defaultDeg);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#0E7490',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: 0,
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Choose from list
+                    </button>
+                  ) : null}
+                </div>
+                {isCustomDegree ? (
+                  <input 
+                    type="text"
+                    name="hrms_add_degree_name"
+                    autoComplete="off"
+                    className="form-control" 
+                    value={formData.degreeName} 
+                    onChange={e => handleChange('degreeName', e.target.value.replace(/[^a-zA-Z0-9\s&.\-()/]/g, ''))}
+                    onKeyDown={handleCompanyKeyDown}
+                    placeholder="Enter Degree / Course Name" 
+                    autoFocus
+                    required 
+                  />
+                ) : (
+                  <select
+                    className="form-control"
+                    value={formData.degreeName}
+                    onChange={e => {
+                      if (e.target.value === '__CUSTOM__') {
+                        setIsCustomDegree(true);
+                        handleChange('degreeName', '');
+                      } else {
+                        setIsCustomDegree(false);
+                        handleChange('degreeName', e.target.value);
+                      }
+                    }}
+                    required
+                  >
+                    <optgroup label={`${formData.qualification} Degrees`}>
+                      {(DEGREE_OPTIONS_BY_QUALIFICATION[formData.qualification] || []).map(deg => (
+                        <option key={deg} value={deg}>{deg}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="All Other Degrees & Courses">
+                      {ALL_DEGREE_OPTIONS.filter(deg => !(DEGREE_OPTIONS_BY_QUALIFICATION[formData.qualification] || []).includes(deg)).map(deg => (
+                        <option key={deg} value={deg}>{deg}</option>
+                      ))}
+                    </optgroup>
+                    <option value="__CUSTOM__">+ Other / Custom Degree (Type manually)...</option>
+                  </select>
+                )}
               </div>
             </div>
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Specialization</label>
+                <label className="form-label">Specialization <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="text"
                   name="hrms_add_specialization"
                   autoComplete="off"
                   className="form-control" 
                   value={formData.specialization} 
-                  onChange={e => handleChange('specialization', e.target.value)}
-                  placeholder="Enter Specialization" 
+                  onChange={e => handleChange('specialization', e.target.value.replace(/[^a-zA-Z\s&.\-]/g, ''))}
+                  onKeyDown={handleUniversityKeyDown}
+                  placeholder="Enter Specialization (Letters only)" 
+                  required
                 />
               </div>
               <div className="form-group">
@@ -2110,8 +2799,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   autoComplete="off"
                   className="form-control" 
                   value={formData.university} 
-                  onChange={e => handleChange('university', e.target.value)}
-                  placeholder="Enter University / College" 
+                  onChange={e => handleChange('university', e.target.value.replace(/[^a-zA-Z\s&.\-]/g, ''))}
+                  onKeyDown={handleUniversityKeyDown}
+                  placeholder="Enter University / College (Letters only)" 
                   required 
                 />
               </div>
@@ -2138,12 +2828,15 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <label className="form-label">Grade / Percentage</label>
                 <input 
                   type="text"
+                  inputMode="decimal"
+                  maxLength={6}
                   name="hrms_add_grade_pct"
                   autoComplete="off"
                   className="form-control" 
                   value={formData.gradePercentage} 
                   onChange={e => handleChange('gradePercentage', e.target.value)}
-                  placeholder="Enter Grade / Percentage" 
+                  onKeyDown={handleDecimalKeyDown(formData.gradePercentage)}
+                  placeholder="Enter Grade / Percentage (0 - 100)" 
                 />
               </div>
             </div>
@@ -2218,15 +2911,18 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               <>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Total Experience *</label>
+                    <label className="form-label">Total Experience (Years) *</label>
                     <input 
                       type="text"
+                      inputMode="decimal"
+                      maxLength={5}
                       name="hrms_add_total_exp"
                       autoComplete="off"
                       className="form-control" 
                       value={formData.totalExperience} 
                       onChange={e => handleChange('totalExperience', e.target.value)}
-                      placeholder="Enter Total Experience" 
+                      onKeyDown={handleDecimalKeyDown(formData.totalExperience)}
+                      placeholder="e.g. 2.5 (Years)" 
                       required 
                     />
                   </div>
@@ -2238,7 +2934,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       autoComplete="off"
                       className="form-control" 
                       value={formData.previousCompany} 
-                      onChange={e => handleChange('previousCompany', e.target.value)}
+                      onChange={e => handleChange('previousCompany', e.target.value.replace(/[^a-zA-Z0-9\s&.\-(),/]/g, ''))}
+                      onKeyDown={handleCompanyKeyDown}
                       placeholder="Enter Previous Company Name" 
                       required 
                     />
@@ -2254,7 +2951,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       autoComplete="off"
                       className="form-control" 
                       value={formData.previousDesignation} 
-                      onChange={e => handleChange('previousDesignation', e.target.value)}
+                      onChange={e => handleChange('previousDesignation', e.target.value.replace(/[^a-zA-Z0-9\s&.\-()]/g, ''))}
+                      onKeyDown={handleCompanyKeyDown}
                       placeholder="Enter Previous Designation" 
                       required 
                     />
@@ -2291,6 +2989,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     <label className="form-label">Employment End Date</label>
                     <input 
                       type="date"
+                      min={formData.expStartDate || undefined}
                       className="form-control" 
                       value={formData.expEndDate} 
                       onChange={e => handleChange('expEndDate', e.target.value)}
@@ -2303,12 +3002,15 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     <label className="form-label">Last Drawn Salary</label>
                     <input 
                       type="text"
+                      inputMode="decimal"
+                      maxLength={12}
                       name="hrms_add_last_salary"
                       autoComplete="off"
                       className="form-control" 
                       value={formData.lastDrawnSalary} 
                       onChange={e => handleChange('lastDrawnSalary', e.target.value)}
-                      placeholder="Enter Last Drawn Salary" 
+                      onKeyDown={handleDecimalKeyDown(formData.lastDrawnSalary)}
+                      placeholder="Enter Last Drawn Salary (e.g. 35000)" 
                     />
                   </div>
                   <div className="form-group">
@@ -2319,7 +3021,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       autoComplete="off"
                       className="form-control" 
                       value={formData.previousCompanyLocation} 
-                      onChange={e => handleChange('previousCompanyLocation', e.target.value)}
+                      onChange={e => handleChange('previousCompanyLocation', e.target.value.replace(/[^a-zA-Z0-9\s&.\-(),/]/g, ''))}
                       placeholder="Enter Company Location" 
                     />
                   </div>
@@ -2363,8 +3065,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <input 
                   type="number" 
                   className="form-control" 
-                  value={formData.monthlyCtc} 
-                  onChange={e => handleCtcChange(Number(e.target.value))}
+                  value={salaryInputValue('monthlyCtc', formData.monthlyCtc)} 
+                  onChange={e => handleCtcChange(e.target.value)}
                   style={{ fontWeight: 800, color: '#0E7490', fontSize: '1.05rem' }}
                   required 
                 />
@@ -2405,8 +3107,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       <input 
                         type="number" 
                         className="form-control" 
-                        value={compVal} 
-                        onChange={e => handleCustomCompChange(comp, Number(e.target.value))} 
+                        value={salaryInputValue(`component:${comp.code}`, compVal)} 
+                        onChange={e => handleCustomCompChange(comp, e.target.value)} 
                         style={{ fontWeight: 700 }}
                       />
                     </div>
@@ -2435,8 +3137,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <input
                     type="number"
                     className="form-control"
-                    value={formData.basicSalary}
-                    onChange={e => handleSalaryChange('basicSalary', Number(e.target.value))}
+                    value={salaryInputValue('basicSalary', formData.basicSalary)}
+                    onChange={e => handleSalaryChange('basicSalary', e.target.value)}
                     style={{ fontWeight: 700 }}
                     required
                   />
@@ -2597,26 +3299,83 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Bank Name *</label>
-                <input className="form-control" value={formData.bankName} onChange={e => handleChange('bankName', e.target.value)} required />
+                <input 
+                  type="text"
+                  name="hrms_add_bank_name"
+                  autoComplete="off"
+                  className="form-control" 
+                  value={formData.bankName} 
+                  onChange={e => handleChange('bankName', e.target.value.replace(/[^a-zA-Z\s&.\-()]/g, ''))} 
+                  onKeyDown={handleLettersOnlyKeyDown}
+                  placeholder="Enter Bank Name (Letters only)" 
+                  required 
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Account Number *</label>
-                <input className="form-control" value={formData.accountNumber} onChange={e => handleChange('accountNumber', e.target.value)} required />
+                <input 
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={18}
+                  name="hrms_add_account_number"
+                  autoComplete="off"
+                  className="form-control" 
+                  value={formData.accountNumber} 
+                  onChange={e => handleChange('accountNumber', e.target.value.replace(/\D/g, '').slice(0, 18))} 
+                  onKeyDown={handleDigitsOnlyKeyDown}
+                  placeholder="9 to 18 digit Account Number" 
+                  required 
+                />
               </div>
             </div>
 
             <div className="form-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
               <div className="form-group">
                 <label className="form-label">IFSC Code *</label>
-                <input className="form-control" value={formData.ifscCode} onChange={e => handleChange('ifscCode', e.target.value)} required />
+                <input 
+                  type="text"
+                  maxLength={11}
+                  name="hrms_add_ifsc_code"
+                  autoComplete="off"
+                  className="form-control" 
+                  value={formData.ifscCode} 
+                  onChange={e => handleChange('ifscCode', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 11))} 
+                  onKeyDown={handleAlphanumericKeyDown}
+                  placeholder="11-character IFSC (e.g. SBIN0001234)" 
+                  style={{ textTransform: 'uppercase' }}
+                  required 
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">PAN Card Number *</label>
-                <input className="form-control" value={formData.panNumber} onChange={e => handleChange('panNumber', e.target.value.toUpperCase())} placeholder="ABCDE1234F" required />
+                <input 
+                  type="text"
+                  maxLength={10}
+                  name="hrms_add_pan_number"
+                  autoComplete="off"
+                  className="form-control" 
+                  value={formData.panNumber} 
+                  onChange={e => handleChange('panNumber', e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10))} 
+                  onKeyDown={handleAlphanumericKeyDown}
+                  placeholder="10-character PAN (e.g. ABCDE1234F)" 
+                  style={{ textTransform: 'uppercase' }}
+                  required 
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">UAN / PF Number (Optional)</label>
-                <input className="form-control" value={formData.uanNumber} onChange={e => handleChange('uanNumber', e.target.value)} placeholder="101234567890" />
+                <input 
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={12}
+                  name="hrms_add_uan_number"
+                  autoComplete="off"
+                  className="form-control" 
+                  value={formData.uanNumber} 
+                  onChange={e => handleChange('uanNumber', e.target.value.replace(/\D/g, '').slice(0, 12))} 
+                  onKeyDown={handleDigitsOnlyKeyDown}
+                  placeholder="12-digit UAN (e.g. 101234567890)" 
+                />
               </div>
             </div>
           </div>
@@ -2629,7 +3388,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               <span>7. Attendance Mode, Shifts & Leave Policies</span>
             </div>
 
-            {formData.role === 'CEO' && (
+            {isCEO && (
               <div style={{ padding: '12px 16px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '10px', marginBottom: '16px', color: '#0E7490', fontSize: '0.82rem', fontWeight: 700 }}>
                 CEO Executive Notice: This employee is exempt from daily biometric face scans, geofenced mobile punches, and absent penalizations.
               </div>
@@ -2657,10 +3416,13 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   value={formData.shift} 
                   onChange={e => handleChange('shift', e.target.value)}
                 >
-                  <option value="">{shifts.length > 0 ? '-- Select Shift --' : '-- No Shifts Configured (Add in Shift Settings) --'}</option>
-                  {shifts.map(s => (
-                    <option key={s.id} value={s.shiftName}>{s.shiftName} ({s.startTime} - {s.endTime})</option>
-                  ))}
+                  {shifts.length === 0 ? (
+                    <option value="">-- No Shifts Configured (Add in Shift Settings) --</option>
+                  ) : (
+                    shifts.map(s => (
+                      <option key={s.id} value={s.shiftName}>{s.shiftName} ({s.startTime} - {s.endTime})</option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>
@@ -2712,7 +3474,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               <div>
                 <span style={{ fontSize: '1.15rem', fontWeight: 700 }}>8. Employee Documents & Verification Uploads</span>
                 <p style={{ fontSize: '0.78rem', color: '#64748B', margin: '3px 0 0', fontWeight: 500 }}>
-                  Attach official candidate credentials. Supported formats: PDF, DOCX, JPG, PNG (up to 10MB per file).
+                  Attach official candidate credentials. Supported formats: PDF, DOCX, JPG, PNG (maximum size: 1 MB per document).
                 </p>
               </div>
             </div>
@@ -2914,7 +3676,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <div className="review-field-val">{formData.phone}</div>
                 </div>
                 <div className="review-field-box">
-                  <div className="review-field-label">Personal Email ID (Login Dispatch)</div>
+                  <div className="review-field-label">Email ID (Login Dispatch)</div>
                   <div className="review-field-val" style={{ color: '#0E7490', fontWeight: 700 }}>{formData.personalEmail || 'N/A'}</div>
                 </div>
                 <div className="review-field-box">
@@ -2953,7 +3715,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               <div className="review-item-grid">
                 <div className="review-field-box">
                   <div className="review-field-label">System Role & Privilege</div>
-                  <div className="review-field-val" style={{ fontWeight: 800, color: '#0E7490' }}>{formData.role}</div>
+                  <div className="review-field-val" style={{ fontWeight: 800, color: '#0E7490' }}>{getDepartmentAccessProfile(formData.department).role}</div>
                 </div>
                 <div className="review-field-box">
                   <div className="review-field-label">Department</div>
@@ -2968,8 +3730,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <div className="review-field-val">{formatDateDDMMYYYY(formData.joiningDate)}</div>
                 </div>
                 <div className="review-field-box">
-                  <div className="review-field-label">Employment Type & Status</div>
-                  <div className="review-field-val">{formData.employmentType} ({formData.status})</div>
+                  <div className="review-field-label">Employment Type</div>
+                  <div className="review-field-val">{formData.employmentType}</div>
                 </div>
                 <div className="review-field-box">
                   <div className="review-field-label">Reporting Manager</div>
@@ -3052,11 +3814,17 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#0E7490', fontSize: '0.95rem' }}>
                   5. Work Experience History
                 </div>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep(5)} style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Edit3 size={12} /> Edit
-                </button>
+                {!isCEO && (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep(5)} style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Edit3 size={12} /> Edit
+                  </button>
+                )}
               </div>
-              {formData.experienceType === 'Fresher' ? (
+              {isCEO ? (
+                <div style={{ padding: '14px 18px', background: '#F8FAFC', borderRadius: '10px', color: '#0E7490', fontSize: '0.88rem', fontWeight: 600 }}>
+                  <strong>Exempt (CEO)</strong> — Prior employment records not applicable.
+                </div>
+              ) : formData.experienceType === 'Fresher' ? (
                 <div style={{ padding: '14px 18px', background: '#F8FAFC', borderRadius: '10px', color: '#64748B', fontSize: '0.88rem', fontWeight: 600 }}>
                   Candidate is registered as a <strong>Fresher</strong> (No prior employment records).
                 </div>
@@ -3064,7 +3832,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <div className="review-item-grid">
                   <div className="review-field-box">
                     <div className="review-field-label">Total Work Experience</div>
-                    <div className="review-field-val">{formData.totalExperience}</div>
+                    <div className="review-field-val">{formData.totalExperience ? `${formData.totalExperience} Years` : 'Fresher'}</div>
                   </div>
                   <div className="review-field-box">
                     <div className="review-field-label">Previous Company</div>
@@ -3096,61 +3864,74 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#0E7490', fontSize: '0.95rem' }}>
                   6. Salary & Bank Details
                 </div>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep(6)} style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Edit3 size={12} /> Edit
-                </button>
+                {!isCEO && (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep(6)} style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Edit3 size={12} /> Edit
+                  </button>
+                )}
               </div>
-              <div className="review-item-grid">
-                <div className="review-field-box">
-                  <div className="review-field-label">Monthly Gross CTC</div>
-                  <div className="review-field-val" style={{ color: '#16A34A', fontWeight: 700 }}>{formatCurrency(formData.monthlyCtc)} / month</div>
+              {isCEO ? (
+                <div style={{ padding: '16px 20px', background: '#ECFEFF', border: '1px solid #CFFAFE', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0E7490', fontWeight: 800, fontSize: '0.95rem' }}>
+                    <span>Salary Exempt — CEO</span>
+                  </div>
+                  <p style={{ margin: '6px 0 0', fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
+                    As CEO executive leadership, standard employee basic salary and wage structures are not applicable.
+                  </p>
                 </div>
-                <div className="review-field-box">
-                  <div className="review-field-label">Salary Scheme (PF / ESIC)</div>
-                  <div className="review-field-val" style={{ fontWeight: 700, color: formData.salaryScheme === 'WITH_PF' ? '#0E7490' : '#D97706' }}>
-                    {formData.salaryScheme === 'WITH_PF' ? 'With PF & ESIC' : 'Without PF & ESIC (< 6 Months)'}
+              ) : (
+                <div className="review-item-grid">
+                  <div className="review-field-box">
+                    <div className="review-field-label">Monthly Gross CTC</div>
+                    <div className="review-field-val" style={{ color: '#16A34A', fontWeight: 700 }}>{formatCurrency(formData.monthlyCtc)} / month</div>
+                  </div>
+                  <div className="review-field-box">
+                    <div className="review-field-label">Salary Scheme (PF / ESIC)</div>
+                    <div className="review-field-val" style={{ fontWeight: 700, color: formData.salaryScheme === 'WITH_PF' ? '#0E7490' : '#D97706' }}>
+                      {formData.salaryScheme === 'WITH_PF' ? 'With PF & ESIC' : 'Without PF & ESIC (< 6 Months)'}
+                    </div>
+                  </div>
+                  <div className="review-field-box" style={{ gridColumn: 'span 2' }}>
+                    <div className="review-field-label">Salary Breakdown</div>
+                    <div className="review-field-val" style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                      {activeEarnings.length > 0 ? (
+                        activeEarnings.map(c => {
+                          const amt = formData.customComponents?.[c.code] ?? (
+                            c.code === 'BASIC' ? formData.basicSalary :
+                            c.code === 'DA' ? formData.da :
+                            (c.code === 'CONV' || c.code === 'CONVEYANCE') ? formData.conveyance :
+                            c.code === 'HRA' ? formData.hra : 0
+                          );
+                          return `${c.name}: ${formatCurrency(amt)}`;
+                        }).join(' | ')
+                      ) : (
+                        'No active components configured'
+                      )}
+                    </div>
+                  </div>
+                  <div className="review-field-box" style={{ gridColumn: 'span 2', backgroundColor: '#F0FDFA' }}>
+                    <div className="review-field-label" style={{ color: '#0E7490' }}>Estimated Net Take-Home Pay (After Deductions)</div>
+                    <div className="review-field-val" style={{ color: '#0E7490', fontWeight: 800 }}>
+                      {formatCurrency(statutoryCalc.netTakeHome)} / month
+                      <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 500, marginLeft: '8px' }}>
+                        (Gross {formatCurrency(statutoryCalc.gross)} - Deductions {formatCurrency(statutoryCalc.totalDeductions)})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="review-field-box">
+                    <div className="review-field-label">Bank Name & Branch</div>
+                    <div className="review-field-val">{formData.bankName} ({formData.branch || 'Main Branch'})</div>
+                  </div>
+                  <div className="review-field-box">
+                    <div className="review-field-label">Account Number & IFSC</div>
+                    <div className="review-field-val">{formData.accountNumber} • {formData.ifscCode}</div>
+                  </div>
+                  <div className="review-field-box">
+                    <div className="review-field-label">PAN Card & UAN / PF</div>
+                    <div className="review-field-val">{formData.panNumber} • {formData.uanNumber || 'N/A'}</div>
                   </div>
                 </div>
-                <div className="review-field-box" style={{ gridColumn: 'span 2' }}>
-                  <div className="review-field-label">Salary Breakdown</div>
-                  <div className="review-field-val" style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                    {activeEarnings.length > 0 ? (
-                      activeEarnings.map(c => {
-                        const amt = formData.customComponents?.[c.code] ?? (
-                          c.code === 'BASIC' ? formData.basicSalary :
-                          c.code === 'DA' ? formData.da :
-                          (c.code === 'CONV' || c.code === 'CONVEYANCE') ? formData.conveyance :
-                          c.code === 'HRA' ? formData.hra : 0
-                        );
-                        return `${c.name}: ${formatCurrency(amt)}`;
-                      }).join(' | ')
-                    ) : (
-                      'No active components configured'
-                    )}
-                  </div>
-                </div>
-                <div className="review-field-box" style={{ gridColumn: 'span 2', backgroundColor: '#F0FDFA' }}>
-                  <div className="review-field-label" style={{ color: '#0E7490' }}>Estimated Net Take-Home Pay (After Deductions)</div>
-                  <div className="review-field-val" style={{ color: '#0E7490', fontWeight: 800 }}>
-                    {formatCurrency(statutoryCalc.netTakeHome)} / month
-                    <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 500, marginLeft: '8px' }}>
-                      (Gross {formatCurrency(statutoryCalc.gross)} - Deductions {formatCurrency(statutoryCalc.totalDeductions)})
-                    </span>
-                  </div>
-                </div>
-                <div className="review-field-box">
-                  <div className="review-field-label">Bank Name & Branch</div>
-                  <div className="review-field-val">{formData.bankName} ({formData.branch || 'Main Branch'})</div>
-                </div>
-                <div className="review-field-box">
-                  <div className="review-field-label">Account Number & IFSC</div>
-                  <div className="review-field-val">{formData.accountNumber} • {formData.ifscCode}</div>
-                </div>
-                <div className="review-field-box">
-                  <div className="review-field-label">PAN Card & UAN / PF</div>
-                  <div className="review-field-val">{formData.panNumber} • {formData.uanNumber || 'N/A'}</div>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Section 7: Attendance & Shift Policies */}
@@ -3159,28 +3940,36 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#0E7490', fontSize: '0.95rem' }}>
                   7. Attendance & Shift Settings
                 </div>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep(7)} style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Edit3 size={12} /> Edit
-                </button>
+                {!isCEO && (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep(7)} style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Edit3 size={12} /> Edit
+                  </button>
+                )}
               </div>
-              <div className="review-item-grid">
-                <div className="review-field-box">
-                  <div className="review-field-label">Attendance Capture Mode</div>
-                  <div className="review-field-val">{formData.attendanceMethod} {formData.gpsAllowed ? '(GPS Geofenced Enabled)' : ''}</div>
+              {isCEO ? (
+                <div style={{ padding: '14px 18px', background: '#F8FAFC', borderRadius: '10px', color: '#0E7490', fontSize: '0.88rem', fontWeight: 600 }}>
+                  <strong>Exempt (CEO)</strong> — Biometric attendance and work shift schedule tracking are not required.
                 </div>
-                <div className="review-field-box">
-                  <div className="review-field-label">Assigned Work Shift</div>
-                  <div className="review-field-val">{formData.shift}</div>
+              ) : (
+                <div className="review-item-grid">
+                  <div className="review-field-box">
+                    <div className="review-field-label">Attendance Capture Mode</div>
+                    <div className="review-field-val">{formData.attendanceMethod} {formData.gpsAllowed ? '(GPS Geofenced Enabled)' : ''}</div>
+                  </div>
+                  <div className="review-field-box">
+                    <div className="review-field-label">Assigned Work Shift</div>
+                    <div className="review-field-val">{formData.shift}</div>
+                  </div>
+                  <div className="review-field-box">
+                    <div className="review-field-label">Weekly Off Routine</div>
+                    <div className="review-field-val">{formData.weeklyOff}</div>
+                  </div>
+                  <div className="review-field-box">
+                    <div className="review-field-label">Annual Leave Policy</div>
+                    <div className="review-field-val">{formData.leavePolicy}</div>
+                  </div>
                 </div>
-                <div className="review-field-box">
-                  <div className="review-field-label">Weekly Off Routine</div>
-                  <div className="review-field-val">{formData.weeklyOff}</div>
-                </div>
-                <div className="review-field-box">
-                  <div className="review-field-label">Annual Leave Policy</div>
-                  <div className="review-field-val">{formData.leavePolicy}</div>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Section 8: Uploaded Documents */}
@@ -3189,11 +3978,17 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#0E7490', fontSize: '0.95rem' }}>
                   8. Verified Uploaded Documents ({documents.length} Files)
                 </div>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep(8)} style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Edit3 size={12} /> Edit
-                </button>
+                {!isCEO && (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setStep(8)} style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Edit3 size={12} /> Edit
+                  </button>
+                )}
               </div>
-              {documents.length === 0 ? (
+              {isCEO && documents.length === 0 ? (
+                <div style={{ padding: '14px 18px', background: '#F8FAFC', borderRadius: '10px', color: '#64748B', fontSize: '0.88rem', fontWeight: 600 }}>
+                  <strong>Exempt / Optional</strong> — Document uploads not required for CEO.
+                </div>
+              ) : documents.length === 0 ? (
                 <div style={{ padding: '14px 18px', background: '#F8FAFC', borderRadius: '10px', color: '#64748B', fontSize: '0.85rem' }}>
                   No documents attached yet.
                 </div>
@@ -3216,7 +4011,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             <div style={{ padding: '16px 20px', background: '#ECFEFF', border: '1px solid #CFFAFE', borderRadius: 'var(--radius-card)', display: 'flex', alignItems: 'center', gap: '14px' }}>
               <CheckCircle2 size={24} color="var(--color-primary-blue)" style={{ flexShrink: 0 }} />
               <div style={{ fontSize: '0.88rem', color: 'var(--color-text-primary)' }}>
-                All mandatory parameters have been checked and validated. Clicking <strong>Confirm & Onboard Employee</strong> will save the profile into the employee directory and prepare the official offer letter.
+                {isCEO 
+                  ? 'All parameters for the CEO profile have been verified. Clicking the button below will register the CEO executive account with executive administrative authority.'
+                  : 'All mandatory parameters have been checked and validated. Clicking Confirm & Onboard Employee will save the profile into the employee directory and prepare the official offer letter.'}
               </div>
             </div>
           </div>
@@ -3239,7 +4036,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600 }}>
-              Step <span style={{ color: '#0E7490', fontWeight: 700 }}>{step}</span> of 9 • {Math.round((step / 9) * 100)}% Completed
+              Step <span style={{ color: '#0E7490', fontWeight: 700 }}>{currentStepIndex + 1}</span> of {stepsList.length} • {Math.round(((currentStepIndex + 1) / stepsList.length) * 100)}% Completed
             </div>
             {validationError && (
               <div style={{ 
@@ -3265,16 +4062,19 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {step > 1 && (
+            {currentStepIndex > 0 && (
               <button 
                 type="button" 
                 className="btn btn-secondary" 
                 onClick={() => {
                   setValidationError(null);
-                  setStep(prev => prev - 1);
-                  const scrollTarget = document.querySelector('.onboarding-body');
-                  if (scrollTarget) {
-                    scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
+                  const prevStepObj = stepsList[currentStepIndex - 1];
+                  if (prevStepObj) {
+                    setStep(prevStepObj.num);
+                    const scrollTarget = document.querySelector('.onboarding-body');
+                    if (scrollTarget) {
+                      scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
                   }
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', fontSize: '0.88rem' }}
@@ -3283,7 +4083,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               </button>
             )}
 
-            {step < 9 ? (
+            {currentStepIndex < stepsList.length - 1 ? (
               <button 
                 type="button" 
                 className="btn btn-primary" 
@@ -3298,10 +4098,13 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     return;
                   }
                   setValidationError(null);
-                  setStep(prev => prev + 1);
-                  const scrollTarget = document.querySelector('.onboarding-body');
-                  if (scrollTarget) {
-                    scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
+                  const nextStepObj = stepsList[currentStepIndex + 1];
+                  if (nextStepObj) {
+                    setStep(nextStepObj.num);
+                    const scrollTarget = document.querySelector('.onboarding-body');
+                    if (scrollTarget) {
+                      scrollTarget.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
                   }
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 20px', fontSize: '0.88rem', background: '#0E7490', borderColor: '#0E7490', boxShadow: '0 2px 8px rgba(14, 116, 144, 0.25)' }}
@@ -3332,7 +4135,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 size={18} /> Confirm & Onboard Employee
+                    <CheckCircle2 size={18} /> {isCEO ? 'Confirm & Create CEO / Owner Account' : 'Confirm & Onboard Employee'}
                   </>
                 )}
               </button>

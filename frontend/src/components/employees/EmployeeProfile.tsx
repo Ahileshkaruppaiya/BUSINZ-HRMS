@@ -40,6 +40,12 @@ import { formatCurrency } from '../../utils/numbers';
 import { rbacService } from '../../services/rbacService';
 import { getInitialRBACState } from '../../services/rbacService';
 import { dispatchCredentialEmail } from '../../services/emailDispatchService';
+import { 
+  HIGHEST_QUALIFICATION_OPTIONS, 
+  DEGREE_OPTIONS_BY_QUALIFICATION, 
+  ALL_DEGREE_OPTIONS, 
+  normalizeQualification 
+} from './AddEmployeeModal';
 
 interface EmployeeProfileProps {
   employee: Employee;
@@ -47,10 +53,69 @@ interface EmployeeProfileProps {
   initialTab?: string;
 }
 
+const CURRENT_YEAR = new Date().getFullYear();
 const PASSING_YEARS = Array.from(
-  { length: (new Date().getFullYear() + 4) - 1960 + 1 },
-  (_, i) => String((new Date().getFullYear() + 4) - i)
+  { length: CURRENT_YEAR - 1960 + 1 },
+  (_, i) => String(CURRENT_YEAR - i)
 );
+
+// Real-time Keystroke Format Filters
+const allowControlKeys = (e: React.KeyboardEvent) => {
+  return (
+    ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Enter', 'Home', 'End'].includes(e.key) ||
+    e.ctrlKey || e.metaKey || e.altKey
+  );
+};
+
+const handleLettersOnlyKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z\s]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleDigitsOnlyKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[0-9]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleDecimalKeyDown = (currentVal: string) => (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (e.key === '.' && !currentVal.includes('.')) return;
+  if (!/^[0-9]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleUniversityKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z\s&.\-]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleAddressLineKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z0-9\s,.\-/#]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleAlphanumericKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z0-9]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
+
+const handleCompanyKeyDown = (e: React.KeyboardEvent) => {
+  if (allowControlKeys(e)) return;
+  if (!/^[a-zA-Z0-9\s&.\-()]$/.test(e.key)) {
+    e.preventDefault();
+  }
+};
 
 export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({ 
   employee, 
@@ -71,7 +136,10 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     weeklySchedules,
     holidayPolicies,
     employees,
-    payrollSettingsConfig
+    payrollSettingsConfig,
+    employmentTypes,
+    orgStructure,
+    companyBranches
   } = useHRMS();
 
   // Dynamic salary components from Settings → Payroll Settings
@@ -82,6 +150,40 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   const activeDeductions = useMemo(() => {
     return (payrollSettingsConfig?.components || []).filter(c => c.active && c.type === 'DEDUCTION');
   }, [payrollSettingsConfig]);
+
+  const employmentTypeOptions = useMemo(() => {
+    const names = [
+      ...(orgStructure?.employmentTypes || []),
+      ...(employmentTypes || []).filter(t => t.status !== 'Inactive').map(t => t.name)
+    ]
+      .map(name => name.trim())
+      .filter(Boolean);
+
+    const uniqueNames = Array.from(new Map(names.map(name => [name.toLowerCase(), name])).values());
+    return uniqueNames.length > 0 ? uniqueNames : ['Full-Time', 'Intern', 'Provisional'];
+  }, [orgStructure, employmentTypes]);
+
+  const defaultEmploymentType = employmentTypeOptions[0] || 'Full-Time';
+  const workLocationOptions = useMemo(() => {
+    const options = [
+      ...(companyBranches || []).map(branch => ({
+        value: branch.branchName?.trim(),
+        label: `${branch.branchName?.trim()}${branch.address?.city ? ` (${branch.address.city})` : ''}`
+      })),
+      ...(branches || []).map(branch => ({
+        value: branch.name?.trim(),
+        label: `${branch.name?.trim()}${branch.location ? ` (${branch.location})` : ''}`
+      })),
+      ...(orgStructure?.workLocations || []).map(location => ({
+        value: location.trim(),
+        label: location.trim()
+      }))
+    ].filter(option => option.value);
+
+    return Array.from(new Map(options.map(option => [option.value.toLowerCase(), option])).values());
+  }, [companyBranches, branches, orgStructure]);
+
+  const defaultWorkLocation = workLocationOptions[0]?.value || '';
 
 
   const [currentEmp, setCurrentEmp] = useState<Employee>(employee);
@@ -139,122 +241,154 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   // Sync internal state if prop employee updates
   useEffect(() => {
     setCurrentEmp(employee);
+    const d = employee.educationalDetails?.degreeName;
+    setIsCustomDegree(Boolean(d && !ALL_DEGREE_OPTIONS.includes(d)));
   }, [employee]);
 
+  // 18+ DOB constraint
+  const maxDobDate = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 18);
+    return d.toISOString().split('T')[0];
+  }, []);
+
   // Form State initialized from employee data
-  const getInitialFormData = (emp: Employee) => ({
-    // 1. Personal Details
-    firstName: emp.firstName || '',
-    lastName: emp.lastName || '',
-    employeeId: emp.employeeId || emp.id || '',
-    gender: (emp.gender || 'Male') as 'Male' | 'Female' | 'Other',
-    dob: emp.dob || '1996-05-15',
-    phone: emp.phone || '',
-    personalEmail: emp.personalEmail || emp.email || '',
-    companyEmail: emp.companyEmail || emp.email || '',
-    maritalStatus: (emp.maritalStatus || 'Single') as 'Single' | 'Married' | 'Divorced' | 'Widowed',
-    avatar: emp.avatar || '',
+  const getInitialFormData = (emp: Employee) => {
+    const isEmpCEO = emp.role === 'CEO' || emp.department === 'CEO' || emp.designation === 'CEO';
+    return {
+      // 1. Personal Details
+      firstName: emp.firstName || '',
+      lastName: emp.lastName || '',
+      employeeId: emp.employeeId || emp.id || '',
+      gender: (emp.gender || 'Male') as 'Male' | 'Female' | 'Other',
+      dob: emp.dob || '1996-05-15',
+      phone: emp.phone || '',
+      personalEmail: emp.personalEmail || emp.email || '',
+      maritalStatus: (emp.maritalStatus || 'Single') as 'Single' | 'Married' | 'Divorced' | 'Widowed',
+      avatar: emp.avatar || '',
 
-    // 2. Employment & Organization
-    joiningDate: emp.joiningDate || new Date().toISOString().split('T')[0],
-    department: emp.department || departments[0]?.name || 'HR',
-    designation: emp.designation || designations[0]?.title || 'HR Manager',
-    employmentType: (emp.employmentType || 'Full-Time') as Employee['employmentType'],
-    reportingManagerId: emp.reportingManagerId || employees[0]?.employeeId || 'EMP-001',
-    reportingManagerName: emp.reportingManagerName || (employees[0] ? `${employees[0].firstName} ${employees[0].lastName}`.trim() : 'Executive Office'),
-    workLocation: emp.workLocation || branches[0]?.name || 'Chennai HQ',
-    status: (emp.status || 'Active') as Employee['status'],
+      // 2. Employment & Organization
+      joiningDate: emp.joiningDate || new Date().toISOString().split('T')[0],
+      department: emp.department || (isEmpCEO ? 'CEO' : (departments[0]?.name || 'HR')),
+      designation: emp.designation || (isEmpCEO ? 'CEO' : (designations[0]?.title || 'HR Manager')),
+      employmentType: emp.employmentType || defaultEmploymentType,
+      reportingManagerId: isEmpCEO ? '' : (emp.reportingManagerId || employees[0]?.employeeId || 'EMP-001'),
+      reportingManagerName: isEmpCEO ? 'Self / Board of Directors' : (emp.reportingManagerName || (employees[0] ? `${employees[0].firstName} ${employees[0].lastName}`.trim() : 'Executive Office')),
+      workLocation: emp.workLocation || defaultWorkLocation,
+      status: (emp.status || 'Active') as Employee['status'],
 
-    // 3. Address & Emergency Contacts
-    currentLine1: emp.currentAddress?.line1 || (typeof emp.address === 'string' ? emp.address.split(',')[0] || '' : ''),
-    currentLine2: emp.currentAddress?.line2 || '',
-    currentCity: emp.currentAddress?.city || 'Chennai',
-    currentState: emp.currentAddress?.state || 'Tamil Nadu',
-    currentCountry: emp.currentAddress?.country || 'India',
-    currentPincode: emp.currentAddress?.pincode || '600001',
-    sameAsCurrent: emp.permanentAddress?.sameAsCurrent ?? true,
-    permanentLine1: emp.permanentAddress?.line1 || emp.currentAddress?.line1 || '',
-    permanentLine2: emp.permanentAddress?.line2 || emp.currentAddress?.line2 || '',
-    permanentCity: emp.permanentAddress?.city || emp.currentAddress?.city || 'Chennai',
-    permanentState: emp.permanentAddress?.state || emp.currentAddress?.state || 'Tamil Nadu',
-    permanentCountry: emp.permanentAddress?.country || emp.currentAddress?.country || 'India',
-    permanentPincode: emp.permanentAddress?.pincode || emp.currentAddress?.pincode || '600001',
-    emergencyName: emp.emergencyContact?.name || '',
-    emergencyRelationship: emp.emergencyContact?.relationship || 'Parent',
-    emergencyMobile: emp.emergencyContact?.mobile || '',
-    emergencyAltMobile: emp.emergencyContact?.alternateMobile || '',
+      // 3. Address & Emergency Contacts
+      currentLine1: emp.currentAddress?.line1 || (typeof emp.address === 'string' ? emp.address.split(',')[0] || '' : ''),
+      currentLine2: emp.currentAddress?.line2 || '',
+      currentCity: emp.currentAddress?.city || 'Chennai',
+      currentState: emp.currentAddress?.state || 'Tamil Nadu',
+      currentCountry: emp.currentAddress?.country || 'India',
+      currentPincode: emp.currentAddress?.pincode || '600001',
+      sameAsCurrent: emp.permanentAddress?.sameAsCurrent ?? true,
+      permanentLine1: emp.permanentAddress?.line1 || emp.currentAddress?.line1 || '',
+      permanentLine2: emp.permanentAddress?.line2 || emp.currentAddress?.line2 || '',
+      permanentCity: emp.permanentAddress?.city || emp.currentAddress?.city || 'Chennai',
+      permanentState: emp.permanentAddress?.state || emp.currentAddress?.state || 'Tamil Nadu',
+      permanentCountry: emp.permanentAddress?.country || emp.currentAddress?.country || 'India',
+      permanentPincode: emp.permanentAddress?.pincode || emp.currentAddress?.pincode || '600001',
+      emergencyName: emp.emergencyContact?.name || '',
+      emergencyRelationship: emp.emergencyContact?.relationship || 'Parent',
+      emergencyMobile: emp.emergencyContact?.mobile || '',
+      emergencyAltMobile: emp.emergencyContact?.alternateMobile || '',
 
-    // 4. Educational Details
-    qualification: emp.educationalDetails?.highestQualification || emp.professionalDetails?.qualification || 'B.E / B.Tech',
-    degreeName: emp.educationalDetails?.degreeName || 'B.Tech Civil Engineering',
-    specialization: emp.educationalDetails?.specialization || emp.professionalDetails?.specialization || 'Structural Engineering',
-    university: emp.educationalDetails?.university || 'Anna University',
-    yearOfPassing: emp.educationalDetails?.yearOfPassing || '2023',
-    gradePercentage: emp.educationalDetails?.gradePercentage || '8.4 CGPA',
+      // 4. Educational Details
+      qualification: normalizeQualification(emp.educationalDetails?.highestQualification || emp.professionalDetails?.qualification),
+      degreeName: emp.educationalDetails?.degreeName || 'B.E / B.Tech (Engineering / Technology)',
+      specialization: emp.educationalDetails?.specialization || emp.professionalDetails?.specialization || 'Structural Engineering',
+      university: emp.educationalDetails?.university || 'Anna University',
+      yearOfPassing: emp.educationalDetails?.yearOfPassing || '2023',
+      gradePercentage: emp.educationalDetails?.gradePercentage || '8.4 CGPA',
 
-    // 5. Work Experience & Skills
-    experienceType: (emp.experienceDetails?.experienceType || 'Experienced') as 'Fresher' | 'Experienced',
-    totalExperience: emp.experienceDetails?.totalExperience || emp.professionalDetails?.totalExperience || '3 Years',
-    relevantExperience: emp.professionalDetails?.relevantExperience || '3 Years',
-    previousCompany: emp.experienceDetails?.previousCompany || emp.professionalDetails?.previousCompany || 'L&T Construction',
-    previousDesignation: emp.experienceDetails?.previousDesignation || 'Project Engineer',
-    previousDepartment: emp.experienceDetails?.previousDepartment || 'Civil & Structural',
-    expStartDate: emp.experienceDetails?.startDate || '2023-06-01',
-    expEndDate: emp.experienceDetails?.endDate || '2026-08-31',
-    lastDrawnSalary: emp.experienceDetails?.lastDrawnSalary || '₹45,000 / month',
-    previousCompanyLocation: emp.experienceDetails?.companyLocation || 'Chennai, Tamil Nadu',
-    skills: Array.isArray(emp.professionalDetails?.skills) 
-      ? emp.professionalDetails.skills.join(', ') 
-      : (emp.skills ? emp.skills.join(', ') : 'Civil Engineering, AutoCAD, Project Management, Quality Control'),
+      // 5. Work Experience & Skills
+      experienceType: (emp.experienceDetails?.experienceType || 'Experienced') as 'Fresher' | 'Experienced',
+      totalExperience: isEmpCEO ? (emp.experienceDetails?.totalExperience || 'Executive Leadership') : (emp.experienceDetails?.totalExperience || emp.professionalDetails?.totalExperience || '3 Years'),
+      relevantExperience: isEmpCEO ? 'Executive Leadership' : (emp.professionalDetails?.relevantExperience || '3 Years'),
+      previousCompany: isEmpCEO ? (emp.experienceDetails?.previousCompany || 'N/A') : (emp.experienceDetails?.previousCompany || emp.professionalDetails?.previousCompany || 'L&T Construction'),
+      previousDesignation: isEmpCEO ? (emp.experienceDetails?.previousDesignation || 'Director / Executive') : (emp.experienceDetails?.previousDesignation || 'Project Engineer'),
+      previousDepartment: isEmpCEO ? (emp.experienceDetails?.previousDepartment || 'Executive') : (emp.experienceDetails?.previousDepartment || 'Civil & Structural'),
+      expStartDate: isEmpCEO ? '' : (emp.experienceDetails?.startDate || '2023-06-01'),
+      expEndDate: isEmpCEO ? '' : (emp.experienceDetails?.endDate || '2026-08-31'),
+      lastDrawnSalary: isEmpCEO ? 'Exempt' : (emp.experienceDetails?.lastDrawnSalary || '₹45,000 / month'),
+      previousCompanyLocation: isEmpCEO ? 'N/A' : (emp.experienceDetails?.companyLocation || 'Chennai, Tamil Nadu'),
+      skills: Array.isArray(emp.professionalDetails?.skills) 
+        ? emp.professionalDetails.skills.join(', ') 
+        : (emp.skills ? emp.skills.join(', ') : (isEmpCEO ? 'Enterprise Strategy, Executive Leadership, Corporate Governance' : 'Civil Engineering, AutoCAD, Project Management, Quality Control')),
 
-    // 6. Salary & Bank Details
-    salaryStructure: emp.salaryDetails?.salaryStructure || 'Standard Industrial CTC',
-    salaryScheme: (emp.salaryDetails?.salaryScheme || (emp.withPf ? 'WITH_PF' : 'WITHOUT_PF')) as 'WITH_PF' | 'WITHOUT_PF',
-    withPf: Boolean(emp.withPf ?? emp.salaryDetails?.withPf),
-    monthlyCtc: Number(emp.salaryDetails?.monthlyCtc || (emp.basicSalary ? emp.basicSalary * 2.5 : 25000)),
-    basicSalary: Number(emp.salaryDetails?.basicSalary || emp.basicSalary || 10000),
-    da: Number(emp.salaryDetails?.da ?? emp.allowances?.da ?? 5000),
-    conveyance: Number(emp.salaryDetails?.conveyance ?? emp.allowances?.conveyance ?? 1250),
-    hra: Number(emp.salaryDetails?.hra ?? emp.allowances?.hra ?? 8750),
-    transport: Number(emp.allowances?.transport || 0),
-    medical: Number(emp.allowances?.medical || 0),
-    special: Number(emp.allowances?.special || 0),
-    customComponents: ((emp.allowances as any) || {}) as Record<string, number>,
-    panNumber: emp.salaryDetails?.panNumber || 'ABCDE1234F',
-    uanNumber: emp.salaryDetails?.uanNumber || '101492817261',
-    bankName: emp.bankDetails?.bankName || 'HDFC Bank',
-    accountNumber: emp.bankDetails?.accountNumber || '50100492817261',
-    ifscCode: emp.bankDetails?.ifscCode || 'HDFC0001234',
-    branch: emp.bankDetails?.branch || 'Mount Road Branch',
+      // 6. Salary & Bank Details
+      salaryStructure: isEmpCEO ? 'Exempt (CEO)' : (emp.salaryDetails?.salaryStructure || 'Standard Industrial CTC'),
+      salaryScheme: (emp.salaryDetails?.salaryScheme || (emp.withPf ? 'WITH_PF' : 'WITHOUT_PF')) as 'WITH_PF' | 'WITHOUT_PF',
+      withPf: isEmpCEO ? false : Boolean(emp.withPf ?? emp.salaryDetails?.withPf),
+      monthlyCtc: isEmpCEO ? (emp.salaryDetails?.monthlyCtc ?? 0) : Number(emp.salaryDetails?.monthlyCtc || (emp.basicSalary ? emp.basicSalary * 2.5 : 25000)),
+      basicSalary: isEmpCEO ? (emp.salaryDetails?.basicSalary ?? 0) : Number(emp.salaryDetails?.basicSalary || emp.basicSalary || 10000),
+      da: isEmpCEO ? (emp.salaryDetails?.da ?? 0) : Number(emp.salaryDetails?.da ?? emp.allowances?.da ?? 5000),
+      conveyance: isEmpCEO ? (emp.salaryDetails?.conveyance ?? 0) : Number(emp.salaryDetails?.conveyance ?? emp.allowances?.conveyance ?? 1250),
+      hra: isEmpCEO ? (emp.salaryDetails?.hra ?? 0) : Number(emp.salaryDetails?.hra ?? emp.allowances?.hra ?? 8750),
+      transport: Number(emp.allowances?.transport || 0),
+      medical: Number(emp.allowances?.medical || 0),
+      special: Number(emp.allowances?.special || 0),
+      customComponents: ((emp.allowances as any) || {}) as Record<string, number>,
+      panNumber: emp.salaryDetails?.panNumber || (isEmpCEO ? '' : 'ABCDE1234F'),
+      uanNumber: emp.salaryDetails?.uanNumber || (isEmpCEO ? '' : '101492817261'),
+      bankName: emp.bankDetails?.bankName || (isEmpCEO ? '' : 'HDFC Bank'),
+      accountNumber: emp.bankDetails?.accountNumber || (isEmpCEO ? '' : '50100492817261'),
+      ifscCode: emp.bankDetails?.ifscCode || (isEmpCEO ? '' : 'HDFC0001234'),
+      branch: emp.bankDetails?.branch || (isEmpCEO ? '' : 'Mount Road Branch'),
 
-    // 7. Shift & Attendance Policies
-    attendanceMethod: (emp.attendanceMethod || 'Face Scan') as Employee['attendanceMethod'],
-    shift: emp.workShift || emp.shiftDetails?.shiftType || shifts[0]?.shiftName || '',
-    weeklyOff: emp.shiftDetails?.weeklyOff || 'Sunday',
-    holidayCalendar: emp.shiftDetails?.holidayCalendar || 'Tamil Nadu Industrial Calendar (14 Days)',
-    leavePolicy: emp.shiftDetails?.leavePolicy || 'Standard 18 Casual + 12 Medical + 10 Earned',
-    gpsAllowed: Boolean(emp.gpsAllowed ?? true),
+      // 7. Shift & Attendance Policies
+      attendanceMethod: (isEmpCEO ? 'Exempt' : (emp.attendanceMethod || 'Face Scan')) as Employee['attendanceMethod'],
+      shift: isEmpCEO ? 'Exempt' : (emp.workShift || emp.shiftDetails?.shiftType || shifts[0]?.shiftName || ''),
+      weeklyOff: isEmpCEO ? 'Flexible' : (emp.shiftDetails?.weeklyOff || 'Sunday'),
+      holidayCalendar: emp.shiftDetails?.holidayCalendar || 'Tamil Nadu Industrial Calendar (14 Days)',
+      leavePolicy: isEmpCEO ? 'Exempt' : (emp.shiftDetails?.leavePolicy || 'Standard 18 Casual + 12 Medical + 10 Earned'),
+      gpsAllowed: Boolean(emp.gpsAllowed ?? true),
 
-    // 8. Documents
-    documents: emp.documents && emp.documents.length > 0 ? emp.documents : [
-      { name: '10th_Marksheet_SSLC.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' },
-      { name: '12th_Diploma_Certificate.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' },
-      { name: 'Degree_Certificate_Civil.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' },
-      { name: 'PAN_Card_Verified.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' },
-      { name: 'Aadhaar_Card_Front_Back.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' }
-    ],
+      // 8. Documents
+      documents: emp.documents && emp.documents.length > 0 ? emp.documents : (isEmpCEO ? [] : [
+        { name: '10th_Marksheet_SSLC.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' },
+        { name: '12th_Diploma_Certificate.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' },
+        { name: 'Degree_Certificate_Civil.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' },
+        { name: 'PAN_Card_Verified.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' },
+        { name: 'Aadhaar_Card_Front_Back.pdf', type: 'PDF', uploadDate: '2026-09-04', url: '#' }
+      ]),
 
-    // 9. System Access & Security
-    officialUsername: (emp as any).officialUsername || emp.employeeId || emp.id,
-    role: (emp.systemAccess?.role || emp.role || 'Employee') as Role,
-    accountStatus: ((emp.accountStatus as any) || (emp.status === 'Terminated' ? 'DISABLED' : 'ACTIVE')) as 'ACTIVE' | 'DISABLED',
-    password: (emp as any).password || emp.password || 'Password@123',
-    mustChangePassword: Boolean(emp.mustChangePassword ?? false),
-    credentialEmailStatus: emp.credentialEmailStatus || 'SENT',
-    credentialEmailSentAt: emp.credentialEmailSentAt || '14 Sep 2026, 09:15 AM'
-  });
+      // 9. System Access & Security
+      officialUsername: (emp as any).officialUsername || emp.employeeId || emp.id,
+      role: (isEmpCEO ? 'CEO' : (emp.systemAccess?.role || emp.role || 'Employee')) as Role,
+      accountStatus: ((emp.accountStatus as any) || (emp.status === 'Terminated' ? 'DISABLED' : 'ACTIVE')) as 'ACTIVE' | 'DISABLED',
+      password: (emp as any).password || emp.password || 'Password@123',
+      mustChangePassword: Boolean(emp.mustChangePassword ?? false),
+      credentialEmailStatus: emp.credentialEmailStatus || 'SENT',
+      credentialEmailSentAt: emp.credentialEmailSentAt || '14 Sep 2026, 09:15 AM'
+    };
+  };
 
   const [formData, setFormData] = useState(getInitialFormData(currentEmp));
+  const [salaryInputDrafts, setSalaryInputDrafts] = useState<Record<string, string>>({});
+  const [isCustomDegree, setIsCustomDegree] = useState<boolean>(() => {
+    const d = currentEmp.educationalDetails?.degreeName;
+    return Boolean(d && !ALL_DEGREE_OPTIONS.includes(d));
+  });
+
+  const salaryInputValue = (key: string, value: number) => (
+    Object.prototype.hasOwnProperty.call(salaryInputDrafts, key) ? salaryInputDrafts[key] : value
+  );
+
+  const setSalaryDraft = (key: string, rawValue: string) => {
+    setSalaryInputDrafts(prev => {
+      const next = { ...prev };
+      if (rawValue === '') {
+        next[key] = '';
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
+  };
 
   // Sync permanent address when sameAsCurrent changes
   useEffect(() => {
@@ -282,11 +416,123 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
 
   // Handle Form Change
   const handleChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    let sanitizedValue = value;
+
+    // Names & Alphabet-only fields
+    if (['firstName', 'lastName', 'emergencyName', 'currentCity', 'permanentCity', 'currentState', 'permanentState', 'currentCountry', 'permanentCountry'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s]/g, '') : value;
+    }
+
+    // Address Lines (Letters, numbers, spaces, and , . - / #)
+    if (['currentLine1', 'currentLine2', 'permanentLine1', 'permanentLine2'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '') : value;
+    }
+
+    // Pincode (Exactly digits, max 6)
+    if (field === 'currentPincode' || field === 'permanentPincode') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/\D/g, '').slice(0, 6) : value;
+    }
+
+    // University (Letters, spaces, and &, -, . strictly - no digits/symbols)
+    if (field === 'university') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s&.\-]/g, '') : value;
+    }
+
+    // Degree Name
+    if (field === 'degreeName') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9\s&.\-()/]/g, '') : value;
+    }
+
+    // Specialization (Letters, spaces, and &, -, . ONLY - strictly no digits)
+    if (field === 'specialization') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s&.\-]/g, '') : value;
+    }
+
+    // Grade / Percentage (0 to 100, decimal allowed)
+    if (field === 'gradePercentage') {
+      if (typeof value === 'string') {
+        let val = value.replace(/[^0-9.]/g, '');
+        const parts = val.split('.');
+        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+        if (parseFloat(val) > 100) val = '100';
+        sanitizedValue = val;
+      }
+    }
+
+    // Total Experience (non-negative decimal allowed e.g. 2.5)
+    if (field === 'totalExperience' || field === 'relevantExperience') {
+      if (typeof value === 'string') {
+        let val = value.replace(/[^0-9.]/g, '');
+        const parts = val.split('.');
+        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+        sanitizedValue = val;
+      } else if (typeof value === 'number') {
+        sanitizedValue = Math.max(0, value).toString();
+      }
+    }
+
+    // Previous Company & Location
+    if (field === 'previousCompany' || field === 'previousCompanyLocation') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9\s&.\-(),/]/g, '') : value;
+    }
+
+    // Designation & Previous Designation
+    if (field === 'designation') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[0-9]/g, '') : value;
+    }
+    if (field === 'previousDesignation') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9\s&.\-()]/g, '') : value;
+    }
+
+    // Last Drawn Salary (decimal positive)
+    if (field === 'lastDrawnSalary') {
+      if (typeof value === 'string') {
+        let val = value.replace(/[^0-9.]/g, '');
+        const parts = val.split('.');
+        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+        sanitizedValue = val;
+      }
+    }
+
+    // Bank Name (letters, spaces, &, -, ()) - not numeric-only
+    if (field === 'bankName') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s&.\-()]/g, '') : value;
+    }
+
+    // Account Number (digits only, max 18)
+    if (field === 'accountNumber') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/\D/g, '').slice(0, 18) : value;
+    }
+
+    // IFSC Code (alphanumeric uppercase, max 11)
+    if (field === 'ifscCode') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 11) : value;
+    }
+
+    // PAN Number (alphanumeric uppercase, max 10)
+    if (field === 'panNumber') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10) : value;
+    }
+
+    // UAN Number (digits only, max 12)
+    if (field === 'uanNumber') {
+      sanitizedValue = typeof value === 'string' ? value.replace(/\D/g, '').slice(0, 12) : value;
+    }
+
+    setFormData(prev => ({ ...prev, [field]: sanitizedValue }));
+  };
+
+  const handleQualificationChange = (newQual: string) => {
+    setIsCustomDegree(false);
+    const defaultDeg = DEGREE_OPTIONS_BY_QUALIFICATION[newQual]?.[0] || 'B.E / B.Tech (Engineering / Technology)';
+    handleChange('qualification', newQual);
+    handleChange('degreeName', defaultDeg);
   };
 
   // CTC Auto-breakdown helper
-  const handleCtcChange = (ctcVal: number) => {
+  const handleCtcChange = (rawValue: string) => {
+    setSalaryDraft('monthlyCtc', rawValue);
+    const ctcVal = rawValue === '' ? 0 : Number(rawValue);
     const ctc = Math.max(0, ctcVal);
     const breakdown = calculateSalaryBreakdown(ctc, activeEarnings);
     setFormData(prev => ({
@@ -301,7 +547,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   };
 
   // Component direct adjustment
-  const handleSalaryComponentChange = (field: 'basicSalary' | 'da' | 'conveyance' | 'hra', val: number) => {
+  const handleSalaryComponentChange = (field: 'basicSalary' | 'da' | 'conveyance' | 'hra', rawValue: string) => {
+    setSalaryDraft(field, rawValue);
+    const val = rawValue === '' ? 0 : Number(rawValue);
     const num = Math.max(0, val);
     setFormData(prev => {
       const updated = { ...prev, [field]: num };
@@ -405,10 +653,15 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Document add simulation
   const handleAddDocument = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 1 * 1024 * 1024) {
+      alert(`Document "${file.name}" exceeds the maximum allowed size of 1 MB (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please upload a file up to 1 MB.`);
+      return;
+    }
+
     const sizeInKb = Math.round(file.size / 1024);
     const sizeFormatted = sizeInKb > 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${sizeInKb} KB`;
 
@@ -442,13 +695,118 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
 
   // Save changes
   const handleSaveChanges = () => {
+    if (formData.dob) {
+      const birthDate = new Date(formData.dob);
+      const today = new Date();
+      const ageInYears = (today.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+      if (ageInYears < 18) {
+        alert('Employee must be at least 18 years of age (Date of Birth indicates under 18).');
+        return;
+      }
+    }
+
+    if (formData.currentCity && !/^[a-zA-Z\s]+$/.test(formData.currentCity.trim())) {
+      alert('City must contain letters and spaces only.');
+      return;
+    }
+    if (formData.currentState && !/^[a-zA-Z\s]+$/.test(formData.currentState.trim())) {
+      alert('State must contain letters and spaces only.');
+      return;
+    }
+    if (formData.currentCountry && !/^[a-zA-Z\s]+$/.test(formData.currentCountry.trim())) {
+      alert('Country must contain letters and spaces only.');
+      return;
+    }
+    if (formData.currentPincode && !/^[0-9]{6}$/.test(formData.currentPincode.trim())) {
+      alert('Pincode must be exactly 6 digits.');
+      return;
+    }
+    if (!formData.sameAsCurrent) {
+      if (formData.permanentCity && !/^[a-zA-Z\s]+$/.test(formData.permanentCity.trim())) {
+        alert('Permanent City must contain letters and spaces only.');
+        return;
+      }
+      if (formData.permanentPincode && !/^[0-9]{6}$/.test(formData.permanentPincode.trim())) {
+        alert('Permanent Pincode must be exactly 6 digits.');
+        return;
+      }
+    }
+    if (formData.university && !/^[a-zA-Z\s&.\-]+$/.test(formData.university.trim())) {
+      alert('University must contain valid characters (letters and spaces only).');
+      return;
+    }
+    if (formData.gradePercentage) {
+      const gp = parseFloat(formData.gradePercentage);
+      if (isNaN(gp) || gp < 0 || gp > 100) {
+        alert('Grade / Percentage must be a valid number between 0 and 100.');
+        return;
+      }
+    }
+    if (formData.totalExperience) {
+      const exp = parseFloat(formData.totalExperience);
+      if (isNaN(exp) || exp < 0) {
+        alert('Total experience must be a non-negative number.');
+        return;
+      }
+    }
+    if (formData.expStartDate && formData.expEndDate) {
+      if (new Date(formData.expEndDate) < new Date(formData.expStartDate)) {
+        alert('Employment end date cannot be earlier than start date.');
+        return;
+      }
+    }
+    if (formData.lastDrawnSalary) {
+      const sal = parseFloat(formData.lastDrawnSalary);
+      if (isNaN(sal) || sal <= 0) {
+        alert('Last drawn salary must be a positive number.');
+        return;
+      }
+    }
+    if (formData.bankName && !/[a-zA-Z]/.test(formData.bankName.trim())) {
+      alert('Bank name must contain letters and cannot be numeric-only.');
+      return;
+    }
+    if (formData.accountNumber && !/^[0-9]{9,18}$/.test(formData.accountNumber.trim())) {
+      alert('Account number must be between 9 and 18 digits.');
+      return;
+    }
+    if (formData.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifscCode.trim().toUpperCase())) {
+      alert('Invalid IFSC format.');
+      return;
+    }
+    if (formData.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(formData.panNumber.trim().toUpperCase())) {
+      alert('Invalid PAN format.');
+      return;
+    }
+    if (formData.uanNumber && !/^[0-9]{12}$/.test(formData.uanNumber.trim())) {
+      alert('UAN must be exactly 12 digits.');
+      return;
+    }
+
+    const cleanEmail = (formData.personalEmail || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      alert('Email ID is required.');
+      return;
+    }
+    const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+    if (!emailRegex.test(cleanEmail) || /\s/.test(formData.personalEmail)) {
+      alert('Please enter a valid email ID.');
+      return;
+    }
+    const isDuplicateEmail = employees.some(
+      e => e.id !== currentEmp.id && e.employeeId !== currentEmp.employeeId && e.email?.toLowerCase().trim() === cleanEmail
+    );
+    if (isDuplicateEmail) {
+      alert('Email ID already exists.');
+      return;
+    }
+
     const updatedData: Partial<Employee> = {
       firstName: formData.firstName.trim(),
       lastName: formData.lastName.trim(),
       phone: formData.phone.trim(),
-      personalEmail: formData.personalEmail.trim(),
-      companyEmail: formData.companyEmail.trim(),
-      email: formData.companyEmail.trim() || formData.personalEmail.trim() || currentEmp.email,
+      personalEmail: cleanEmail,
+      email: cleanEmail,
       gender: formData.gender,
       dob: formData.dob,
       maritalStatus: formData.maritalStatus,
@@ -565,7 +923,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
       systemAccess: {
         role: formData.role,
         status: (formData.accountStatus === 'ACTIVE' ? 'Active' : 'Inactive') as 'Active' | 'Inactive',
-        permissions: currentEmp.systemAccess?.permissions || ['Dashboard', 'Attendance', 'Leaves', 'Tasks'],
+        permissions: (formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO')
+          ? ['Dashboard', 'Employees', 'Attendance', 'Leaves', 'Payroll', 'Projects', 'Recruitment', 'Performance', 'Reports', 'Settings', 'CEO', 'All']
+          : (currentEmp.systemAccess?.permissions || ['Dashboard', 'Attendance', 'Leaves', 'Tasks']),
         sendInvite: false
       }
     };
@@ -573,12 +933,16 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     updateEmployee(currentEmp.id || currentEmp.employeeId, updatedData);
     setCurrentEmp(prev => ({ ...prev, ...updatedData }));
     setIsEditing(false);
+    setSalaryInputDrafts({});
     setSaveNotice('Employee onboarding details and salary updated successfully.');
     setTimeout(() => setSaveNotice(null), 5000);
   };
 
   const handleCancelEditing = () => {
     setFormData(getInitialFormData(currentEmp));
+    setSalaryInputDrafts({});
+    const d = currentEmp.educationalDetails?.degreeName;
+    setIsCustomDegree(Boolean(d && !ALL_DEGREE_OPTIONS.includes(d)));
     setIsEditing(false);
   };
 
@@ -837,8 +1201,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
-              value={formData.firstName} 
-              onChange={(e) => handleChange('firstName', e.target.value)} 
+              value={formData.firstName.replace(/[^a-zA-Z\s]/g, '')} 
+              onChange={(e) => handleChange('firstName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} 
+              onKeyDown={(e) => {
+                if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                }
+              }}
               style={inputStyle} 
               placeholder="First name"
             />
@@ -853,8 +1222,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
-              value={formData.lastName} 
-              onChange={(e) => handleChange('lastName', e.target.value)} 
+              value={formData.lastName.replace(/[^a-zA-Z\s]/g, '')} 
+              onChange={(e) => handleChange('lastName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} 
+              onKeyDown={(e) => {
+                if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                }
+              }}
               style={inputStyle} 
               placeholder="Last name"
             />
@@ -901,12 +1275,15 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
         <div>
           <label style={labelStyle}>Date of Birth</label>
           {isEditing ? (
-            <input 
-              type="date" 
-              value={formData.dob} 
-              onChange={(e) => handleChange('dob', e.target.value)} 
-              style={inputStyle} 
-            />
+            <div>
+              <input 
+                type="date" 
+                value={formData.dob} 
+                onChange={(e) => handleChange('dob', e.target.value)} 
+                max={maxDobDate}
+                style={inputStyle} 
+              />
+            </div>
           ) : (
             <div style={viewValueStyle}>
               {currentEmp.dob ? formatDateDDMMYYYY(currentEmp.dob) : '—'}
@@ -977,37 +1354,31 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           )}
         </div>
 
-        {/* Personal Email */}
+        {/* Email ID */}
         <div>
-          <label style={labelStyle}>Personal Email</label>
+          <label style={labelStyle}>Email ID <span style={{ color: '#EF4444' }}>*</span></label>
           {isEditing ? (
             <input 
               type="email" 
               value={formData.personalEmail} 
-              onChange={(e) => handleChange('personalEmail', e.target.value)} 
+              onChange={(e) => {
+                const cleanEmail = e.target.value.toLowerCase().replace(/\s/g, '');
+                handleChange('personalEmail', cleanEmail);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === ' ') {
+                  e.preventDefault();
+                }
+              }}
+              onBlur={() => {
+                handleChange('personalEmail', (formData.personalEmail || '').trim().toLowerCase());
+              }}
               style={inputStyle} 
-              placeholder="personal@gmail.com"
+              placeholder="e.g. employee@gmail.com"
+              required
             />
           ) : (
             <div style={viewValueStyle}>{formData.personalEmail || currentEmp.email || '—'}</div>
-          )}
-        </div>
-
-        {/* Company Official Email */}
-        <div>
-          <label style={labelStyle}>Company Official Email</label>
-          {isEditing ? (
-            <input 
-              type="email" 
-              value={formData.companyEmail} 
-              onChange={(e) => handleChange('companyEmail', e.target.value)} 
-              style={inputStyle} 
-              placeholder="name@businz.com"
-            />
-          ) : (
-            <div style={viewValueStyle}>
-              {formData.companyEmail || currentEmp.email || '—'}
-            </div>
           )}
         </div>
       </div>
@@ -1055,13 +1426,16 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           <label style={labelStyle}>Designation / Role</label>
           {isEditing ? (
             <select 
-              value={formData.designation} 
-              onChange={(e) => handleChange('designation', e.target.value)} 
+              value={formData.designation.replace(/[0-9]/g, '')} 
+              onChange={(e) => handleChange('designation', e.target.value.replace(/[0-9]/g, ''))} 
               style={selectStyle}
             >
-              {designations.map(des => (
-                <option key={des.id} value={des.title}>{des.title}</option>
-              ))}
+              {designations.map(des => {
+                const clean = des.title.replace(/[0-9]/g, '').trim();
+                return (
+                  <option key={des.id} value={clean}>{clean}</option>
+                );
+              })}
             </select>
           ) : (
             <div style={viewValueStyle}>{currentEmp.designation}</div>
@@ -1077,10 +1451,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               onChange={(e) => handleChange('employmentType', e.target.value)} 
               style={selectStyle}
             >
-              <option value="Full-Time">Full-Time</option>
-              <option value="Part-Time">Part-Time</option>
-              <option value="Contract">Contract</option>
-              <option value="Intern">Intern</option>
+              {employmentTypeOptions.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
             </select>
           ) : (
             <div style={viewValueStyle}>
@@ -1156,14 +1529,19 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               value={formData.workLocation} 
               onChange={(e) => handleChange('workLocation', e.target.value)} 
               style={selectStyle}
+              disabled={workLocationOptions.length === 0}
             >
-              {branches.map(b => (
-                <option key={b.id} value={b.name}>{b.name}</option>
-              ))}
+              {workLocationOptions.length === 0 ? (
+                <option value="">No branches configured in Settings</option>
+              ) : (
+                workLocationOptions.map(location => (
+                  <option key={location.value} value={location.value}>{location.label}</option>
+                ))
+              )}
             </select>
           ) : (
             <div style={viewValueStyle}>
-              {formData.workLocation || currentEmp.workLocation || 'Chennai HQ'}
+              {formData.workLocation || currentEmp.workLocation || '—'}
             </div>
           )}
         </div>
@@ -1242,6 +1620,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                   type="text" 
                   value={formData.currentLine1} 
                   onChange={(e) => handleChange('currentLine1', e.target.value)} 
+                  onKeyDown={handleAddressLineKeyDown}
                   style={inputStyle} 
                   placeholder="Door No, Street Name"
                 />
@@ -1257,6 +1636,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                   type="text" 
                   value={formData.currentLine2} 
                   onChange={(e) => handleChange('currentLine2', e.target.value)} 
+                  onKeyDown={handleAddressLineKeyDown}
                   style={inputStyle} 
                   placeholder="Area / Landmark"
                 />
@@ -1273,7 +1653,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     type="text" 
                     value={formData.currentCity} 
                     onChange={(e) => handleChange('currentCity', e.target.value)} 
+                    onKeyDown={handleLettersOnlyKeyDown}
                     style={inputStyle} 
+                    placeholder="City (Letters only)"
                   />
                 ) : (
                   <div style={viewValueStyle}>{formData.currentCity || '—'}</div>
@@ -1286,7 +1668,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     type="text" 
                     value={formData.currentState} 
                     onChange={(e) => handleChange('currentState', e.target.value)} 
+                    onKeyDown={handleLettersOnlyKeyDown}
                     style={inputStyle} 
+                    placeholder="State (Letters only)"
                   />
                 ) : (
                   <div style={viewValueStyle}>{formData.currentState || '—'}</div>
@@ -1302,7 +1686,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     type="text" 
                     value={formData.currentCountry} 
                     onChange={(e) => handleChange('currentCountry', e.target.value)} 
+                    onKeyDown={handleLettersOnlyKeyDown}
                     style={inputStyle} 
+                    placeholder="Country (Letters only)"
                   />
                 ) : (
                   <div style={viewValueStyle}>{formData.currentCountry || '—'}</div>
@@ -1313,9 +1699,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                 {isEditing ? (
                   <input 
                     type="text" 
+                    inputMode="numeric"
+                    maxLength={6}
                     value={formData.currentPincode} 
                     onChange={(e) => handleChange('currentPincode', e.target.value)} 
+                    onKeyDown={handleDigitsOnlyKeyDown}
                     style={inputStyle} 
+                    placeholder="6-digit Pincode"
                   />
                 ) : (
                   <div style={viewValueStyle}>{formData.currentPincode || '—'}</div>
@@ -1352,7 +1742,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                   type="text" 
                   value={formData.permanentLine1} 
                   onChange={(e) => handleChange('permanentLine1', e.target.value)} 
+                  onKeyDown={handleAddressLineKeyDown}
                   style={inputStyle} 
+                  placeholder="House / Flat No, Street Name"
                 />
               ) : (
                 <div style={viewValueStyle}>
@@ -1368,7 +1760,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                   type="text" 
                   value={formData.permanentLine2} 
                   onChange={(e) => handleChange('permanentLine2', e.target.value)} 
+                  onKeyDown={handleAddressLineKeyDown}
                   style={inputStyle} 
+                  placeholder="Apartment, Landmark, Area"
                 />
               ) : (
                 <div style={viewValueStyle}>
@@ -1385,7 +1779,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     type="text" 
                     value={formData.permanentCity} 
                     onChange={(e) => handleChange('permanentCity', e.target.value)} 
+                    onKeyDown={handleLettersOnlyKeyDown}
                     style={inputStyle} 
+                    placeholder="City (Letters only)"
                   />
                 ) : (
                   <div style={viewValueStyle}>
@@ -1400,7 +1796,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     type="text" 
                     value={formData.permanentState} 
                     onChange={(e) => handleChange('permanentState', e.target.value)} 
+                    onKeyDown={handleLettersOnlyKeyDown}
                     style={inputStyle} 
+                    placeholder="State (Letters only)"
                   />
                 ) : (
                   <div style={viewValueStyle}>
@@ -1418,7 +1816,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     type="text" 
                     value={formData.permanentCountry} 
                     onChange={(e) => handleChange('permanentCountry', e.target.value)} 
+                    onKeyDown={handleLettersOnlyKeyDown}
                     style={inputStyle} 
+                    placeholder="Country (Letters only)"
                   />
                 ) : (
                   <div style={viewValueStyle}>
@@ -1431,9 +1831,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                 {isEditing && !formData.sameAsCurrent ? (
                   <input 
                     type="text" 
+                    inputMode="numeric"
+                    maxLength={6}
                     value={formData.permanentPincode} 
                     onChange={(e) => handleChange('permanentPincode', e.target.value)} 
+                    onKeyDown={handleDigitsOnlyKeyDown}
                     style={inputStyle} 
+                    placeholder="6-digit Pincode"
                   />
                 ) : (
                   <div style={viewValueStyle}>
@@ -1466,8 +1870,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                 type="text" 
                 value={formData.emergencyName} 
                 onChange={(e) => handleChange('emergencyName', e.target.value)} 
+                onKeyDown={handleLettersOnlyKeyDown}
                 style={inputStyle} 
-                placeholder="Name"
+                placeholder="Name (Letters only)"
               />
             ) : (
               <div style={viewValueStyle}>{formData.emergencyName || '—'}</div>
@@ -1607,17 +2012,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <select 
               value={formData.qualification} 
-              onChange={(e) => handleChange('qualification', e.target.value)} 
+              onChange={(e) => handleQualificationChange(e.target.value)} 
               style={selectStyle}
             >
-              <option value="B.E / B.Tech">B.E / B.Tech</option>
-              <option value="M.E / M.Tech">M.E / M.Tech</option>
-              <option value="MBA">MBA</option>
-              <option value="MCA">MCA</option>
-              <option value="B.Sc / M.Sc">B.Sc / M.Sc</option>
+              <option value="UG">UG</option>
+              <option value="PG">PG</option>
               <option value="Diploma">Diploma</option>
-              <option value="12th / HSC">12th / HSC</option>
-              <option value="10th / SSLC">10th / SSLC</option>
+              <option value="Others">Others</option>
             </select>
           ) : (
             <div style={viewValueStyle}>{formData.qualification || '—'}</div>
@@ -1625,29 +2026,85 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
         </div>
 
         <div>
-          <label style={labelStyle}>Degree / Course Name</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Degree / Course Name</label>
+            {isEditing && isCustomDegree ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomDegree(false);
+                  const defaultDeg = DEGREE_OPTIONS_BY_QUALIFICATION[formData.qualification]?.[0] || 'B.E / B.Tech (Engineering / Technology)';
+                  handleChange('degreeName', defaultDeg);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#0E7490',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: 0,
+                  textDecoration: 'underline'
+                }}
+              >
+                Choose from list
+              </button>
+            ) : null}
+          </div>
           {isEditing ? (
-            <input 
-              type="text" 
-              value={formData.degreeName} 
-              onChange={(e) => handleChange('degreeName', e.target.value)} 
-              style={inputStyle} 
-              placeholder="e.g. B.Tech Civil Engineering"
-            />
+            isCustomDegree ? (
+              <input 
+                type="text" 
+                value={formData.degreeName} 
+                onChange={(e) => handleChange('degreeName', e.target.value.replace(/[^a-zA-Z0-9\s&.\-()/]/g, ''))} 
+                onKeyDown={handleCompanyKeyDown}
+                style={inputStyle} 
+                placeholder="Enter Degree / Course Name"
+                autoFocus
+              />
+            ) : (
+              <select
+                value={formData.degreeName}
+                onChange={(e) => {
+                  if (e.target.value === '__CUSTOM__') {
+                    setIsCustomDegree(true);
+                    handleChange('degreeName', '');
+                  } else {
+                    setIsCustomDegree(false);
+                    handleChange('degreeName', e.target.value);
+                  }
+                }}
+                style={selectStyle}
+              >
+                <optgroup label={`${formData.qualification} Degrees`}>
+                  {(DEGREE_OPTIONS_BY_QUALIFICATION[formData.qualification] || []).map(deg => (
+                    <option key={deg} value={deg}>{deg}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="All Other Degrees & Courses">
+                  {ALL_DEGREE_OPTIONS.filter(deg => !(DEGREE_OPTIONS_BY_QUALIFICATION[formData.qualification] || []).includes(deg)).map(deg => (
+                    <option key={deg} value={deg}>{deg}</option>
+                  ))}
+                </optgroup>
+                <option value="__CUSTOM__">+ Other / Custom Degree (Type manually)...</option>
+              </select>
+            )
           ) : (
             <div style={viewValueStyle}>{formData.degreeName || '—'}</div>
           )}
         </div>
 
         <div>
-          <label style={labelStyle}>Specialization / Stream</label>
+          <label style={labelStyle}>Specialization / Stream <span style={{ color: '#EF4444' }}>*</span></label>
           {isEditing ? (
             <input 
               type="text" 
               value={formData.specialization} 
-              onChange={(e) => handleChange('specialization', e.target.value)} 
+              onChange={(e) => handleChange('specialization', e.target.value.replace(/[^a-zA-Z\s&.\-]/g, ''))} 
+              onKeyDown={handleUniversityKeyDown}
               style={inputStyle} 
-              placeholder="e.g. Structural Engineering"
+              placeholder="e.g. Mechanical / CSE (Letters only)"
+              required
             />
           ) : (
             <div style={viewValueStyle}>{formData.specialization || '—'}</div>
@@ -1661,8 +2118,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               type="text" 
               value={formData.university} 
               onChange={(e) => handleChange('university', e.target.value)} 
+              onKeyDown={handleUniversityKeyDown}
               style={inputStyle} 
-              placeholder="e.g. Anna University"
+              placeholder="e.g. Anna University (Letters only)"
             />
           ) : (
             <div style={viewValueStyle}>{formData.university || '—'}</div>
@@ -1694,10 +2152,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
+              inputMode="decimal"
+              maxLength={6}
               value={formData.gradePercentage} 
               onChange={(e) => handleChange('gradePercentage', e.target.value)} 
+              onKeyDown={handleDecimalKeyDown(formData.gradePercentage)}
               style={inputStyle} 
-              placeholder="e.g. 8.4 CGPA / 84%"
+              placeholder="e.g. 84.50 (0 to 100)"
             />
           ) : (
             <div style={viewValueStyle}>
@@ -1766,17 +2227,26 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
         </div>
 
         <div>
-          <label style={labelStyle}>Total Experience Duration</label>
+          <label style={labelStyle}>Total Experience (Years)</label>
           {isEditing ? (
-            <input 
-              type="text" 
-              value={formData.totalExperience} 
-              onChange={(e) => handleChange('totalExperience', e.target.value)} 
-              style={inputStyle} 
-              placeholder="e.g. 3 Years 6 Months"
-            />
+            <div>
+              <input 
+                type="text" 
+                inputMode="decimal"
+                maxLength={5}
+                value={formData.totalExperience ? formData.totalExperience.toString() : ''} 
+                onChange={(e) => handleChange('totalExperience', e.target.value)} 
+                onKeyDown={handleDecimalKeyDown(formData.totalExperience)}
+                style={inputStyle} 
+                placeholder="e.g. 2.5 (Years)"
+              />
+            </div>
           ) : (
-            <div style={viewValueStyle}>{formData.totalExperience || '—'}</div>
+            <div style={viewValueStyle}>
+              {formData.totalExperience 
+                ? `${formData.totalExperience} Years`
+                : '—'}
+            </div>
           )}
         </div>
 
@@ -1787,6 +2257,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               type="text" 
               value={formData.previousCompany} 
               onChange={(e) => handleChange('previousCompany', e.target.value)} 
+              onKeyDown={handleCompanyKeyDown}
               style={inputStyle} 
               placeholder="Company name"
             />
@@ -1798,13 +2269,16 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
         <div>
           <label style={labelStyle}>Previous Designation</label>
           {isEditing ? (
-            <input 
-              type="text" 
-              value={formData.previousDesignation} 
-              onChange={(e) => handleChange('previousDesignation', e.target.value)} 
-              style={inputStyle} 
-              placeholder="Job title"
-            />
+            <div>
+              <input 
+                type="text" 
+                value={formData.previousDesignation} 
+                onChange={(e) => handleChange('previousDesignation', e.target.value)} 
+                onKeyDown={handleCompanyKeyDown}
+                style={inputStyle} 
+                placeholder="e.g. Site Engineer"
+              />
+            </div>
           ) : (
             <div style={viewValueStyle}>{formData.previousDesignation || '—'}</div>
           )}
@@ -1830,10 +2304,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
+              inputMode="decimal"
+              maxLength={12}
               value={formData.lastDrawnSalary} 
               onChange={(e) => handleChange('lastDrawnSalary', e.target.value)} 
+              onKeyDown={handleDecimalKeyDown(formData.lastDrawnSalary)}
               style={inputStyle} 
-              placeholder="e.g. ₹50,000 / month"
+              placeholder="e.g. 35000"
             />
           ) : (
             <div style={viewValueStyle}>{formData.lastDrawnSalary || '—'}</div>
@@ -1917,18 +2394,40 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: formData.salaryScheme === 'WITH_PF' ? '#DCFCE7' : '#FEF3C7',
-            color: formData.salaryScheme === 'WITH_PF' ? '#15803D' : '#B45309',
-            border: `1px solid ${formData.salaryScheme === 'WITH_PF' ? '#BBF7D0' : '#FDE68A'}`,
+            backgroundColor: (formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') ? '#ECFEFF' : (formData.salaryScheme === 'WITH_PF' ? '#DCFCE7' : '#FEF3C7'),
+            color: (formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') ? '#0E7490' : (formData.salaryScheme === 'WITH_PF' ? '#15803D' : '#B45309'),
+            border: `1px solid ${(formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') ? '#0E7490' : (formData.salaryScheme === 'WITH_PF' ? '#BBF7D0' : '#FDE68A')}`,
             padding: '4px 12px',
             borderRadius: '9999px',
             fontSize: '0.78rem',
             fontWeight: 800
           }}>
-            {formData.salaryScheme === 'WITH_PF' ? 'PF & ESI ENROLLED' : 'WITHOUT PF SCHEME'}
+            {(formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') ? '👑 OWNER / SALARY EXEMPT' : (formData.salaryScheme === 'WITH_PF' ? 'PF & ESI ENROLLED' : 'WITHOUT PF SCHEME')}
           </span>
         </div>
       </div>
+
+      {(formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') && (
+        <div style={{
+          backgroundColor: '#ECFEFF',
+          border: '1.5px solid #0E7490',
+          borderRadius: '12px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div>
+            <div style={{ fontWeight: 800, color: '#0E7490', fontSize: '0.95rem' }}>
+              Chief Executive Officer — Salary Exempt
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#155E75', marginTop: '2px' }}>
+              As Chief Executive Officer, standard employee monthly salary, payroll deductions, and statutory CTC allocations are not applicable.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TOP SALARY SUMMARY HERO */}
       <div style={{
@@ -1950,8 +2449,8 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             <div style={{ marginTop: '6px' }}>
               <input 
                 type="number" 
-                value={formData.monthlyCtc} 
-                onChange={(e) => handleCtcChange(Number(e.target.value))} 
+                value={salaryInputValue('monthlyCtc', formData.monthlyCtc)} 
+                onChange={(e) => handleCtcChange(e.target.value)} 
                 style={{ ...inputStyle, fontSize: '1.2rem', fontWeight: 800, color: '#0E7490' }}
                 placeholder="Monthly CTC"
               />
@@ -1963,8 +2462,14 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             </div>
           ) : (
             <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0E7490', letterSpacing: '-0.02em', marginTop: '4px' }}>
-              {formatCurrency(formData.monthlyCtc)}
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', marginLeft: '6px' }}>/ month</span>
+              {(formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') && formData.monthlyCtc === 0 ? (
+                <span style={{ color: '#0E7490', fontSize: '1.05rem', fontWeight: 800 }}>Exempt</span>
+              ) : (
+                <>
+                  {formatCurrency(formData.monthlyCtc)}
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', marginLeft: '6px' }}>/ month</span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1974,8 +2479,14 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             ANNUAL CTC (ESTIMATED)
           </div>
           <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
-            {formatCurrency(formData.monthlyCtc * 12)}
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', marginLeft: '6px' }}>/ annum</span>
+            {(formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') && formData.monthlyCtc === 0 ? (
+              <span style={{ color: '#64748B', fontSize: '1.05rem', fontWeight: 700 }}>Exempt</span>
+            ) : (
+              <>
+                {formatCurrency(formData.monthlyCtc * 12)}
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', marginLeft: '6px' }}>/ annum</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -2033,9 +2544,10 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                 {isEditing ? (
                   <input 
                     type="number" 
-                    value={compVal} 
+                    value={salaryInputValue(`component:${comp.code}`, compVal)} 
                     onChange={(e) => {
-                      const val = Math.max(0, Number(e.target.value));
+                      setSalaryDraft(`component:${comp.code}`, e.target.value);
+                      const val = Math.max(0, e.target.value === '' ? 0 : Number(e.target.value));
                       setFormData(prev => {
                         const customVals = { ...(prev.customComponents || {}), [comp.code]: val };
                         const code = comp.code.toUpperCase();
@@ -2051,7 +2563,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                           conveyance,
                           hra,
                           customComponents: customVals,
-                          monthlyCtc: total || prev.monthlyCtc
+                          monthlyCtc: total
                         };
                       });
                     }} 
@@ -2076,8 +2588,8 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               {isEditing ? (
                 <input
                   type="number"
-                  value={formData.basicSalary}
-                  onChange={(e) => handleSalaryComponentChange('basicSalary', Number(e.target.value))}
+                  value={salaryInputValue('basicSalary', formData.basicSalary)}
+                  onChange={(e) => handleSalaryComponentChange('basicSalary', e.target.value)}
                   style={inputStyle}
                 />
               ) : (
@@ -2256,8 +2768,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               type="text" 
               value={formData.bankName} 
               onChange={(e) => handleChange('bankName', e.target.value)} 
+              onKeyDown={handleLettersOnlyKeyDown}
               style={inputStyle} 
-              placeholder="e.g. HDFC Bank"
+              placeholder="e.g. HDFC Bank (Letters only)"
             />
           ) : (
             <div style={viewValueStyle}>{formData.bankName || '—'}</div>
@@ -2269,10 +2782,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
+              inputMode="numeric"
+              maxLength={18}
               value={formData.accountNumber} 
               onChange={(e) => handleChange('accountNumber', e.target.value)} 
+              onKeyDown={handleDigitsOnlyKeyDown}
               style={inputStyle} 
-              placeholder="Bank account number"
+              placeholder="9 to 18 digit Account Number"
             />
           ) : (
             <div style={{ ...viewValueStyle, fontFamily: 'monospace', color: '#0E7490' }}>
@@ -2294,10 +2810,12 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
+              maxLength={11}
               value={formData.ifscCode} 
               onChange={(e) => handleChange('ifscCode', e.target.value.toUpperCase())} 
-              style={inputStyle} 
-              placeholder="e.g. HDFC0001234"
+              onKeyDown={handleAlphanumericKeyDown}
+              style={{ ...inputStyle, textTransform: 'uppercase' }} 
+              placeholder="11-character IFSC (e.g. SBIN0001234)"
             />
           ) : (
             <div style={{ ...viewValueStyle, fontFamily: 'monospace' }}>
@@ -2326,10 +2844,12 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
+              maxLength={10}
               value={formData.panNumber} 
               onChange={(e) => handleChange('panNumber', e.target.value.toUpperCase())} 
-              style={inputStyle} 
-              placeholder="ABCDE1234F"
+              onKeyDown={handleAlphanumericKeyDown}
+              style={{ ...inputStyle, textTransform: 'uppercase' }} 
+              placeholder="10-character PAN (e.g. ABCDE1234F)"
             />
           ) : (
             <div style={{ ...viewValueStyle, fontFamily: 'monospace', fontWeight: 800 }}>
@@ -2343,10 +2863,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
+              inputMode="numeric"
+              maxLength={12}
               value={formData.uanNumber} 
               onChange={(e) => handleChange('uanNumber', e.target.value)} 
+              onKeyDown={handleDigitsOnlyKeyDown}
               style={inputStyle} 
-              placeholder="12-digit UAN"
+              placeholder="12-digit UAN (e.g. 101234567890)"
             />
           ) : (
             <div style={{ ...viewValueStyle, fontFamily: 'monospace' }}>
@@ -2415,10 +2938,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               onChange={(e) => handleChange('shift', e.target.value)} 
               style={selectStyle}
             >
-              <option value="">{shifts.length > 0 ? '-- Select Shift --' : '-- No Shifts Configured --'}</option>
-              {shifts.map(s => (
-                <option key={s.id} value={s.shiftName}>{s.shiftName}</option>
-              ))}
+              {shifts.length === 0 ? (
+                <option value="">No Shifts Configured</option>
+              ) : (
+                shifts.map(s => (
+                  <option key={s.id} value={s.shiftName}>{s.shiftName}</option>
+                ))
+              )}
             </select>
           ) : (
             <div style={viewValueStyle}>{formData.shift || 'No Shift Assigned'}</div>
@@ -2519,7 +3045,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             </h3>
           </div>
           <p style={{ margin: '3px 0 0 0', fontSize: '0.78rem', color: '#64748B' }}>
-            Employee verification certificates, KYC identity files, and relieving letters
+            Employee verification certificates, KYC identity files, and relieving letters (Max size: 1 MB per document)
           </p>
         </div>
 

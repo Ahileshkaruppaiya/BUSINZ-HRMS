@@ -27,7 +27,6 @@ import {
   ArrowRight,
   TrendingUp,
   CreditCard,
-  Building2,
   Receipt,
   Eye,
   Send,
@@ -82,9 +81,16 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   const isEmployeeRole = currentUser.role === 'Employee' && !isAccountsUser && !isApprovalAuthority;
   const isViewingAsEmployee = isEmployeeRole;
 
-  // Target Employee for Employee View
-  const targetEmployeeId = currentUser.employeeId || employees[0]?.employeeId || '';
-  const targetEmployee = employees.find(e => e.employeeId === targetEmployeeId || e.email === currentUser.email) || employees[0];
+  // Target Employee for Personal Advance Salary Application (Strictly own application)
+  const targetEmployee = useMemo(() => {
+    return employees.find(e => 
+      (currentUser.employeeId && e.employeeId === currentUser.employeeId) ||
+      (currentUser.email && e.email?.toLowerCase().trim() === currentUser.email?.toLowerCase().trim()) ||
+      (currentUser.name && `${e.firstName} ${e.lastName}`.trim().toLowerCase() === currentUser.name?.trim().toLowerCase())
+    ) || (currentUser.employeeId ? employees.find(e => e.employeeId === currentUser.employeeId) : null) || employees[0];
+  }, [employees, currentUser]);
+
+  const targetEmployeeId = targetEmployee?.employeeId || currentUser.employeeId || employees[0]?.employeeId || '';
 
   // Employee Self-Service Eligibility
   const employeeEligibility = useMemo(() => {
@@ -117,8 +123,6 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Target employee for Request modal (for HR/Admin mode)
-  const [requestModalEmployeeId, setRequestModalEmployeeId] = useState<string>(targetEmployeeId);
 
   // Reset page when filters or tab change
   useEffect(() => {
@@ -144,7 +148,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
   // Request Form State
   const [requestFormData, setRequestFormData] = useState<{
-    requestType: 'Advance Salary' | 'Employee Loan' | 'Emergency Loan' | 'Salary Advance';
+    requestType: 'Advance Salary' | 'Employee Loan' | 'Emergency Loan';
     requestedAmount: number;
     installmentMonths: number;
     purpose: string;
@@ -231,7 +235,13 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       if (departmentFilter !== 'ALL' && record.department !== departmentFilter) return false;
 
       // Type filter
-      if (typeFilter !== 'ALL' && record.requestType !== typeFilter) return false;
+      if (typeFilter !== 'ALL') {
+        if (typeFilter === 'Advance Salary') {
+          if (record.requestType !== 'Advance Salary' && (record.requestType as string) !== 'Salary Advance') return false;
+        } else if (record.requestType !== typeFilter) {
+          return false;
+        }
+      }
 
       // Search query
       if (searchQuery.trim()) {
@@ -330,14 +340,12 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     );
   };
 
-  // Open Request Modal
+  // Open Request Modal (Strictly for applicant's own advance salary)
   const openRequestModal = () => {
-    const targetEmpId = isViewingAsEmployee ? (targetEmployee?.employeeId || targetEmployeeId) : (requestModalEmployeeId || employees.find(e => e.employeeId !== currentUser.employeeId)?.employeeId || targetEmployeeId);
-    const targetEmp = employees.find(e => e.employeeId === targetEmpId) || targetEmployee || employees[0];
-    const elig = calculateEmployeeLoanEligibility(targetEmp?.employeeId || targetEmpId);
+    const elig = calculateEmployeeLoanEligibility(targetEmployee.employeeId);
     const maxAmt = Math.max(elig.maxEligibleAmount || 50000, 30000);
     setRequestFormData({
-      requestType: 'Employee Loan',
+      requestType: 'Advance Salary',
       requestedAmount: Math.min(30000, maxAmt),
       installmentMonths: 6,
       purpose: 'Emergency Medical & Personal Expense',
@@ -347,32 +355,30 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     setIsRequestModalOpen(true);
   };
 
-  // Submit Loan Request Handler
+  // Submit Loan Request Handler (Strictly for applicant's own advance salary)
   const handleRequestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const targetEmpId = isViewingAsEmployee ? targetEmployeeId : (requestModalEmployeeId || targetEmployeeId);
-    const targetEmp = employees.find(e => e.employeeId === targetEmpId) || targetEmployee;
-    const elig = calculateEmployeeLoanEligibility(targetEmp.employeeId);
+    const elig = calculateEmployeeLoanEligibility(targetEmployee.employeeId);
 
     if (!elig.isEligible) {
-      showFeedback('error', elig.ineligibleReason || 'Employee is not eligible to apply.');
+      showFeedback('error', elig.ineligibleReason || 'You are not eligible to apply for advance salary.');
       return;
     }
 
     if (requestFormData.requestedAmount > elig.maxEligibleAmount) {
-      showFeedback('error', `Requested amount exceeds maximum eligible loan limit of ${formatCurrency(elig.maxEligibleAmount)}.`);
+      showFeedback('error', `Requested amount exceeds maximum eligible limit of ${formatCurrency(elig.maxEligibleAmount)}.`);
       return;
     }
 
     const res = submitLoanRequest({
-      employeeId: targetEmp.employeeId,
-      employeeName: `${targetEmp.firstName} ${targetEmp.lastName}`,
-      department: targetEmp.department,
-      designation: targetEmp.designation,
+      employeeId: targetEmployee.employeeId,
+      employeeName: `${targetEmployee.firstName} ${targetEmployee.lastName}`,
+      department: targetEmployee.department,
+      designation: targetEmployee.designation,
       policyId: elig.policy.id,
       policyName: elig.policy.policyName,
       requestType: requestFormData.requestType,
-      basicSalary: toNum(targetEmp.basicSalary),
+      basicSalary: toNum(targetEmployee.basicSalary),
       eligibleLimitAmount: elig.maxEligibleAmount,
       requestedAmount: requestFormData.requestedAmount,
       installmentMonths: requestFormData.installmentMonths,
@@ -384,7 +390,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     });
 
     if (res.success) {
-      showFeedback('success', `Loan Request submitted successfully for ${targetEmp.firstName} (Ref: ${res.loanId})!`);
+      showFeedback('success', `Advance Salary request submitted successfully (Ref: ${res.loanId})!`);
       setIsRequestModalOpen(false);
       if (onCloseQuickAdd) onCloseQuickAdd();
     } else {
@@ -544,7 +550,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       { field: 'Monthly EMI Recovery', value: formatCurrency(record.monthlyDeduction) },
       { field: 'Current Status', value: record.status },
       { field: 'Approval Authority', value: approver },
-      { field: 'Notes / Purpose', value: record.internalHrNotes || record.purpose || 'Approved for salary advance disbursement' }
+      { field: 'Notes / Purpose', value: record.internalHrNotes || record.purpose || 'Approved for advance salary disbursement' }
     ];
     downloadPDF(data, `Advance Salary Payout Voucher - ${record.employeeName}`, `Advance_Voucher_${record.employeeId}_${record.id}`, columns);
   };
@@ -598,32 +604,30 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
             />
           )}
 
-          {/* Quick Apply / Request Button - Visible ONLY for Employees */}
-          {isViewingAsEmployee && (
-            <button 
-              type="button" 
-              className="btn btn-primary"
-              onClick={openRequestModal}
-              title="Apply for Advance Salary"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                borderRadius: '12px',
-                padding: '9px 18px',
-                fontWeight: 700,
-                fontSize: '0.84rem',
-                backgroundColor: '#0E7490',
-                borderColor: '#0E7490',
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(14, 116, 144, 0.2)',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <Plus size={16} strokeWidth={2.5} />
-              <span>Request Advance Salary</span>
-            </button>
-          )}
+          {/* Create / Request Advance Salary Button */}
+          <button 
+            type="button" 
+            className="btn btn-primary"
+            onClick={openRequestModal}
+            title="Apply for Advance Salary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              borderRadius: '12px',
+              padding: '9px 18px',
+              fontWeight: 700,
+              fontSize: '0.84rem',
+              backgroundColor: '#0E7490',
+              borderColor: '#0E7490',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(14, 116, 144, 0.2)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            <span>Request Advance Salary</span>
+          </button>
         </div>
       </div>
 
@@ -1072,7 +1076,6 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                     <option value="Advance Salary">Advance Salary</option>
                     <option value="Employee Loan">Employee Loan</option>
                     <option value="Emergency Loan">Emergency Loan</option>
-                    <option value="Salary Advance">Salary Advance</option>
                   </select>
                 </div>
 
@@ -1195,7 +1198,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                               backgroundColor: record.requestType.includes('Advance') ? '#EFF6FF' : '#F5F3FF',
                               color: record.requestType.includes('Advance') ? '#1D4ED8' : '#6D28D9'
                             }}>
-                              {record.requestType}
+                              {(record.requestType as string) === 'Salary Advance' ? 'Advance Salary' : record.requestType}
                             </span>
                           </td>
                           <td>
@@ -1261,9 +1264,9 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                                 )
                               )}
 
-                              {/* Approved Action - Disburse by HR/CEO or Approved Badge for Accounts */}
+                              {/* Approved Action - Disburse by HR/CEO or Accounts once Approved */}
                               {record.status === 'Approved' && (
-                                isApprovalAuthority ? (
+                                (isApprovalAuthority || isAccountsUser) ? (
                                   <button 
                                     type="button" 
                                     className="btn btn-primary btn-sm"
@@ -1290,7 +1293,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                                     fontSize: '0.74rem', 
                                     borderRadius: '8px', 
                                     color: '#0E7490', 
-                                    fontWeight: 700,
+                                    fontWeight: 700, 
                                     border: '1px solid #A5F3FC',
                                     background: '#ECFEFF',
                                     display: 'inline-flex',
@@ -1303,8 +1306,8 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                                 </button>
                               )}
 
-                              {/* Active -> Manual Repayment Action (HR/CEO) */}
-                              {(record.status === 'Active' || record.status === 'Disbursed') && record.outstandingBalance > 0 && isApprovalAuthority && (
+                              {/* Active -> Manual Repayment Action (HR/CEO/Accounts) */}
+                              {(record.status === 'Active' || record.status === 'Disbursed') && record.outstandingBalance > 0 && (isApprovalAuthority || isAccountsUser) && (
                                 <button 
                                   type="button" 
                                   className="btn btn-secondary btn-sm"
@@ -1384,8 +1387,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
           MODAL 1: REQUEST LOAN MODAL (LIVE VALIDATION & ESTIMATOR)
           ======================================================== */}
       {isRequestModalOpen && (() => {
-        const modalEmpId = isViewingAsEmployee ? targetEmployeeId : (requestModalEmployeeId || targetEmployeeId);
-        const modalEmp = employees.find(e => e.employeeId === modalEmpId) || targetEmployee;
+        const modalEmp = targetEmployee;
         const modalElig = calculateEmployeeLoanEligibility(modalEmp.employeeId);
 
         return (
@@ -1395,12 +1397,10 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
               <div className="modal-header" style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#ffffff', flexShrink: 0 }}>
                 <div>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--color-text-primary)' }}>
-                    {isViewingAsEmployee ? 'Request Advance Salary' : 'Create Employee Advance Salary Request'}
+                    Request Advance Salary
                   </h3>
                   <p style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', margin: '3px 0 0' }}>
-                    {isViewingAsEmployee 
-                      ? `Calculated against your monthly salary: ${formatCurrency(targetEmployee.basicSalary)}`
-                      : `Applying on behalf of ${modalEmp.firstName} ${modalEmp.lastName} (${modalEmp.employeeId})`}
+                    Calculated against your monthly salary: {formatCurrency(modalEmp.basicSalary)}
                   </p>
                 </div>
                 <button 
@@ -1419,45 +1419,6 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
               {/* Scrollable Modal Body */}
               <div className="modal-body" style={{ padding: '20px 24px', overflowY: 'auto', flex: '1 1 auto' }}>
                 <form id="advance-salary-request-form" onSubmit={handleRequestSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {/* Employee Selector for Admin */}
-                  {!isViewingAsEmployee && (
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Building2 size={14} color="#0E7490" />
-                        <span>Select Target Employee *</span>
-                      </label>
-                      <select 
-                        className="form-control"
-                        value={modalEmpId}
-                        onChange={e => {
-                          const newEmpId = e.target.value;
-                          setRequestModalEmployeeId(newEmpId);
-                          const newElig = calculateEmployeeLoanEligibility(newEmpId);
-                          setRequestFormData(prev => ({
-                            ...prev,
-                            requestedAmount: Math.min(prev.requestedAmount, newElig.maxEligibleAmount || 30000)
-                          }));
-                        }}
-                        style={{
-                          width: '100%',
-                          height: '42px',
-                          padding: '9px 12px',
-                          fontSize: '0.85rem',
-                          borderRadius: '10px',
-                          border: '1.5px solid #0E7490',
-                          fontWeight: 650,
-                          color: '#0F172A',
-                          backgroundColor: '#F8FAFC'
-                        }}
-                      >
-                        {employees.map(emp => (
-                          <option key={emp.employeeId} value={emp.employeeId}>
-                            {emp.firstName} {emp.lastName} ({emp.employeeId}) — {emp.department} • Basic: {formatCurrency(emp.basicSalary)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
 
                   {/* Ineligibility Alert */}
                   {!modalElig.isEligible && (
@@ -1493,7 +1454,6 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                         style={{ height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                       >
                         <option value="Advance Salary">Advance Salary</option>
-                        <option value="Salary Advance">Salary Advance</option>
                         <option value="Employee Loan">Employee Loan</option>
                         <option value="Emergency Loan">Emergency Loan</option>
                       </select>
@@ -1587,37 +1547,6 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                     />
                   </div>
 
-                  {/* Pre-Submission Live Summary Card */}
-                  <div style={{
-                    padding: '14px 18px',
-                    backgroundColor: '#ECFEFF',
-                    border: '1px solid #CFFAFE',
-                    borderRadius: '12px',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(2, 1fr)',
-                    gap: '12px',
-                    fontSize: '0.82rem',
-                    marginTop: '4px'
-                  }}>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: '0.75rem' }}>Applicant Monthly Salary:</span>
-                      <strong style={{ color: '#0F172A', fontSize: '0.92rem' }}>{formatCurrency(modalEmp.basicSalary)}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: '0.75rem' }}>Maximum Eligible Limit:</span>
-                      <strong style={{ color: '#0E7490', fontSize: '0.92rem' }}>{formatCurrency(modalElig.maxEligibleAmount)}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: '0.75rem' }}>Requested Amount:</span>
-                      <strong style={{ color: '#0F172A', fontSize: '0.92rem' }}>{formatCurrency(requestFormData.requestedAmount)}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: '0.75rem' }}>Estimated Monthly EMI:</span>
-                      <strong style={{ color: '#0E7490', fontSize: '1rem', fontWeight: 800 }}>
-                        {formatCurrency(Math.round(requestFormData.requestedAmount / (requestFormData.installmentMonths || 1)))} / mo
-                      </strong>
-                    </div>
-                  </div>
                 </form>
               </div>
 
