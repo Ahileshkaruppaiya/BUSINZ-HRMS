@@ -81,6 +81,7 @@ export const CompanyDetailsSettings: React.FC = () => {
   // Branch Modal State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<CompanyBranch | null>(null);
+  const [branchToDelete, setBranchToDelete] = useState<CompanyBranch | null>(null);
   const [branchForm, setBranchForm] = useState<{
     branchName: string;
     branchCode: string;
@@ -749,11 +750,7 @@ export const CompanyDetailsSettings: React.FC = () => {
                         <button
                           className="btn btn-secondary btn-sm"
                           style={{ padding: '4px 8px', color: '#EF4444' }}
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to delete ${branch.branchName}?`)) {
-                              deleteCompanyBranch(branch.id);
-                            }
-                          }}
+                          onClick={() => setBranchToDelete(branch)}
                           title="Delete Branch"
                         >
                           <Trash2 size={14} />
@@ -1372,6 +1369,107 @@ export const CompanyDetailsSettings: React.FC = () => {
                 <button type="submit" className="btn btn-primary btn-sm">Save Changes</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* IN-WEBSITE BRANCH DELETE CONFIRMATION MODAL */}
+      {branchToDelete && (
+        <div 
+          className="modal-overlay" 
+          style={{ 
+            zIndex: 99999, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)'
+          }}
+        >
+          <div 
+            className="modal-content" 
+            style={{ 
+              maxWidth: '460px', 
+              width: '90%', 
+              borderRadius: '20px', 
+              padding: '28px 24px',
+              textAlign: 'center',
+              backgroundColor: '#FFFFFF',
+              boxShadow: '0 20px 25px -5px rgba(15, 23, 42, 0.15)',
+              position: 'relative'
+            }}
+          >
+            <button 
+              type="button" 
+              onClick={() => setBranchToDelete(null)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'transparent',
+                border: 'none',
+                color: '#94A3B8',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '8px'
+              }}
+              title="Close modal"
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              backgroundColor: '#FEE2E2',
+              color: '#EF4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <Trash2 size={26} />
+            </div>
+
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#1E293B' }}>
+              Delete Branch Location?
+            </h3>
+            
+            <p style={{ margin: '0 0 20px', fontSize: '0.88rem', color: '#64748B', lineHeight: '1.5' }}>
+              Are you sure you want to delete <strong style={{ color: '#0F172A' }}>&quot;{branchToDelete.branchName}&quot;</strong> (Code: {branchToDelete.branchCode})? This action will remove this branch from employee assignments and location registries.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '10px 16px', borderRadius: '12px', fontWeight: 600 }}
+                onClick={() => setBranchToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-danger" 
+                style={{ 
+                  flex: 1, 
+                  padding: '10px 16px', 
+                  borderRadius: '12px', 
+                  fontWeight: 700,
+                  backgroundColor: '#EF4444',
+                  borderColor: '#EF4444',
+                  color: '#FFFFFF'
+                }}
+                onClick={() => {
+                  deleteCompanyBranch(branchToDelete.id);
+                  showCloudNotice(`Branch "${branchToDelete.branchName}" removed.`);
+                  setBranchToDelete(null);
+                }}
+              >
+                Yes, Delete Branch
+              </button>
+            </div>
           </div>
         </div>
       )}

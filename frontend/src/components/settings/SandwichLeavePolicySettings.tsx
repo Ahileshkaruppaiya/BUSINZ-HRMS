@@ -46,7 +46,7 @@ export const SandwichLeavePolicySettings: React.FC = () => {
     masterLeavePolicies
   } = useHRMS();
 
-  const isPrivileged = currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin' || currentUser.role === 'Management';
+  const isPrivileged = currentUser.role !== 'Employee';
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');

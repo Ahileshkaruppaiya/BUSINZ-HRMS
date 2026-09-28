@@ -55,7 +55,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
     employees 
   } = useHRMS();
 
-  const isPrivileged = currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin';
+  const isPrivileged = currentUser.role !== 'Employee';
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -693,6 +693,55 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
               </div>
             );
           })}
+
+          {isPrivileged && (
+            <div
+              onClick={openAddModal}
+              style={{
+                borderRadius: '16px',
+                border: '2px dashed #CBD5E1',
+                padding: '30px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                backgroundColor: '#FAFCFD',
+                cursor: 'pointer',
+                minHeight: '260px',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = '#0E7490';
+                e.currentTarget.style.backgroundColor = '#F0FDFA';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = '#CBD5E1';
+                e.currentTarget.style.backgroundColor = '#FAFCFD';
+              }}
+            >
+              <div style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                backgroundColor: '#ECFEFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#0E7490'
+              }}>
+                <Plus size={22} />
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0F172A' }}>
+                  Create New Advance Policy
+                </div>
+                <div style={{ fontSize: '0.76rem', color: '#64748B', marginTop: '4px' }}>
+                  Configure eligibility, loan caps, EMI repayment rules
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

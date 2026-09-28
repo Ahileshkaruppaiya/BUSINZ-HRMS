@@ -31,7 +31,7 @@ export const RewardsSettings: React.FC = () => {
     currentUser 
   } = useHRMS();
 
-  const isPrivileged = currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin' || currentUser.role === 'Management';
+  const isPrivileged = currentUser.role !== 'Employee';
   const [activeTab, setActiveTab] = useState<'policies' | 'grants'>('policies');
 
   // Policy Modal
@@ -296,121 +296,279 @@ export const RewardsSettings: React.FC = () => {
 
       {/* TAB 1: REWARD POLICIES */}
       {activeTab === 'policies' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
-          {rewardPolicies.map(policy => {
-            const isActive = policy.status === 'Active';
-            const isArchived = policy.status === 'Archived';
-
-            return (
-              <div
-                key={policy.id}
+        <>
+          {rewardPolicies.length === 0 ? (
+            <div 
+              className="card"
+              style={{
+                borderRadius: '16px',
+                border: '2px dashed #CBD5E1',
+                padding: '50px 24px',
+                textAlign: 'center',
+                backgroundColor: '#FAFCFD',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '16px'
+              }}
+            >
+              <div 
                 style={{
-                  backgroundColor: '#FFFFFF',
+                  width: '64px',
+                  height: '64px',
                   borderRadius: '16px',
-                  border: isActive ? '2px solid #0E7490' : '1px solid #E7ECF3',
-                  padding: '20px',
+                  backgroundColor: '#ECFEFF',
                   display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
-                  opacity: isArchived ? 0.6 : 1
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#0E7490'
                 }}
               >
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <Award size={32} />
+              </div>
+              <div style={{ maxWidth: '520px' }}>
+                <h4 style={{ margin: '0 0 8px', fontSize: '1.15rem', fontWeight: 800, color: '#0F172A' }}>
+                  No Reward Policies Configured Yet
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748B', lineHeight: '1.5' }}>
+                  Configure recognition programs like Employee of the Month, Spot Awards, or Star Performer incentives with automated payroll cash disbursements or gift certificates.
+                </p>
+              </div>
+
+              {isPrivileged && (
+                <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      addRewardPolicy({
+                        rewardName: 'Employee of the Month',
+                        rewardType: 'Employee of the Month',
+                        description: 'Monthly recognition for exceptional performance and teamwork.',
+                        applicableEmployees: 'ALL',
+                        applicableDepartments: 'ALL',
+                        eligibilityRule: 'All full-time employees with at least 3 months tenure.',
+                        valueType: 'FIXED_AMOUNT',
+                        amountValue: 5000,
+                        giftDescription: 'Certificate of Excellence + Cash Award',
+                        addToPayroll: true,
+                        status: 'Active'
+                      });
+                      addRewardPolicy({
+                        rewardName: 'Spot Excellence Award',
+                        rewardType: 'Spot Award',
+                        description: 'Instant quarterly recognition for extraordinary client appreciation or delivery.',
+                        applicableEmployees: 'ALL',
+                        applicableDepartments: 'ALL',
+                        eligibilityRule: 'Nominated by department manager or HR.',
+                        valueType: 'FIXED_AMOUNT',
+                        amountValue: 2500,
+                        giftDescription: 'Instant Memento & Payroll Credit',
+                        addToPayroll: true,
+                        status: 'Active'
+                      });
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.82rem',
+                      padding: '8px 16px',
+                      borderRadius: '10px'
+                    }}
+                  >
+                    <Trophy size={15} color="#0E7490" />
+                    <span>Initialize Sample Policies</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={openAddPolicyModal}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.82rem',
+                      padding: '8px 18px',
+                      borderRadius: '10px',
+                      backgroundColor: '#0E7490',
+                      borderColor: '#0E7490'
+                    }}
+                  >
+                    <Plus size={15} />
+                    <span>Create Policy</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
+              {rewardPolicies.map(policy => {
+                const isActive = policy.status === 'Active';
+                const isArchived = policy.status === 'Archived';
+
+                return (
+                  <div
+                    key={policy.id}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '16px',
+                      border: isActive ? '2px solid #0E7490' : '1px solid #E7ECF3',
+                      padding: '20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                      opacity: isArchived ? 0.6 : 1
+                    }}
+                  >
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-                          {policy.rewardName}
-                        </h4>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
+                              {policy.rewardName}
+                            </h4>
+                          </div>
+                          <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 600 }}>
+                            {policy.rewardType} • v{policy.version}
+                          </span>
+                        </div>
+
+                        <span className={`status-pill ${isActive ? 'approved' : isArchived ? 'overdue' : 'pending'}`}>
+                          {policy.status}
+                        </span>
                       </div>
-                      <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 600 }}>
-                        {policy.rewardType} • v{policy.version}
-                      </span>
+
+                      <p style={{ margin: '0 0 14px', fontSize: '0.82rem', color: '#475569' }}>
+                        {policy.description}
+                      </p>
+
+                      <div style={{
+                        backgroundColor: '#F8FAFC',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        marginBottom: '14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#64748B' }}>Reward Value:</span>
+                          <strong style={{ color: '#166534', fontSize: '0.9rem' }}>
+                            {policy.valueType === 'FIXED_AMOUNT' ? formatCurrency(policy.amountValue) : policy.valueType}
+                          </strong>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#64748B' }}>Payroll Auto-Payout:</span>
+                          <strong style={{ color: policy.addToPayroll ? '#0E7490' : '#64748B' }}>
+                            {policy.addToPayroll ? '✓ Added to Payroll Earnings' : 'Non-Payroll Recognition'}
+                          </strong>
+                        </div>
+
+                        <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '6px', fontSize: '0.76rem', color: '#64748B' }}>
+                          <strong>Eligibility Rule:</strong> {policy.eligibilityRule}
+                        </div>
+                      </div>
                     </div>
 
-                    <span className={`status-pill ${isActive ? 'approved' : isArchived ? 'overdue' : 'pending'}`}>
-                      {policy.status}
-                    </span>
+                    {isPrivileged && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #E2E8F0', paddingTop: '12px' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => openGrantModal(policy)}
+                          >
+                            <Trophy size={14} /> Grant
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => openEditPolicyModal(policy)}
+                          >
+                            <Edit3 size={14} /> Edit
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => toggleRewardPolicyStatus(policy.id)}
+                            disabled={isArchived}
+                          >
+                            {isActive ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </div>
+
+                        {!isArchived && (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            style={{ color: '#EF4444' }}
+                            onClick={() => {
+                              if (window.confirm(`Archive "${policy.rewardName}"?`)) {
+                                archiveRewardPolicy(policy.id);
+                              }
+                            }}
+                          >
+                            <Archive size={14} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+                );
+              })}
 
-                  <p style={{ margin: '0 0 14px', fontSize: '0.82rem', color: '#475569' }}>
-                    {policy.description}
-                  </p>
-
-                  <div style={{
-                    backgroundColor: '#F8FAFC',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    fontSize: '0.8rem',
-                    marginBottom: '14px',
+              {isPrivileged && (
+                <div
+                  onClick={openAddPolicyModal}
+                  style={{
+                    borderRadius: '16px',
+                    border: '2px dashed #CBD5E1',
+                    padding: '30px 20px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '6px'
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    backgroundColor: '#FAFCFD',
+                    cursor: 'pointer',
+                    minHeight: '220px',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = '#0E7490';
+                    e.currentTarget.style.backgroundColor = '#F0FDFA';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = '#CBD5E1';
+                    e.currentTarget.style.backgroundColor = '#FAFCFD';
+                  }}
+                >
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    backgroundColor: '#ECFEFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#0E7490'
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Reward Value:</span>
-                      <strong style={{ color: '#166534', fontSize: '0.9rem' }}>
-                        {policy.valueType === 'FIXED_AMOUNT' ? formatCurrency(policy.amountValue) : policy.valueType}
-                      </strong>
+                    <Plus size={22} />
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#0F172A' }}>
+                      Create New Reward Policy
                     </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Payroll Auto-Payout:</span>
-                      <strong style={{ color: policy.addToPayroll ? '#0E7490' : '#64748B' }}>
-                        {policy.addToPayroll ? '✓ Added to Payroll Earnings' : 'Non-Payroll Recognition'}
-                      </strong>
-                    </div>
-
-                    <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '6px', fontSize: '0.76rem', color: '#64748B' }}>
-                      <strong>Eligibility Rule:</strong> {policy.eligibilityRule}
+                    <div style={{ fontSize: '0.74rem', color: '#64748B', marginTop: '4px' }}>
+                      Add employee incentives, cash awards or mementos
                     </div>
                   </div>
                 </div>
-
-                {isPrivileged && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #E2E8F0', paddingTop: '12px' }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => openGrantModal(policy)}
-                      >
-                        <Trophy size={14} /> Grant
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => openEditPolicyModal(policy)}
-                      >
-                        <Edit3 size={14} /> Edit
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => toggleRewardPolicyStatus(policy.id)}
-                        disabled={isArchived}
-                      >
-                        {isActive ? 'Deactivate' : 'Activate'}
-                      </button>
-                    </div>
-
-                    {!isArchived && (
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        style={{ color: '#EF4444' }}
-                        onClick={() => {
-                          if (window.confirm(`Archive "${policy.rewardName}"?`)) {
-                            archiveRewardPolicy(policy.id);
-                          }
-                        }}
-                      >
-                        <Archive size={14} />
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* TAB 2: GRANTED EMPLOYEE AWARDS */}

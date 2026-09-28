@@ -16,7 +16,7 @@ import {
 
 export const GPSGeofenceSettings: React.FC = () => {
   const { geofenceConfig, updateGeofenceConfig, currentUser } = useHRMS();
-  const isPrivileged = currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin' || currentUser.role === 'Management';
+  const isPrivileged = currentUser.role !== 'Employee';
 
   // Active Editing Fields (Clean slate for manual input)
   const [name, setName] = useState<string>(() => {
