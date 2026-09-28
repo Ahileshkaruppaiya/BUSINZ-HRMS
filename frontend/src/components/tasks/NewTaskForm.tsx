@@ -149,7 +149,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
   const [assignedEmployeeIds, setAssignedEmployeeIds] = useState<string[]>(defaultDeptEmp ? [defaultDeptEmp.employeeId] : []);
 
   // Section 3: Task Planning
-  const [taskCategory, setTaskCategory] = useState<string>('Technical');
+  const taskCategory = 'Technical';
   const [priority, setPriority] = useState<TaskPriority>('High');
   const [startDate, setStartDate] = useState<string>(today);
   const [dueDate, setDueDate] = useState<string>(nextWeek);
@@ -561,22 +561,6 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '16px' }}>
-          <div>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Task Category</label>
-            <select 
-              value={taskCategory} 
-              onChange={e => setTaskCategory(e.target.value)}
-              className="form-control"
-              style={{ marginTop: '4px' }}
-            >
-              <option value="Compliance">Rules, Compliance & Audit</option>
-              <option value="Technical">Engineering / Technical Work</option>
-              <option value="Operations">Daily Operations & Facilities</option>
-              <option value="Strategy">Projects & Business Goals</option>
-              <option value="HR">People & HR</option>
-            </select>
-          </div>
-
           <div>
             <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Priority *</label>
             <select 

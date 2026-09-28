@@ -34,10 +34,10 @@ export const INITIAL_COMPANY_INFO: CompanyInfo = {
 export const INITIAL_COMPANY_BRANCHES: CompanyBranch[] = [];
 
 export const INITIAL_ORG_STRUCTURE: OrganizationStructure = {
-  departments: ['CEO', 'HR', 'Accounts', 'Operations', 'Sales & Marketing', 'IT & Engineering'],
+  departments: [],
   designations: [],
-  employmentTypes: ['Full-Time Regular', 'Contractual Basis', 'Probationary', 'Internship'],
-  workLocations: ['Main Head Office', 'Branch Office 1'],
+  employmentTypes: [],
+  workLocations: [],
   reportingManagers: [],
   teams: []
 };

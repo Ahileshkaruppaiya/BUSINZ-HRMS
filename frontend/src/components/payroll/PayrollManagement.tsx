@@ -65,6 +65,9 @@ export const PayrollManagement: React.FC = () => {
   const paginatedRecords = visibleRecords.slice(startIndex, startIndex + pageSize);
 
   const totalPayout = visibleRecords.reduce((acc, curr) => acc + toNum(curr.netSalary), 0);
+  const totalStaffIncluded = new Set(
+    visibleRecords.map(record => record.employeeId || record.id).filter(Boolean)
+  ).size;
   const processedCount = visibleRecords.filter(p => p.status === 'Processed' || p.status === 'Paid').length;
 
   const handleTogglePayslip = (id: string) => {
@@ -312,7 +315,7 @@ export const PayrollManagement: React.FC = () => {
             <div className="kpi-icon-wrapper blue"><CreditCard size={20} /></div>
           </div>
           <div className="kpi-card-body">
-            <div className="kpi-value">{isEmployeeRole ? 1 : employees.length}</div>
+            <div className="kpi-value">{totalStaffIncluded}</div>
           </div>
         </div>
 

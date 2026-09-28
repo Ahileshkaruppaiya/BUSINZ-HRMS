@@ -16,9 +16,15 @@ export const supabaseDirect = {
    */
   async getEmployees(): Promise<any[]> {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?select=*,departments(id,name,code)&order=created_at.desc`, {
+      let res = await fetch(`${SUPABASE_URL}/rest/v1/employees?select=*,departments!employees_department_id_fkey(id,name,code)&order=created_at.desc`, {
         headers: getHeaders(),
       });
+      if (!res.ok) {
+        // Fallback to basic employee fetch without nested relation if relation error occurs
+        res = await fetch(`${SUPABASE_URL}/rest/v1/employees?select=*&order=created_at.desc`, {
+          headers: getHeaders(),
+        });
+      }
       if (!res.ok) return [];
       return await res.json();
     } catch (err) {
@@ -346,6 +352,10 @@ export const supabaseDirect = {
           updated_at: new Date().toISOString(),
         }),
       });
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        console.error(`[SupabaseDirect] saveCompanySetting('${key}') failed:`, res.status, errorText);
+      }
       return res.ok;
     } catch (err) {
       console.warn(`[SupabaseDirect] saveCompanySetting('${key}') error:`, err);
@@ -361,7 +371,11 @@ export const supabaseDirect = {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/company_settings?select=setting_key,setting_val`, {
         headers: getHeaders(),
       });
-      if (!res.ok) return {};
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        console.error('[SupabaseDirect] getAllCompanySettings failed:', res.status, errorText);
+        return {};
+      }
       const rows = await res.json();
       if (!Array.isArray(rows)) return {};
       const result: Record<string, any> = {};

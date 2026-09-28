@@ -23,6 +23,27 @@ import {
   RefreshCw 
 } from 'lucide-react';
 
+type CompanyInfoFormErrors = Partial<Record<keyof CompanyInfo, string>>;
+
+const cleanText = (value: string) => value.replace(/\s+/g, ' ').trim();
+const cleanCompanyText = (value: string) => value.replace(/[^A-Za-z0-9\s&.,'()/-]/g, '').replace(/\s+/g, ' ');
+const cleanAlphaNumeric = (value: string, maxLength?: number) => value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, maxLength);
+const cleanRocNumber = (value: string) => value.replace(/[^A-Za-z0-9/-]/g, '').toUpperCase().slice(0, 30);
+const cleanPhoneNumber = (value: string) => value.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '').slice(0, 10);
+
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+const isValidPan = (value: string) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(value);
+const isValidGstin = (value: string) => /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(value);
+const isValidCin = (value: string) => /^[LU][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/.test(value);
+const isValidWebsite = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 export const CompanyDetailsSettings: React.FC = () => {
   const { 
     companyInfo, 
@@ -71,6 +92,7 @@ export const CompanyDetailsSettings: React.FC = () => {
   });
   const [isEditingInfo, setIsEditingInfo] = useState(true);
   const [infoSavedSuccess, setInfoSavedSuccess] = useState(false);
+  const [infoErrors, setInfoErrors] = useState<CompanyInfoFormErrors>({});
 
   useEffect(() => {
     if (companyInfo) {
@@ -137,7 +159,50 @@ export const CompanyDetailsSettings: React.FC = () => {
 
   const handleSaveInfo = (e: React.FormEvent) => {
     e.preventDefault();
-    updateCompanyInfo(infoForm);
+    const normalized: CompanyInfo = {
+      ...infoForm,
+      companyName: cleanText(infoForm.companyName),
+      legalCompanyName: cleanText(infoForm.legalCompanyName),
+      industry: cleanText(infoForm.industry),
+      registrationNumber: cleanRocNumber(infoForm.registrationNumber),
+      gstNumber: cleanAlphaNumeric(infoForm.gstNumber, 15),
+      panNumber: cleanAlphaNumeric(infoForm.panNumber, 10),
+      cinNumber: cleanAlphaNumeric(infoForm.cinNumber, 21),
+      website: infoForm.website.trim(),
+      officialEmail: infoForm.officialEmail.trim().toLowerCase(),
+      officialPhone: cleanPhoneNumber(infoForm.officialPhone)
+    };
+
+    const errors: CompanyInfoFormErrors = {};
+    if (!normalized.companyName) errors.companyName = 'Company name is required.';
+    if (!normalized.legalCompanyName) errors.legalCompanyName = 'Legal entity name is required.';
+    if (normalized.registrationNumber && !/^[A-Z0-9/-]{3,30}$/.test(normalized.registrationNumber)) {
+      errors.registrationNumber = 'ROC number must contain only letters, numbers, / or -.';
+    }
+    if (normalized.gstNumber && !isValidGstin(normalized.gstNumber)) {
+      errors.gstNumber = 'Enter valid 15-character GSTIN, e.g. 33ABCDE1234F1Z5.';
+    }
+    if (normalized.panNumber && !isValidPan(normalized.panNumber)) {
+      errors.panNumber = 'Enter valid PAN, e.g. ABCDE1234F.';
+    }
+    if (normalized.cinNumber && !isValidCin(normalized.cinNumber)) {
+      errors.cinNumber = 'Enter valid 21-character CIN.';
+    }
+    if (normalized.website && !isValidWebsite(normalized.website)) {
+      errors.website = 'Enter a full URL starting with http:// or https://.';
+    }
+    if (normalized.officialEmail && !isValidEmail(normalized.officialEmail)) {
+      errors.officialEmail = 'Enter a valid corporate email address.';
+    }
+    if (normalized.officialPhone && normalized.officialPhone.length !== 10) {
+      errors.officialPhone = 'Phone number must be exactly 10 digits.';
+    }
+
+    setInfoForm(normalized);
+    setInfoErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    updateCompanyInfo(normalized);
     setInfoSavedSuccess(true);
     setTimeout(() => setInfoSavedSuccess(false), 3500);
   };
@@ -316,6 +381,28 @@ export const CompanyDetailsSettings: React.FC = () => {
     showCloudNotice(`Team "${newTeam.name}" saved to cloud database!`);
   };
 
+  const setInfoField = <K extends keyof CompanyInfo>(field: K, value: CompanyInfo[K]) => {
+    setInfoForm(prev => ({ ...prev, [field]: value }));
+    setInfoErrors(prev => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const getInfoInputStyle = (field: keyof CompanyInfo, extra?: React.CSSProperties): React.CSSProperties => ({
+    ...(extra || {}),
+    borderColor: infoErrors[field] ? '#EF4444' : undefined,
+    boxShadow: infoErrors[field] ? '0 0 0 3px rgba(239, 68, 68, 0.10)' : undefined
+  });
+
+  const renderInfoError = (field: keyof CompanyInfo) => infoErrors[field] ? (
+    <div style={{ color: '#DC2626', fontSize: '0.74rem', fontWeight: 600, marginTop: '5px' }}>
+      {infoErrors[field]}
+    </div>
+  ) : null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Navigation Sub-Tabs */}
@@ -430,9 +517,11 @@ export const CompanyDetailsSettings: React.FC = () => {
                   type="text"
                   className="form-control"
                   value={infoForm.companyName}
-                  onChange={e => setInfoForm({ ...infoForm, companyName: e.target.value })}
+                  onChange={e => setInfoField('companyName', cleanCompanyText(e.target.value))}
+                  style={getInfoInputStyle('companyName')}
                   required
                 />
+                {renderInfoError('companyName')}
               </div>
 
               <div>
@@ -443,9 +532,11 @@ export const CompanyDetailsSettings: React.FC = () => {
                   type="text"
                   className="form-control"
                   value={infoForm.legalCompanyName}
-                  onChange={e => setInfoForm({ ...infoForm, legalCompanyName: e.target.value })}
+                  onChange={e => setInfoField('legalCompanyName', cleanCompanyText(e.target.value))}
+                  style={getInfoInputStyle('legalCompanyName')}
                   required
                 />
+                {renderInfoError('legalCompanyName')}
               </div>
 
               <div>
@@ -473,7 +564,7 @@ export const CompanyDetailsSettings: React.FC = () => {
                   type="text"
                   className="form-control"
                   value={infoForm.industry}
-                  onChange={e => setInfoForm({ ...infoForm, industry: e.target.value })}
+                  onChange={e => setInfoField('industry', cleanCompanyText(e.target.value))}
                 />
               </div>
 
@@ -485,8 +576,11 @@ export const CompanyDetailsSettings: React.FC = () => {
                   type="text"
                   className="form-control"
                   value={infoForm.registrationNumber}
-                  onChange={e => setInfoForm({ ...infoForm, registrationNumber: e.target.value })}
+                  onChange={e => setInfoField('registrationNumber', cleanRocNumber(e.target.value))}
+                  style={getInfoInputStyle('registrationNumber')}
+                  maxLength={30}
                 />
+                {renderInfoError('registrationNumber')}
               </div>
 
               <div>
@@ -497,8 +591,12 @@ export const CompanyDetailsSettings: React.FC = () => {
                   type="text"
                   className="form-control"
                   value={infoForm.gstNumber}
-                  onChange={e => setInfoForm({ ...infoForm, gstNumber: e.target.value })}
+                  onChange={e => setInfoField('gstNumber', cleanAlphaNumeric(e.target.value, 15))}
+                  style={getInfoInputStyle('gstNumber')}
+                  maxLength={15}
+                  placeholder="33ABCDE1234F1Z5"
                 />
+                {renderInfoError('gstNumber')}
               </div>
 
               <div>
@@ -509,8 +607,12 @@ export const CompanyDetailsSettings: React.FC = () => {
                   type="text"
                   className="form-control"
                   value={infoForm.panNumber}
-                  onChange={e => setInfoForm({ ...infoForm, panNumber: e.target.value })}
+                  onChange={e => setInfoField('panNumber', cleanAlphaNumeric(e.target.value, 10))}
+                  style={getInfoInputStyle('panNumber')}
+                  maxLength={10}
+                  placeholder="ABCDE1234F"
                 />
+                {renderInfoError('panNumber')}
               </div>
 
               <div>
@@ -521,8 +623,12 @@ export const CompanyDetailsSettings: React.FC = () => {
                   type="text"
                   className="form-control"
                   value={infoForm.cinNumber}
-                  onChange={e => setInfoForm({ ...infoForm, cinNumber: e.target.value })}
+                  onChange={e => setInfoField('cinNumber', cleanAlphaNumeric(e.target.value, 21))}
+                  style={getInfoInputStyle('cinNumber')}
+                  maxLength={21}
+                  placeholder="U12345TN2020PTC123456"
                 />
+                {renderInfoError('cinNumber')}
               </div>
 
               <div>
@@ -534,11 +640,13 @@ export const CompanyDetailsSettings: React.FC = () => {
                   <input
                     type="url"
                     className="form-control"
-                    style={{ paddingLeft: '34px' }}
+                    style={getInfoInputStyle('website', { paddingLeft: '34px' })}
                     value={infoForm.website}
-                    onChange={e => setInfoForm({ ...infoForm, website: e.target.value })}
+                    onChange={e => setInfoField('website', e.target.value.trim())}
+                    placeholder="https://example.com"
                   />
                 </div>
+                {renderInfoError('website')}
               </div>
 
               <div>
@@ -550,11 +658,13 @@ export const CompanyDetailsSettings: React.FC = () => {
                   <input
                     type="email"
                     className="form-control"
-                    style={{ paddingLeft: '34px' }}
+                    style={getInfoInputStyle('officialEmail', { paddingLeft: '34px' })}
                     value={infoForm.officialEmail}
-                    onChange={e => setInfoForm({ ...infoForm, officialEmail: e.target.value })}
+                    onChange={e => setInfoField('officialEmail', e.target.value.trim().toLowerCase())}
+                    placeholder="name@company.com"
                   />
                 </div>
+                {renderInfoError('officialEmail')}
               </div>
 
               <div>
@@ -564,13 +674,17 @@ export const CompanyDetailsSettings: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
                   <Phone size={15} style={{ position: 'absolute', left: '12px', color: '#94A3B8' }} />
                   <input
-                    type="tel"
+                  type="tel"
                     className="form-control"
-                    style={{ paddingLeft: '34px' }}
+                    style={getInfoInputStyle('officialPhone', { paddingLeft: '34px' })}
                     value={infoForm.officialPhone}
-                    onChange={e => setInfoForm({ ...infoForm, officialPhone: e.target.value })}
+                    onChange={e => setInfoField('officialPhone', cleanPhoneNumber(e.target.value))}
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="9876543210"
                   />
                 </div>
+                {renderInfoError('officialPhone')}
               </div>
             </div>
 

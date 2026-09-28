@@ -13,7 +13,8 @@ from .core.database import Base, engine
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    seed.run_seed()
+    if settings.ENABLE_DEMO_SEED:
+        seed.run_seed()
     yield
 
 

@@ -540,12 +540,7 @@ const INITIAL_HOLIDAYS: HolidayItem[] = [];
 
 const INITIAL_ATTENDANCE_POLICIES: AttendancePolicyItem[] = [];
 
-const INITIAL_WEEKLY_SCHEDULES: WeeklyScheduleItem[] = [
-  { id: 'wp1', name: '6-Day Site & Production Schedule (Mon - Sat)', workingDays: 'Mon, Tue, Wed, Thu, Fri, Sat', offDays: 'Sunday', isDefault: true },
-  { id: 'wp2', name: '5-Day Corporate Office Schedule (Mon - Fri)', workingDays: 'Mon, Tue, Wed, Thu, Fri', offDays: 'Saturday, Sunday', isDefault: false },
-  { id: 'wp3', name: 'Alternate Saturday Off Schedule (1st & 3rd Working)', workingDays: 'Mon - Fri + 1st/3rd Sat', offDays: 'Sunday + 2nd/4th Sat', isDefault: false },
-  { id: 'wp4', name: 'Continuous 24/7 Shift Rotation', workingDays: 'Rotational 6 Days', offDays: 'Rolling 1 Day', isDefault: false }
-];
+const INITIAL_WEEKLY_SCHEDULES: WeeklyScheduleItem[] = [];
 
 const INITIAL_GLOBAL_ATTENDANCE_CONFIG: GlobalAttendanceConfig = {
   trackInOutTime: true,
@@ -579,35 +574,35 @@ const INITIAL_GLOBAL_ATTENDANCE_CONFIG: GlobalAttendanceConfig = {
 const INITIAL_POLICY_DOCUMENTS: PolicyDocumentItem[] = [];
 
 const INITIAL_BUSINESS_SETTINGS: BusinessProfileSettings = {
-  logoUrl: '/logo.png',
-  logoStatus: 'Added',
-  businessName: 'Businz',
-  businessCode: 'BSZ001',
-  email: 'contact@businz.com',
-  phone: '+91 44 2553 7890',
-  type: 'Private Limited Company',
-  address: 'Businz Towers, Tech Corridor, OMR, Chennai, Tamil Nadu, 600096, India',
-  gstin: '33AABCB1234F1Z8',
-  pan: 'AABCB1234F',
-  cin: 'U72900TN2022PTC150000',
+  logoUrl: '',
+  logoStatus: 'Not Added',
+  businessName: '',
+  businessCode: '',
+  email: '',
+  phone: '',
+  type: '',
+  address: '',
+  gstin: '',
+  pan: '',
+  cin: '',
   employeeCodeGeneration: 'Manual',
   employeeCodePrefix: 'EMP',
   employeeCodeSample: 'EMP-001',
-  administrator: 'Velmurugan (Super Admin)',
+  administrator: '',
   currency: 'INR - ₹ (India)',
   currencySymbol: '₹',
   currencyCode: 'INR',
   timeZone: 'Indian Standard Time (IST) (UTC+05:30)',
-  category: 'Civil Infrastructure & Pre-Engineered Buildings',
-  bankName: 'HDFC Bank Limited',
-  bankAccountNo: '50200084729104',
-  bankIfsc: 'HDFC0001234',
-  bankBranch: 'Madhavaram Branch, Chennai',
+  category: '',
+  bankName: '',
+  bankAccountNo: '',
+  bankIfsc: '',
+  bankBranch: '',
   emailConfig: 'Not Configured',
   smtpHost: '',
   smtpPort: '',
   smtpUser: '',
-  activeEntity: 'Businz HQ'
+  activeEntity: ''
 };
 
 
@@ -630,111 +625,13 @@ export const INITIAL_EMPLOYEE_CONFIG: EmployeeConfigSettings = {
   defaultProbationMonths: 6,
   defaultNoticeDays: 30,
   autoConfirmProbation: false,
-  customFields: [
-    { id: 'cf1', label: 'Blood Group', fieldName: 'bloodGroup', fieldType: 'select', category: 'Personal', required: false, options: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'] },
-    { id: 'cf2', label: 'Emergency Contact Person', fieldName: 'emergencyContactPerson', fieldType: 'text', category: 'Personal', required: true },
-    { id: 'cf3', label: 'Safety Induction Date', fieldName: 'safetyInductionDate', fieldType: 'date', category: 'Job', required: false },
-    { id: 'cf4', label: 'EPF UAN Number', fieldName: 'uanNumber', fieldType: 'text', category: 'Compliance', required: false },
-    { id: 'cf5', label: 'Bank IFSC Code', fieldName: 'bankIfsc', fieldType: 'text', category: 'Payroll', required: true }
-  ],
-  documentTypes: [
-    { id: 'dt1', name: 'Updated Resume / CV', code: 'RESUME', mandatory: true, maxSizeMb: 1, allowedFormats: ['PDF', 'DOCX'] },
-    { id: 'dt2', name: 'Aadhaar / National ID Card', code: 'GOVT_ID', mandatory: true, maxSizeMb: 1, allowedFormats: ['PDF', 'JPG', 'PNG'] },
-    { id: 'dt3', name: 'Income Tax PAN Card', code: 'PAN_CARD', mandatory: true, maxSizeMb: 1, allowedFormats: ['PDF', 'JPG', 'PNG'] },
-    { id: 'dt4', name: 'Highest Degree / Marksheet', code: 'DEGREE', mandatory: true, maxSizeMb: 1, allowedFormats: ['PDF'] },
-    { id: 'dt5', name: 'Previous Relieving / Experience Certificate', code: 'RELIEVING', mandatory: false, maxSizeMb: 1, allowedFormats: ['PDF'] }
-  ]
+  customFields: [],
+  documentTypes: []
 };
 
-export const INITIAL_APPROVAL_WORKFLOWS: ApprovalWorkflowItem[] = [
-  {
-    id: 'wf-leave',
-    workflowName: 'Leave Approval Workflow',
-    module: 'Leave',
-    description: 'Reporting Manager review followed by HR verification and automated leave quota debit',
-    levels: [
-      { level: 1, role: 'Reporting Manager', title: 'Manager Recommendation', timeLimitHours: 24 },
-      { level: 2, role: 'HR Admin', title: 'HR Policy Validation', timeLimitHours: 48 }
-    ],
-    active: true
-  },
-  {
-    id: 'wf-reg',
-    workflowName: 'Attendance Regularization',
-    module: 'Attendance',
-    description: 'Biometric missing punch and geofence override verification',
-    levels: [
-      { level: 1, role: 'Reporting Manager', title: 'Shift Supervisor Approval', timeLimitHours: 24 },
-      { level: 2, role: 'HR Admin', title: 'Attendance Record Update', timeLimitHours: 48 }
-    ],
-    active: true
-  },
-  {
-    id: 'wf-adv',
-    workflowName: 'Advance Salary & Emergency Loan',
-    module: 'Advance Salary',
-    description: 'Two-tier verification: HR eligibility check followed by CEO disbursement authorization',
-    levels: [
-      { level: 1, role: 'HR Admin', title: 'Tenure & Basic Salary Eligibility Check', timeLimitHours: 24 },
-      { level: 2, role: 'CEO / Super Admin', title: 'Financial Sanction & Payout Release', timeLimitHours: 48 }
-    ],
-    active: true
-  },
-  {
-    id: 'wf-tada',
-    workflowName: 'Travel & TA/DA Claim Workflow',
-    module: 'TA/DA',
-    description: 'Site project engineer outstation travel approval and accounts reimbursement',
-    levels: [
-      { level: 1, role: 'Project Manager', title: 'Trip Validation & Kilometers Check', timeLimitHours: 24 },
-      { level: 2, role: 'Finance Manager', title: 'Accounts Audit & Disbursement', timeLimitHours: 48 }
-    ],
-    active: true
-  },
-  {
-    id: 'wf-exp',
-    workflowName: 'General Expense Reimbursement',
-    module: 'Expense',
-    description: 'Corporate and plant operational expense claims with tax invoice verification',
-    levels: [
-      { level: 1, role: 'Department Head', title: 'Department Budget Authorization', timeLimitHours: 24 },
-      { level: 2, role: 'Finance Manager', title: 'Voucher Passed & Settlement', timeLimitHours: 48 }
-    ],
-    active: true
-  },
-  {
-    id: 'wf-rec',
-    workflowName: 'Job Requisition & Offer Approval',
-    module: 'Recruitment',
-    description: 'New hiring headcount sign-off and candidate offer compensation clearance',
-    levels: [
-      { level: 1, role: 'HR Manager', title: 'Candidate Profile & Compensation Fit', timeLimitHours: 48 },
-      { level: 2, role: 'Super Admin', title: 'Executive Offer Sanction', timeLimitHours: 48 }
-    ],
-    active: true
-  },
-  {
-    id: 'wf-ast',
-    workflowName: 'Asset Allocation & Handover',
-    module: 'Asset',
-    description: 'IT and safety equipment issuance and return clearance',
-    levels: [
-      { level: 1, role: 'Store Keeper / IT Admin', title: 'Serial Number Verification', timeLimitHours: 12 },
-      { level: 2, role: 'Department Manager', title: 'Allocation Acknowledgment', timeLimitHours: 24 }
-    ],
-    active: true
-  }
-];
+export const INITIAL_APPROVAL_WORKFLOWS: ApprovalWorkflowItem[] = [];
 
-export const INITIAL_NOTIFICATION_TRIGGERS: NotificationTriggerConfig[] = [
-  { id: 'nt1', event: 'Employee Onboarded', module: 'Employee', email: true, sms: false, whatsapp: true, push: true, template: 'Welcome {{name}} to Businz! Your employee ID is {{employee_id}}.' },
-  { id: 'nt2', event: 'Leave Application Submitted', module: 'Leave', email: true, sms: false, whatsapp: true, push: true, template: '{{name}} applied for {{days}} days of {{leave_type}}.' },
-  { id: 'nt3', event: 'Leave Status Updated', module: 'Leave', email: true, sms: true, whatsapp: true, push: true, template: 'Your leave application for {{date}} has been {{status}}.' },
-  { id: 'nt4', event: 'Late Attendance Recorded', module: 'Attendance', email: false, sms: false, whatsapp: true, push: true, template: 'Late punch recorded at {{time}} (Grace exceeded by {{minutes}}m).' },
-  { id: 'nt5', event: 'Advance Salary Approved', module: 'Finance', email: true, sms: true, whatsapp: true, push: true, template: 'Your advance salary request of ₹{{amount}} has been approved by {{approver}}.' },
-  { id: 'nt6', event: 'Monthly Payslip Disbursed', module: 'Payroll', email: true, sms: true, whatsapp: true, push: true, template: 'Your payslip for {{month}} {{year}} is ready for download.' },
-  { id: 'nt7', event: 'Asset Assigned', module: 'Asset', email: true, sms: false, whatsapp: false, push: true, template: 'Asset {{asset_name}} (Tag: {{asset_tag}}) has been assigned to you.' }
-];
+export const INITIAL_NOTIFICATION_TRIGGERS: NotificationTriggerConfig[] = [];
 
 export const INITIAL_GENERAL_SYSTEM_CONFIG: GeneralSystemConfig = {
   language: 'English (US / IN)',
@@ -1216,11 +1113,11 @@ const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
 export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Pure Supabase Cloud Architecture: purge any remaining business data from browser localStorage
   if (typeof window !== 'undefined') {
-    const STORAGE_MODE = 'vrm_hrms_supabase_cloud_only_v2';
+    const STORAGE_MODE = 'vrm_hrms_supabase_cloud_only_v4';
     if (localStorage.getItem('vrm_hrms_storage_mode') !== STORAGE_MODE) {
       const keysToRemove = [
         'vrm_hrms_employees', 'vrm_hrms_enhanced_tasks', 'vrm_hrms_attendance_records',
-        'vrm_hrms_leave_requests', 'hrms_loan_records', 'vrm_hrms_loan_policies',
+        'vrm_hrms_leave_requests', 'hrms_loan_records', 'vrm_hrms_loan_records', 'vrm_hrms_loan_policies',
         'vrm_hrms_expenses', 'vrm_hrms_assets', 'vrm_hrms_mom_meetings',
         'vrm_hrms_payroll_records', 'vrm_hrms_field_assignments', 'vrm_hrms_trip_sessions',
         'vrm_hrms_tracking_alerts', 'vrm_hrms_shifts', 'vrm_hrms_holiday_policies',
@@ -1228,8 +1125,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         'vrm_hrms_master_attendance_policies', 'vrm_hrms_master_leave_policies',
         'vrm_hrms_payroll_settings_config', 'vrm_hrms_geofence_config', 'vrm_hrms_company_info',
         'vrm_hrms_company_branches', 'vrm_hrms_org_structure', 'vrm_hrms_departments',
-        'vrm_hrms_designations', 'vrm_hrms_department_ot_policies',
-        'vrm_enterprise_integrations_v5', 'vrm_enterprise_integrations_v4',
+        'vrm_hrms_designations', 'vrm_hrms_department_ot_policies', 'vrm_hrms_overtime_records',
+        'vrm_enterprise_integrations_v6', 'vrm_enterprise_integrations_v5', 'vrm_enterprise_integrations_v4',
         'vrm_enterprise_integrations_v3', 'vrm_enterprise_integrations_v2'
       ];
       for (const k of keysToRemove) {
@@ -1348,10 +1245,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     },
     withPf: d.withPf ?? true,
     bankDetails: {
-      bankName: d.bankName || d.bank_name || 'HDFC Bank',
-      accountNumber: d.accountNumber || d.account_number || '****1001',
-      ifscCode: d.ifscCode || d.ifsc_code || 'HDFC0001234',
-      branch: d.branch || 'Main Branch',
+      bankName: d.bankName || d.bank_name || '',
+      accountNumber: d.accountNumber || d.account_number || '',
+      ifscCode: d.ifscCode || d.ifsc_code || '',
+      branch: d.branch || '',
     },
     attendanceMethod: (d.attendanceMethod || d.attendance_method || (d.designation === 'CEO' || (d.designation && d.designation.toLowerCase().includes('ceo')) ? 'Exempt' : 'Face Scan')) as any,
     gpsAllowed: d.gpsAllowed ?? (d.designation === 'CEO' ? false : true),
@@ -3601,16 +3498,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else {
       const blankCompany: CompanyInfo = {
         logoUrl: '',
-        companyName: 'New Client Enterprise',
-        legalCompanyName: 'New Client Enterprise Private Limited',
+        companyName: '',
+        legalCompanyName: '',
         companyType: 'Private Limited',
-        industry: 'General Business & Technology',
+        industry: '',
         registrationNumber: '',
         gstNumber: '',
         panNumber: '',
         cinNumber: '',
-        website: 'https://example.com',
-        officialEmail: 'corporate@example.com',
+        website: '',
+        officialEmail: '',
         officialPhone: '',
         createdAt: new Date().toISOString(),
         createdBy: currentUser.name,
@@ -3618,10 +3515,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updatedBy: currentUser.name
       };
       const blankOrg: OrganizationStructure = {
-        departments: ['Administration', 'Human Resources', 'Operations', 'Finance & Accounts', 'Sales & Marketing', 'IT & Engineering'],
+        departments: [],
         designations: [],
-        employmentTypes: ['Full-Time Regular', 'Contractual Basis', 'Probationary', 'Internship'],
-        workLocations: ['Main Head Office', 'Branch Office 1'],
+        employmentTypes: [],
+        workLocations: [],
         reportingManagers: [],
         teams: []
       };
@@ -7737,21 +7634,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setPayrollRecords([]);
       }
       if (settings) {
+        const hasSetting = (key: string) => Object.prototype.hasOwnProperty.call(settings, key);
+
         // Organization Structure & Departments
         const cloudOrg = settings.org_structure;
-        if (cloudOrg && typeof cloudOrg === 'object') {
+        if (hasSetting('org_structure') && cloudOrg && typeof cloudOrg === 'object') {
           const deptNames = Array.isArray(cloudOrg.departments) ? [...cloudOrg.departments] : [];
-          if (Array.isArray(cloudDepts)) {
-            cloudDepts.forEach((d: any) => {
-              if (d.name && !deptNames.includes(d.name)) deptNames.push(d.name);
-            });
-          }
-          // Ensure standard enterprise departments: CEO, HR, Accounts
-          ['CEO', 'HR', 'Accounts'].forEach(std => {
-            if (!deptNames.some(d => d.toLowerCase() === std.toLowerCase())) {
-              deptNames.unshift(std);
-            }
-          });
           const mergedOrg: OrganizationStructure = {
             departments: deptNames,
             designations: Array.isArray(cloudOrg.designations) ? cloudOrg.designations : [],
@@ -7773,11 +7661,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           })));
         } else if (Array.isArray(cloudDepts) && cloudDepts.length > 0) {
           const loadedNames = cloudDepts.map(d => d.name);
-          ['CEO', 'HR', 'Accounts'].forEach(std => {
-            if (!loadedNames.some(d => d.toLowerCase() === std.toLowerCase())) {
-              loadedNames.unshift(std);
-            }
-          });
           setOrgStructure(prev => ({ ...prev, departments: loadedNames }));
           setDepartments(loadedNames.map(name => {
             const match = cloudDepts.find((d: any) => d.name.toLowerCase() === name.toLowerCase());
@@ -7794,10 +7677,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Company Details & Branches
-        if (settings.company_info && typeof settings.company_info === 'object' && settings.company_info.companyName) {
+        if (hasSetting('company_info') && settings.company_info && typeof settings.company_info === 'object') {
           setCompanyInfo(settings.company_info);
         }
-        if (Array.isArray(settings.company_branches) && settings.company_branches.length > 0) {
+        if (hasSetting('company_branches') && Array.isArray(settings.company_branches)) {
           setCompanyBranches(settings.company_branches);
         }
 
@@ -7811,15 +7694,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setHolidayPolicies(settings.holiday_policies_data);
         }
 
-        if (Array.isArray(settings.weekly_schedules_data) && settings.weekly_schedules_data.length > 0) {
+        if (hasSetting('weekly_schedules_data') && Array.isArray(settings.weekly_schedules_data)) {
           setWeeklySchedules(settings.weekly_schedules_data);
         }
 
-        if (settings.attendance_config_data && typeof settings.attendance_config_data === 'object') {
+        if (hasSetting('attendance_config_data') && settings.attendance_config_data && typeof settings.attendance_config_data === 'object') {
           setAttendanceConfig(prev => ({ ...prev, ...settings.attendance_config_data }));
         }
 
-        if (settings.overtime_policy_data && typeof settings.overtime_policy_data === 'object') {
+        if (hasSetting('overtime_policy_data') && settings.overtime_policy_data && typeof settings.overtime_policy_data === 'object') {
           setOvertimePolicy(prev => ({ ...prev, ...settings.overtime_policy_data }));
         }
 
@@ -7834,7 +7717,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Geofence Config
-        if (settings.geofence_config && typeof settings.geofence_config === 'object' && settings.geofence_config.officeName) {
+        if (hasSetting('geofence_config') && settings.geofence_config && typeof settings.geofence_config === 'object') {
           setGeofenceConfig(settings.geofence_config);
         }
 
@@ -7850,32 +7733,32 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Payroll Settings Config (Salary Components, PF, ESIC, Tax, etc.)
-        if (settings.payroll_settings_config && typeof settings.payroll_settings_config === 'object') {
+        if (hasSetting('payroll_settings_config') && settings.payroll_settings_config && typeof settings.payroll_settings_config === 'object') {
           setPayrollSettingsConfig(settings.payroll_settings_config);
         }
 
         // Master Attendance Policies
-        if (Array.isArray(settings.master_attendance_policies_data) && settings.master_attendance_policies_data.length > 0) {
+        if (hasSetting('master_attendance_policies_data') && Array.isArray(settings.master_attendance_policies_data)) {
           setMasterAttendancePolicies(settings.master_attendance_policies_data);
         }
 
         // Master Leave Policies
-        if (Array.isArray(settings.master_leave_policies_data) && settings.master_leave_policies_data.length > 0) {
+        if (hasSetting('master_leave_policies_data') && Array.isArray(settings.master_leave_policies_data)) {
           setMasterLeavePolicies(settings.master_leave_policies_data);
         }
 
         // Department OT Policies
-        if (Array.isArray(settings.department_ot_policies_data) && settings.department_ot_policies_data.length > 0) {
+        if (hasSetting('department_ot_policies_data') && Array.isArray(settings.department_ot_policies_data)) {
           setDepartmentOtPolicies(settings.department_ot_policies_data.map(normalizeDepartmentOtPolicy));
         }
 
         // Designations
-        if (Array.isArray(settings.designations_data) && settings.designations_data.length > 0) {
+        if (hasSetting('designations_data') && Array.isArray(settings.designations_data)) {
           setDesignations(settings.designations_data);
         }
 
         // Departments
-        if (Array.isArray(settings.departments_data) && settings.departments_data.length > 0) {
+        if (hasSetting('departments_data') && Array.isArray(settings.departments_data)) {
           setDepartments(settings.departments_data);
         }
 
@@ -7888,12 +7771,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Enterprise System Config
-        if (Array.isArray(settings.grades_data)) setGrades(settings.grades_data);
-        if (Array.isArray(settings.employment_types_data)) setEmploymentTypes(settings.employment_types_data);
-        if (Array.isArray(settings.employee_categories_data)) setEmployeeCategories(settings.employee_categories_data);
-        if (settings.employee_config_data) setEmployeeConfig(settings.employee_config_data);
-        if (settings.general_system_config_data) setGeneralSystemConfig(settings.general_system_config_data);
-        if (settings.integrations_config_data) setIntegrationsConfig(settings.integrations_config_data);
+        if (hasSetting('grades_data') && Array.isArray(settings.grades_data)) setGrades(settings.grades_data);
+        if (hasSetting('employment_types_data') && Array.isArray(settings.employment_types_data)) setEmploymentTypes(settings.employment_types_data);
+        if (hasSetting('employee_categories_data') && Array.isArray(settings.employee_categories_data)) setEmployeeCategories(settings.employee_categories_data);
+        if (hasSetting('employee_config_data') && settings.employee_config_data) setEmployeeConfig(settings.employee_config_data);
+        if (hasSetting('general_system_config_data') && settings.general_system_config_data) setGeneralSystemConfig(settings.general_system_config_data);
+        if (hasSetting('integrations_config_data') && settings.integrations_config_data) setIntegrationsConfig(settings.integrations_config_data);
       }
     } catch (err) {
       console.warn('[HRMSContext] syncAllModulesFromDatabase notice:', err);

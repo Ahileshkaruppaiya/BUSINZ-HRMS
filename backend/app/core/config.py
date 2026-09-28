@@ -29,6 +29,9 @@ class Settings:
     # Role keys whose row-level access is restricted to their own employee record.
     SELF_SERVICE_ROLE_KEYS: list[str] = _comma_list(os.getenv("SELF_SERVICE_ROLE_KEYS", "EMPLOYEE"))
 
+    # Demo seed data is opt-in only. Keep disabled for production deployments.
+    ENABLE_DEMO_SEED: bool = os.getenv("ENABLE_DEMO_SEED", "false").lower() == "true"
+
 
 @lru_cache
 def get_settings() -> Settings:

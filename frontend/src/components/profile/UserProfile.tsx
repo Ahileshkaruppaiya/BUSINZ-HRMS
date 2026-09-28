@@ -34,6 +34,19 @@ export type ProfileTab =
   | 'notifications' 
   | 'logout';
 
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  emailLeaveAlerts: true,
+  emailPayrollSlips: true,
+  emailTaskAssignments: true,
+  emailAnnouncements: true,
+  pushDailyPunchReminder: true,
+  pushShiftChanges: true,
+  smsEmergencyAlerts: true,
+  smsOtpVerification: true
+};
+
+type NotificationPreferences = typeof DEFAULT_NOTIFICATION_PREFERENCES;
+
 interface UserProfileProps {
   onLogout?: () => void;
   isEmbedded?: boolean;
@@ -92,6 +105,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
   const assignedEmployeeId = matchingEmp?.employeeId || currentUser.employeeId || 'EMP-000';
   const assignedLocation = (matchingEmp as any)?.branch || (matchingEmp as any)?.workLocation || (currentUser as any).location || 'Headquarters';
   const assignedJoiningDate = matchingEmp?.joiningDate || (currentUser as any).joiningDate || '01 Jan 2020';
+  const notificationStorageKey = `vrm_hrms_notification_preferences_${assignedEmployeeId || currentUser.id || currentUser.email || 'default'}`;
 
   // Profile Form State (Only editable personal contact details)
   const [profileForm, setProfileForm] = useState({
@@ -162,16 +176,33 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
   };
 
   // Notification Preferences State
-  const [notifPreferences, setNotifPreferences] = useState({
-    emailLeaveAlerts: true,
-    emailPayrollSlips: true,
-    emailTaskAssignments: true,
-    emailAnnouncements: true,
-    pushDailyPunchReminder: true,
-    pushShiftChanges: true,
-    smsEmergencyAlerts: true,
-    smsOtpVerification: true
-  });
+  const readNotificationPreferences = (storageKey: string): NotificationPreferences => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (!saved) return DEFAULT_NOTIFICATION_PREFERENCES;
+      return {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        ...JSON.parse(saved)
+      };
+    } catch {
+      return DEFAULT_NOTIFICATION_PREFERENCES;
+    }
+  };
+
+  const [notifPreferences, setNotifPreferences] = useState<NotificationPreferences>(() => readNotificationPreferences(notificationStorageKey));
+
+  React.useEffect(() => {
+    setNotifPreferences(readNotificationPreferences(notificationStorageKey));
+  }, [notificationStorageKey]);
+
+  const updateNotificationPreference = (key: keyof NotificationPreferences, value: boolean) => {
+    setNotifPreferences(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem(notificationStorageKey, JSON.stringify(updated));
+      return updated;
+    });
+    showToast('Notification preference updated.');
+  };
 
   // Navigation Items
   const menuItems: { id: ProfileTab; label: string; icon: React.ElementType }[] = [
@@ -766,10 +797,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   <input
                     type="checkbox"
                     checked={notifPreferences.emailLeaveAlerts}
-                    onChange={(e) => {
-                      setNotifPreferences({ ...notifPreferences, emailLeaveAlerts: e.target.checked });
-                      showToast('Notification preference updated.');
-                    }}
+                    onChange={(e) => updateNotificationPreference('emailLeaveAlerts', e.target.checked)}
                     style={{ width: '18px', height: '18px', accentColor: '#0E7490', cursor: 'pointer' }}
                   />
                 </div>
@@ -782,10 +810,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   <input
                     type="checkbox"
                     checked={notifPreferences.emailPayrollSlips}
-                    onChange={(e) => {
-                      setNotifPreferences({ ...notifPreferences, emailPayrollSlips: e.target.checked });
-                      showToast('Notification preference updated.');
-                    }}
+                    onChange={(e) => updateNotificationPreference('emailPayrollSlips', e.target.checked)}
                     style={{ width: '18px', height: '18px', accentColor: '#0E7490', cursor: 'pointer' }}
                   />
                 </div>
@@ -798,10 +823,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   <input
                     type="checkbox"
                     checked={notifPreferences.emailTaskAssignments}
-                    onChange={(e) => {
-                      setNotifPreferences({ ...notifPreferences, emailTaskAssignments: e.target.checked });
-                      showToast('Notification preference updated.');
-                    }}
+                    onChange={(e) => updateNotificationPreference('emailTaskAssignments', e.target.checked)}
                     style={{ width: '18px', height: '18px', accentColor: '#0E7490', cursor: 'pointer' }}
                   />
                 </div>
@@ -818,10 +840,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   <input
                     type="checkbox"
                     checked={notifPreferences.pushDailyPunchReminder}
-                    onChange={(e) => {
-                      setNotifPreferences({ ...notifPreferences, pushDailyPunchReminder: e.target.checked });
-                      showToast('Notification preference updated.');
-                    }}
+                    onChange={(e) => updateNotificationPreference('pushDailyPunchReminder', e.target.checked)}
                     style={{ width: '18px', height: '18px', accentColor: '#0E7490', cursor: 'pointer' }}
                   />
                 </div>
@@ -834,10 +853,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   <input
                     type="checkbox"
                     checked={notifPreferences.smsEmergencyAlerts}
-                    onChange={(e) => {
-                      setNotifPreferences({ ...notifPreferences, smsEmergencyAlerts: e.target.checked });
-                      showToast('Notification preference updated.');
-                    }}
+                    onChange={(e) => updateNotificationPreference('smsEmergencyAlerts', e.target.checked)}
                     style={{ width: '18px', height: '18px', accentColor: '#0E7490', cursor: 'pointer' }}
                   />
                 </div>
