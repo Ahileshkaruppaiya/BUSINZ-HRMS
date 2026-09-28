@@ -23,6 +23,59 @@ interface NewTaskFormProps {
   onCancel: () => void;
 }
 
+const normalizeDepartmentLabel = (value?: string) =>
+  (value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const canonicalDepartmentKey = (value?: string) => {
+  const normalized = normalizeDepartmentLabel(value);
+  if (!normalized) return '';
+  if (normalized === 'hr' || normalized.includes('human resource')) return 'hr';
+  if (normalized.includes('sales') || normalized.includes('marketing')) return 'sales';
+  if (normalized.includes('account') || normalized.includes('finance')) return 'accounts';
+  if (normalized.includes('operation')) return 'operations';
+  if (normalized.includes('engineer') || normalized.includes('technical') || normalized === 'it') return 'engineering';
+  return normalized;
+};
+
+const departmentLookupKeys = (value?: string, allDepartments: { id?: string; name?: string; code?: string }[] = []) => {
+  const normalized = normalizeDepartmentLabel(value);
+  if (!normalized) return new Set<string>();
+
+  const keys = new Set([normalized, canonicalDepartmentKey(value)]);
+  allDepartments.forEach(dept => {
+    const identifiers = [dept.id, dept.name, dept.code]
+      .map(item => normalizeDepartmentLabel(item))
+      .filter(Boolean);
+    if (identifiers.includes(normalized)) {
+      identifiers.forEach(item => keys.add(item));
+      keys.add(canonicalDepartmentKey(dept.name || dept.code || dept.id));
+    }
+  });
+  return keys;
+};
+
+const departmentMatches = (
+  employeeDepartment?: string,
+  selectedDepartment?: string,
+  allDepartments: { id?: string; name?: string; code?: string }[] = []
+) => {
+  const employeeNormalized = normalizeDepartmentLabel(employeeDepartment);
+  const selectedNormalized = normalizeDepartmentLabel(selectedDepartment);
+  if (!employeeNormalized || !selectedNormalized) return false;
+  if (employeeNormalized === selectedNormalized) return true;
+
+  const employeeKeys = departmentLookupKeys(employeeDepartment, allDepartments);
+  const selectedKeys = departmentLookupKeys(selectedDepartment, allDepartments);
+  if ([...employeeKeys].some(key => selectedKeys.has(key))) return true;
+
+  const employeeTokens = new Set(employeeNormalized.split(' ').filter(token => token.length >= 4));
+  return selectedNormalized.split(' ').some(token => token.length >= 4 && employeeTokens.has(token));
+};
+
 export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCancel }) => {
   const { employees, departments, enhancedTasks, currentUser, createEnhancedTask } = useHRMS();
 
@@ -88,8 +141,8 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
 
   // Department-scoped assignable employees (ONLY employees belonging to the selected department, excluding creator and excluding CEO)
   const departmentAssignableEmployees = useMemo(() => {
-    return employees.filter(emp => !isSelf(emp) && !isCeoEmp(emp) && emp.department === department);
-  }, [employees, department, currentEmpId, currentEmpName, currentUser]);
+    return employees.filter(emp => !isSelf(emp) && !isCeoEmp(emp) && departmentMatches(emp.department, department, departments));
+  }, [employees, departments, department, currentEmpId, currentEmpName, currentUser]);
 
   const defaultDeptEmp = departmentAssignableEmployees.find(e => e.designation !== 'CEO' && e.employeeId !== 'EMP-000') || departmentAssignableEmployees[0];
   const [responsiblePersonId, setResponsiblePersonId] = useState<string>(defaultDeptEmp?.employeeId || '');

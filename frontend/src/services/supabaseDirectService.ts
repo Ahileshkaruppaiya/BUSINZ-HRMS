@@ -16,7 +16,7 @@ export const supabaseDirect = {
    */
   async getEmployees(): Promise<any[]> {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?select=*&order=created_at.desc`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?select=*,departments(id,name,code)&order=created_at.desc`, {
         headers: getHeaders(),
       });
       if (!res.ok) return [];
@@ -135,43 +135,109 @@ export const supabaseDirect = {
     try {
       if (!idOrEmpId) return { success: false, error: 'No employee ID provided' };
       const cleanId = idOrEmpId.trim();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
 
-      // Clean up potential foreign key dependencies first
+      // 1. Locate the employee record first to get UUID, employee_id, and email
+      let uuid = isUuid ? cleanId : '';
+      let empCode = !isUuid ? cleanId : '';
+      let empEmail = '';
+
       try {
-        const queryFilter = `or=(id.eq.${encodeURIComponent(cleanId)},employee_id.eq.${encodeURIComponent(cleanId)})`;
-        const empRows = await fetch(`${SUPABASE_URL}/rest/v1/employees?${queryFilter}&select=id,employee_id`, {
+        const queryFilter = isUuid
+          ? `id=eq.${encodeURIComponent(cleanId)}`
+          : `employee_id=eq.${encodeURIComponent(cleanId)}`;
+
+        const empRows = await fetch(`${SUPABASE_URL}/rest/v1/employees?${queryFilter}&select=id,employee_id,email&limit=1`, {
           headers: getHeaders(),
         });
         if (empRows.ok) {
           const matching = await empRows.json();
           if (Array.isArray(matching) && matching.length > 0) {
-            const uuid = matching[0].id;
-            const empCode = matching[0].employee_id;
-
-            // Remove non-cascading child records if any
-            const tablesToClean = [
-              { table: 'attendance_records', col: 'employee_id' },
-              { table: 'leave_requests', col: 'employee_id' },
-              { table: 'task_assignees', col: 'employee_id' },
-              { table: 'password_resets', col: 'email' },
-            ];
-
-            await Promise.allSettled(
-              tablesToClean.map(t =>
-                fetch(`${SUPABASE_URL}/rest/v1/${t.table}?${t.col}=eq.${encodeURIComponent(uuid)}`, {
-                  method: 'DELETE',
-                  headers: getHeaders(),
-                })
-              )
-            );
+            uuid = matching[0].id || uuid;
+            empCode = matching[0].employee_id || empCode;
+            empEmail = matching[0].email || '';
           }
+        }
+      } catch (findErr) {
+        console.warn('[SupabaseDirect] Employee lookup warning:', findErr);
+      }
+
+      // 2. Cascade delete dependent child records and unassign references
+      try {
+        if (uuid) {
+          const tablesToClean = [
+            { table: 'attendance_records', col: 'employee_id' },
+            { table: 'leave_requests', col: 'employee_id' },
+            { table: 'task_assignees', col: 'employee_id' },
+            { table: 'task_updates', col: 'employee_id' },
+            { table: 'payroll_records', col: 'employee_id' },
+            { table: 'salary_structures', col: 'employee_id' },
+            { table: 'performance_scores', col: 'employee_id' },
+            { table: 'expenses', col: 'employee_id' },
+            { table: 'shift_assignments', col: 'employee_id' },
+            { table: 'shift_requests', col: 'employee_id' },
+            { table: 'employee_documents', col: 'employee_id' },
+            { table: 'face_logs', col: 'employee_id' },
+            { table: 'field_duty_assignments', col: 'employee_id' },
+            { table: 'field_trip_sessions', col: 'employee_id' },
+            { table: 'field_location_points', col: 'employee_id' },
+            { table: 'field_tracking_alerts', col: 'employee_id' },
+            { table: 'notification_recipients', col: 'employee_id' },
+          ];
+
+          await Promise.allSettled(
+            tablesToClean.map(t =>
+              fetch(`${SUPABASE_URL}/rest/v1/${t.table}?${t.col}=eq.${encodeURIComponent(uuid)}`, {
+                method: 'DELETE',
+                headers: getHeaders(),
+              })
+            )
+          );
+
+          if (empEmail) {
+            await fetch(`${SUPABASE_URL}/rest/v1/password_resets?email=eq.${encodeURIComponent(empEmail)}`, {
+              method: 'DELETE',
+              headers: getHeaders(),
+            }).catch(() => {});
+          }
+
+          // Unassign foreign key references without deleting parent containers
+          await Promise.allSettled([
+            fetch(`${SUPABASE_URL}/rest/v1/departments?head_id=eq.${encodeURIComponent(uuid)}`, {
+              method: 'PATCH',
+              headers: getHeaders(),
+              body: JSON.stringify({ head_id: null }),
+            }),
+            fetch(`${SUPABASE_URL}/rest/v1/assets?assigned_employee_id=eq.${encodeURIComponent(uuid)}`, {
+              method: 'PATCH',
+              headers: getHeaders(),
+              body: JSON.stringify({ assigned_employee_id: null, status: 'Available' }),
+            }),
+            fetch(`${SUPABASE_URL}/rest/v1/tasks?responsible_person_id=eq.${encodeURIComponent(uuid)}`, {
+              method: 'PATCH',
+              headers: getHeaders(),
+              body: JSON.stringify({ responsible_person_id: null }),
+            }),
+          ]);
+        }
+
+        // Clean enterprise_tasks by empCode
+        if (empCode) {
+          await fetch(`${SUPABASE_URL}/rest/v1/enterprise_tasks?responsible_person_id=eq.${encodeURIComponent(empCode)}`, {
+            method: 'PATCH',
+            headers: getHeaders(),
+            body: JSON.stringify({ responsible_person_id: null, responsible_person_name: null }),
+          }).catch(() => {});
         }
       } catch (cascadeErr) {
         console.warn('[SupabaseDirect] Pre-delete cascade notice:', cascadeErr);
       }
 
-      // Delete from employees table
-      const deleteFilter = `or=(id.eq.${encodeURIComponent(cleanId)},employee_id.eq.${encodeURIComponent(cleanId)})`;
+      // 3. Delete from employees table
+      const deleteFilter = uuid
+        ? `id=eq.${encodeURIComponent(uuid)}`
+        : `employee_id=eq.${encodeURIComponent(cleanId)}`;
+
       const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?${deleteFilter}`, {
         method: 'DELETE',
         headers: getHeaders(),
@@ -1258,4 +1324,3 @@ export const supabaseDirect = {
     }
   },
 };
-

@@ -187,18 +187,25 @@ export class TrackingRepository {
     startAddress?: string;
   }): Promise<FieldTripSession> {
     const assignment = inMemoryAssignments.find((a) => a.id === params.assignmentId);
+    const existingActiveTrip = inMemoryTrips.find(
+      (t) => t.assignmentId === params.assignmentId && t.employeeId === params.employeeId && t.status === 'Active'
+    );
+    if (existingActiveTrip) return existingActiveTrip;
+
     const emp = await employeeRepository.getEmployeeById(params.employeeId);
     const empName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : 'Staff';
+    const now = new Date().toISOString();
+    const tripId = `trip-${Date.now()}`;
 
     const newTrip: FieldTripSession = {
-      id: `trip-${Date.now()}`,
+      id: tripId,
       assignmentId: params.assignmentId,
       employeeId: params.employeeId,
       employeeName: empName,
       department: emp?.department || 'Operations',
       dutyType: assignment?.dutyType || 'Site Visit',
       customerSiteName: assignment?.customerSiteName || 'Site',
-      tripStartTime: new Date().toISOString(),
+      tripStartTime: now,
       startLat: params.startLat,
       startLng: params.startLng,
       startAddress: params.startAddress || 'Origin Location',
@@ -207,10 +214,10 @@ export class TrackingRepository {
       locationPoints: [
         {
           id: `lp-${Date.now()}`,
-          tripId: `trip-${Date.now()}`,
+          tripId,
           assignmentId: params.assignmentId,
           employeeId: params.employeeId,
-          recordedAt: new Date().toISOString(),
+          recordedAt: now,
           latitude: params.startLat,
           longitude: params.startLng,
           accuracy: 10,
@@ -219,9 +226,9 @@ export class TrackingRepository {
       ],
       gpsStatus: 'GPS Active',
       trackingStatus: 'Travelling',
-      lastGpsUpdate: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      lastGpsUpdate: now,
+      createdAt: now,
+      updatedAt: now,
     };
 
     inMemoryTrips.unshift(newTrip);

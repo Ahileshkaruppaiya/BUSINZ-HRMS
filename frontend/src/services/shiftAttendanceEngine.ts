@@ -5,6 +5,7 @@
 
 import { AttendanceRecord, AttendanceShiftState, Employee, HolidayItem, LeaveRequest, Shift } from '../types/hrms';
 import { WeeklyScheduleItem } from '../types/hrms';
+import { isDateWeeklyOffBySchedule } from '../utils/weeklyScheduleUtils';
 
 export interface ShiftTimeComponents {
   hours: number;     // 0 - 23
@@ -80,23 +81,7 @@ export function isDateWeeklyOff(
   weeklySchedules?: WeeklyScheduleItem[],
   customWorkingDays?: string[]
 ): boolean {
-  const dayIndex = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const dayName = dayNames[dayIndex];
-
-  // If custom working days are provided on employee
-  if (Array.isArray(customWorkingDays) && customWorkingDays.length > 0) {
-    return !customWorkingDays.includes(dayName);
-  }
-
-  // Default company schedule: Sunday is off
-  if (!weeklySchedules || weeklySchedules.length === 0) {
-    return dayIndex === 0;
-  }
-
-  const activeSchedule = weeklySchedules.find(s => s.isDefault) || weeklySchedules[0];
-  const offDays = (activeSchedule.offDays || 'Sunday').toLowerCase();
-  return offDays.includes(dayName.toLowerCase());
+  return isDateWeeklyOffBySchedule(date, weeklySchedules, customWorkingDays);
 }
 
 /**

@@ -1313,6 +1313,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   // Supabase Database Employee Entity Mapper
+  const resolveEmployeeDepartmentName = (d: any): string => {
+    const directDepartment = typeof d.department === 'string' ? d.department : d.department_name || d.deptName;
+    const relatedDepartment = d.departments?.name || d.department?.name;
+    return directDepartment || relatedDepartment || d.departmentId || d.department_id || 'General';
+  };
+
   const mapEmployeeFromDb = (d: any): Employee => ({
     id: d.id,
     employeeId: d.employeeId || d.employee_id,
@@ -1323,7 +1329,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     dob: d.dob || '1995-01-01',
     gender: (d.gender as any) || 'Male',
     address: d.address || 'Chennai, Tamil Nadu',
-    department: d.department || (d.departments && d.departments.name) || 'General',
+    department: resolveEmployeeDepartmentName(d),
     designation: d.designation || 'Staff',
     reportingManagerId: d.reportingManagerId || d.reporting_manager_id || '',
     reportingManagerName: d.reportingManagerName || d.reporting_manager_name || '',
@@ -2495,13 +2501,29 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateDepartmentOtPolicy = (idOrDeptName: string, policy: Partial<DepartmentOtPolicy>) => {
     setDepartmentOtPolicies(prev => {
-      const idx = prev.findIndex(p => p.id === idOrDeptName || p.department.toLowerCase() === idOrDeptName.toLowerCase());
+      const normalizedKey = idOrDeptName.trim().toLowerCase();
+      const nextDepartment = (policy.department || idOrDeptName).trim();
+      const normalizedDepartment = nextDepartment.toLowerCase();
+      const stableId = idOrDeptName.startsWith('DOT-')
+        ? idOrDeptName
+        : `DOT-${nextDepartment.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || Date.now()}`;
+
+      const idx = prev.findIndex(p => {
+        const normalizedPolicyId = p.id.trim().toLowerCase();
+        const normalizedPolicyDept = p.department.trim().toLowerCase();
+        return (
+          normalizedPolicyId === normalizedKey ||
+          normalizedPolicyId === `dot-${normalizedKey}` ||
+          normalizedPolicyDept === normalizedKey ||
+          normalizedPolicyDept === normalizedDepartment
+        );
+      });
       if (idx >= 0) {
         return prev.map((p, i) => i === idx ? { ...p, ...policy } : p);
       } else {
         const newPolicy: DepartmentOtPolicy = {
-          id: idOrDeptName.startsWith('DOT-') ? idOrDeptName : `DOT-${Date.now()}`,
-          department: policy.department || idOrDeptName,
+          id: stableId,
+          department: nextDepartment,
           otAllowed: policy.otAllowed ?? true,
           policyId: 'OTP-001',
           maxOtHoursDaily: policy.maxOtHoursDaily ?? 4.0,
@@ -2705,6 +2727,46 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } catch {}
   }, [masterLeavePolicies]);
+
+  useEffect(() => {
+    try {
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('holiday_policies_data', holidayPolicies);
+      }
+    } catch {}
+  }, [holidayPolicies]);
+
+  useEffect(() => {
+    try {
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('weekly_schedules_data', weeklySchedules);
+      }
+    } catch {}
+  }, [weeklySchedules]);
+
+  useEffect(() => {
+    try {
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('attendance_config_data', attendanceConfig);
+      }
+    } catch {}
+  }, [attendanceConfig]);
+
+  useEffect(() => {
+    try {
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('department_ot_policies_data', departmentOtPolicies);
+      }
+    } catch {}
+  }, [departmentOtPolicies]);
+
+  useEffect(() => {
+    try {
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('overtime_policy_data', overtimePolicy);
+      }
+    } catch {}
+  }, [overtimePolicy]);
 
   useEffect(() => {
     try {
@@ -4730,14 +4792,25 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const deleteEmployee = async (id: string): Promise<{ success: boolean; message?: string }> => {
     const check = canDeleteEmployee(id);
     if (!check.canDelete) {
+      addNotification({
+        title: 'Deletion Blocked',
+        message: check.reason || 'Employee cannot be deleted.',
+        priority: 'Urgent',
+        category: 'Announcement'
+      });
       return { success: false, message: check.reason };
     }
 
     // 1. Delete from Supabase Cloud Database directly
+    let cloudSuccess = false;
+    let cloudError: any = null;
     try {
-      await supabaseDirect.deleteEmployee(id);
+      const res = await supabaseDirect.deleteEmployee(id);
+      cloudSuccess = res.success;
+      cloudError = res.error;
     } catch (sbErr) {
       console.warn('Direct Supabase delete notice:', sbErr);
+      cloudError = sbErr;
     }
 
     // 2. Also attempt backend API deletion if token is active
@@ -4750,6 +4823,18 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       });
     } catch {}
+
+    if (!cloudSuccess) {
+      console.error('[HRMSContext] Cloud employee deletion failed:', cloudError);
+      const errMsg = typeof cloudError === 'string' ? cloudError : (cloudError?.message || 'Database error occurred');
+      addNotification({
+        title: 'Delete Failed',
+        message: `Could not delete employee record from cloud database: ${errMsg}`,
+        priority: 'Urgent',
+        category: 'Announcement'
+      });
+      return { success: false, message: errMsg };
+    }
 
     // 3. Update React state
     setEmployees(prev => {
@@ -4775,8 +4860,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     // 1. Delete from Supabase directly
+    let batchResult: { success: boolean; deletedCount: number; errors: any[] } = { success: false, deletedCount: 0, errors: [] };
     try {
-      await supabaseDirect.deleteEmployees(idsToDelete);
+      batchResult = await supabaseDirect.deleteEmployees(idsToDelete);
     } catch (sbErr) {
       console.warn('Batch Supabase delete notice:', sbErr);
     }
@@ -4796,6 +4882,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
     } catch {}
 
+    if (!batchResult.success && batchResult.deletedCount === 0) {
+      addNotification({
+        title: 'Batch Delete Failed',
+        message: 'Could not delete the selected employees from the database.',
+        priority: 'Urgent',
+        category: 'Announcement'
+      });
+      return { success: false, deletedCount: 0, message: 'Batch delete failed in database' };
+    }
+
     // 3. Update React state
     const idSet = new Set(idsToDelete);
     setEmployees(prev => {
@@ -4805,12 +4901,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     addNotification({
       title: 'Employees Removed',
-      message: `${idsToDelete.length} employee record(s) deleted successfully.`,
+      message: `${batchResult.deletedCount || idsToDelete.length} employee record(s) deleted successfully.`,
       priority: 'Normal',
       category: 'Announcement'
     });
 
-    return { success: true, deletedCount: idsToDelete.length };
+    return { success: true, deletedCount: batchResult.deletedCount || idsToDelete.length };
   };
 
 
@@ -7118,6 +7214,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setFieldAssignments(prev => prev.map(a => a.id === id ? { ...a, ...updates, updatedAt: new Date().toISOString() } : a));
   };
 
+  const doesAssignmentBelongToEmployee = (assignment: FieldAssignment, employeeIdOrName: string): boolean => {
+    const key = (employeeIdOrName || '').trim().toLowerCase();
+    if (!key) return false;
+    return (
+      assignment.employeeId.trim().toLowerCase() === key ||
+      assignment.employeeName.trim().toLowerCase() === key
+    );
+  };
+
   const cancelFieldAssignment = (id: string) => {
     const now = new Date().toISOString();
     setFieldAssignments(prev => prev.map(a => a.id === id ? { ...a, status: 'Cancelled', updatedAt: now } : a));
@@ -7133,6 +7238,15 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const startTrip = (assignmentId: string, startLat: number, startLng: number, startAddress: string = 'Starting Point'): FieldTripSession => {
     const now = new Date().toISOString();
     const assignment = fieldAssignments.find(a => a.id === assignmentId);
+    if (assignment && (assignment.status === 'Cancelled' || assignment.status === 'Completed')) {
+      throw new Error('Cannot start trip for cancelled or completed field assignment.');
+    }
+
+    const existingActiveTrip = tripSessions.find(t => t.assignmentId === assignmentId && t.status === 'Active');
+    if (existingActiveTrip) {
+      return existingActiveTrip;
+    }
+
     const initialPoint: LocationPoint = {
       id: `pt-${Date.now()}-1`,
       tripId: `TRIP-${Date.now()}`,
@@ -7165,7 +7279,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       createdAt: now,
       updatedAt: now
     };
-    setTripSessions(prev => [newTrip, ...prev]);
+    setTripSessions(prev => [newTrip, ...prev.filter(t => !(t.assignmentId === assignmentId && t.status === 'Active'))]);
     setFieldAssignments(prev => prev.map(a => a.id === assignmentId && a.status === 'Scheduled' ? { ...a, status: 'Active', updatedAt: now } : a));
     return newTrip;
   };
@@ -7175,7 +7289,14 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (trip.id !== tripId || trip.status !== 'Active') return trip;
 
       const prevPoint = trip.locationPoints[trip.locationPoints.length - 1] || null;
-      const validation = isValidMovementPoint(prevPoint, point.latitude, point.longitude, point.accuracy);
+      const recordedAtMs = point.recordedAt ? new Date(point.recordedAt).getTime() : Date.now();
+      const validation = isValidMovementPoint(
+        prevPoint,
+        point.latitude,
+        point.longitude,
+        point.accuracy,
+        Number.isFinite(recordedAtMs) ? recordedAtMs : Date.now()
+      );
 
       if (!validation.valid && prevPoint) {
         return {
@@ -7246,6 +7367,18 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { success: false, message: 'Field assignment not found.' };
     }
 
+    if (assignment.status === 'Cancelled') {
+      return { success: false, message: 'This field duty assignment has been cancelled.' };
+    }
+
+    if (assignment.status === 'Completed') {
+      return { success: false, message: 'This field duty assignment is already completed.' };
+    }
+
+    if (!isTrackingScheduleActive(assignment)) {
+      return { success: false, message: 'Field check-in is allowed only during the approved duty schedule.' };
+    }
+
     if (assignment.attendanceType === 'Site Geofence' && assignment.siteLat && assignment.siteLng) {
       const distMeters = calculateHaversineMeters(lat, lng, assignment.siteLat, assignment.siteLng);
       if (distMeters > assignment.allowedRadiusMeters) {
@@ -7284,6 +7417,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const fieldCheckOut = (assignmentId: string): void => {
     const nowIso = new Date().toISOString();
+    const activeTrip = tripSessions.find(t => t.assignmentId === assignmentId && t.status === 'Active');
+
     setFieldAssignments(prev => prev.map(a => a.id === assignmentId ? {
       ...a,
       status: 'Completed',
@@ -7293,8 +7428,13 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setTripSessions(prev => prev.map(t => t.assignmentId === assignmentId ? {
       ...t,
       checkOutTime: nowIso,
+      tripEndTime: t.tripEndTime || nowIso,
+      endLat: t.endLat ?? (activeTrip?.locationPoints[activeTrip.locationPoints.length - 1]?.latitude || t.startLat),
+      endLng: t.endLng ?? (activeTrip?.locationPoints[activeTrip.locationPoints.length - 1]?.longitude || t.startLng),
+      endAddress: t.endAddress || 'Field Duty Check-Out',
       status: 'Completed',
       trackingStatus: 'Completed',
+      gpsStatus: t.gpsStatus === 'GPS Active' ? 'GPS Active' : t.gpsStatus,
       updatedAt: nowIso
     } : t));
   };
@@ -7319,7 +7459,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     return fieldAssignments.find(a => {
-      if (a.employeeId !== employeeId && a.employeeName !== employeeId) return false;
+      if (!doesAssignmentBelongToEmployee(a, employeeId)) return false;
       if (a.status === 'Cancelled') return false;
       if (a.scheduleType === 'One Day') {
         return a.startDate === todayStr;
@@ -7648,6 +7788,18 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Holiday Policies
         if (Array.isArray(settings.holiday_policies_data)) {
           setHolidayPolicies(settings.holiday_policies_data);
+        }
+
+        if (Array.isArray(settings.weekly_schedules_data) && settings.weekly_schedules_data.length > 0) {
+          setWeeklySchedules(settings.weekly_schedules_data);
+        }
+
+        if (settings.attendance_config_data && typeof settings.attendance_config_data === 'object') {
+          setAttendanceConfig(prev => ({ ...prev, ...settings.attendance_config_data }));
+        }
+
+        if (settings.overtime_policy_data && typeof settings.overtime_policy_data === 'object') {
+          setOvertimePolicy(prev => ({ ...prev, ...settings.overtime_policy_data }));
         }
 
         // Loan Policies

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { HolidayItem } from '../../types/hrms';
+import { DAYS_OF_WEEK, isDateWeeklyOffBySchedule, parseWeeklyOffDays } from '../../utils/weeklyScheduleUtils';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -33,6 +34,13 @@ interface CalendarDayDetail {
   holiday: HolidayItem | null;
 }
 
+const parseOffDays = (offDays?: string): string[] => {
+  return parseWeeklyOffDays(offDays, false);
+};
+
+const getWorkingDaysText = (offDays: string[]) =>
+  DAYS_OF_WEEK.filter(day => !offDays.includes(day)).join(', ');
+
 export const WeekOffCalendarSettings: React.FC = () => {
   const { 
     holidayPolicies, 
@@ -63,8 +71,10 @@ export const WeekOffCalendarSettings: React.FC = () => {
 
   const canManageHolidays = isCEO || isHR || userRole === 'Management' || userRole !== 'Employee';
 
-  // Current view date (default to current year & month, e.g. Sept 2026)
-  const [currentDate, setCurrentDate] = useState(() => new Date(2026, 8, 1)); // September 2026
+  const today = useMemo(() => new Date(), []);
+
+  // Current view date (default to current month)
+  const [currentDate, setCurrentDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
 
   // Policy configuration state
   const [primaryOffDays, setPrimaryOffDays] = useState<string[]>(['Sunday']);
@@ -111,13 +121,22 @@ export const WeekOffCalendarSettings: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const defaultWeeklySchedule = weeklySchedules.find(ws => ws.isDefault) || weeklySchedules[0];
+
+  useEffect(() => {
+    const savedOffDays = parseOffDays(defaultWeeklySchedule?.offDays);
+    if (savedOffDays.length > 0) {
+      setPrimaryOffDays(savedOffDays);
+    }
+  }, [defaultWeeklySchedule?.offDays]);
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth(); // 0-indexed
 
   // Month navigation
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-  const goToToday = () => setCurrentDate(new Date(2026, 8, 10));
+  const goToToday = () => setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -147,7 +166,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
   const getDayDetails = (dayNum: number): CalendarDayDetail => {
     const dateObj = new Date(year, month, dayNum);
     const dayOfWeek = dateObj.getDay(); // 0 = Sun, 6 = Sat
-    const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
+    const dayName = DAYS_OF_WEEK[dayOfWeek];
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
 
     // Check holiday list
@@ -179,7 +198,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
     }
 
     // Check Primary Off Day (e.g. Sunday)
-    if (primaryOffDays.includes(dayName)) {
+    if (isDateWeeklyOffBySchedule(dateObj, weeklySchedules)) {
       return {
         dateStr,
         dayNum,
@@ -367,7 +386,19 @@ export const WeekOffCalendarSettings: React.FC = () => {
   };
 
   const handleSaveRosterConfig = () => {
-    showToast('Weekly Off calendar rules saved and active for attendance calculation!');
+    const offDaysText = primaryOffDays.join(', ');
+    const workingDaysText = getWorkingDaysText(primaryOffDays);
+
+    if (defaultWeeklySchedule) {
+      updateWeeklySchedule(defaultWeeklySchedule.id, {
+        name: defaultWeeklySchedule.name || 'Default Weekly Off Schedule',
+        workingDays: workingDaysText,
+        offDays: offDaysText,
+        isDefault: true
+      });
+    }
+
+    showToast(`Weekly Off rules saved: ${offDaysText}. Attendance, payroll, and calendars will use this default roster.`);
   };
 
   // Holidays falling in the current viewed month
@@ -1297,7 +1328,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
             Primary Weekly Off Day(s)
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-            {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => {
+            {DAYS_OF_WEEK.map(day => {
               const isSelected = primaryOffDays.includes(day);
               return (
                 <button

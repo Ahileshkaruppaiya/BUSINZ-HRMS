@@ -40,6 +40,13 @@ export const EmployeeDutyTab: React.FC<EmployeeDutyTabProps> = ({ onGoToTripTab 
   const [isGpsEnabled, setIsGpsEnabled] = useState<boolean>(true);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const currentEmployeeKeys = [
+    currentUser.employeeId,
+    currentUser.id,
+    currentUser.name
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase());
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -55,9 +62,8 @@ export const EmployeeDutyTab: React.FC<EmployeeDutyTabProps> = ({ onGoToTripTab 
   // Find employee's active or scheduled assignment today
   const todayStr = new Date().toISOString().split('T')[0];
   const myAssignment = fieldAssignments.find((a) => {
-    const matchEmp = a.employeeId === currentUser.employeeId ||
-                     a.employeeId === currentUser.id ||
-                     a.employeeName.toLowerCase().includes(currentUser.name.toLowerCase());
+    const assignmentKeys = [a.employeeId, a.employeeName].map((value) => String(value || '').trim().toLowerCase());
+    const matchEmp = assignmentKeys.some((key) => currentEmployeeKeys.includes(key));
     if (!matchEmp || a.status === 'Cancelled') return false;
     if (a.scheduleType === 'One Day') return a.startDate === todayStr;
     if (a.scheduleType === 'Date Range') return todayStr >= a.startDate && todayStr <= a.endDate;
@@ -66,11 +72,11 @@ export const EmployeeDutyTab: React.FC<EmployeeDutyTabProps> = ({ onGoToTripTab 
 
   // Find active or completed trip for this assignment
   const activeTrip = tripSessions.find(
-    (t) => (t.assignmentId === myAssignment?.id || t.employeeId === currentUser.employeeId) && t.status === 'Active'
+    (t) => t.assignmentId === myAssignment?.id && t.status === 'Active'
   );
 
   const completedTrip = tripSessions.find(
-    (t) => (t.assignmentId === myAssignment?.id || t.employeeId === currentUser.employeeId) && t.status === 'Completed'
+    (t) => t.assignmentId === myAssignment?.id && t.status === 'Completed'
   );
 
   const isCheckedIn = Boolean(activeTrip?.checkInTime || completedTrip?.checkInTime || myAssignment?.status === 'Active');
@@ -117,14 +123,18 @@ export const EmployeeDutyTab: React.FC<EmployeeDutyTabProps> = ({ onGoToTripTab 
     try {
       const position = await defaultLocationProvider.getCurrentPosition();
       setIsGpsEnabled(true);
-      startTrip(myAssignment.id, position.lat, position.lng, myAssignment.siteAddress || 'Current Location');
-      setFeedbackMessage({ type: 'success', text: 'Trip initiated! GPS location tracking is now active.' });
+      const trip = startTrip(myAssignment.id, position.lat, position.lng, myAssignment.siteAddress || 'Current Location');
+      setFeedbackMessage({ type: 'success', text: trip.status === 'Active' ? 'Trip initiated! GPS location tracking is now active.' : 'Trip is ready.' });
       onGoToTripTab();
-    } catch (err) {
+    } catch (err: any) {
       setIsGpsEnabled(false);
       // Fallback: start trip with site coordinates if browser geolocation fails
-      startTrip(myAssignment.id, myAssignment.siteLat || 13.0827, myAssignment.siteLng || 80.2707, 'Current Location');
-      onGoToTripTab();
+      try {
+        startTrip(myAssignment.id, myAssignment.siteLat || 13.0827, myAssignment.siteLng || 80.2707, 'Current Location');
+        onGoToTripTab();
+      } catch (tripErr: any) {
+        setFeedbackMessage({ type: 'error', text: tripErr?.message || 'Unable to start trip for this assignment.' });
+      }
     } finally {
       setIsProcessing(false);
     }

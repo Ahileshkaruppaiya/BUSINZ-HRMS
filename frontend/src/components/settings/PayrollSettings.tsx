@@ -36,6 +36,7 @@ export const PayrollSettings: React.FC = () => {
   // Component Edit Modal
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
   const [editingComp, setEditingComp] = useState<SalaryComponentConfig | null>(null);
+  const [defaultValueDraft, setDefaultValueDraft] = useState<string | null>(null);
   const [compForm, setCompForm] = useState<{
     name: string;
     code: string;
@@ -78,6 +79,7 @@ export const PayrollSettings: React.FC = () => {
       isConfidential: false,
       description: ''
     });
+    setDefaultValueDraft(null);
     setIsCompModalOpen(true);
   };
 
@@ -95,7 +97,13 @@ export const PayrollSettings: React.FC = () => {
       isConfidential: c.isConfidential,
       description: c.description
     });
+    setDefaultValueDraft(null);
     setIsCompModalOpen(true);
+  };
+
+  const handleDefaultValueChange = (rawValue: string) => {
+    setDefaultValueDraft(rawValue === '' ? '' : null);
+    setCompForm({ ...compForm, defaultValue: rawValue === '' ? 0 : Number(rawValue) });
   };
 
   const handleSaveComp = (e: React.FormEvent) => {
@@ -483,8 +491,8 @@ export const PayrollSettings: React.FC = () => {
                       <input
                         type="number"
                         className="form-control"
-                        value={compForm.defaultValue}
-                        onChange={e => setCompForm({ ...compForm, defaultValue: parseFloat(e.target.value) || 0 })}
+                        value={defaultValueDraft ?? compForm.defaultValue}
+                        onChange={e => handleDefaultValueChange(e.target.value)}
                       />
                     </div>
                     <div>
@@ -506,8 +514,8 @@ export const PayrollSettings: React.FC = () => {
                     <input
                       type="number"
                       className="form-control"
-                      value={compForm.defaultValue}
-                      onChange={e => setCompForm({ ...compForm, defaultValue: parseFloat(e.target.value) || 0 })}
+                      value={defaultValueDraft ?? compForm.defaultValue}
+                      onChange={e => handleDefaultValueChange(e.target.value)}
                     />
                   </div>
                 ) : (

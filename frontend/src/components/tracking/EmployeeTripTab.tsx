@@ -33,6 +33,22 @@ export const EmployeeTripTab: React.FC<EmployeeTripTabProps> = ({ onTripEnded })
   const [offlinePendingCount, setOfflinePendingCount] = useState<number>(0);
   const [watchId, setWatchId] = useState<number | null>(null);
 
+  const currentEmployeeKeys = [
+    currentUser.employeeId,
+    currentUser.id,
+    currentUser.name
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase());
+
+  // Find employee's active trip session. Never fall back to another user's trip.
+  const activeTrip = tripSessions.find((t) => {
+    const tripKeys = [t.employeeId, t.employeeName].map((value) => String(value || '').trim().toLowerCase());
+    return t.status === 'Active' && tripKeys.some((key) => currentEmployeeKeys.includes(key));
+  });
+
+  const assignment = fieldAssignments.find((a) => a.id === activeTrip?.assignmentId);
+
   // Network state listener & offline sync
   useEffect(() => {
     const updateOnline = () => {
@@ -40,11 +56,12 @@ export const EmployeeTripTab: React.FC<EmployeeTripTabProps> = ({ onTripEnded })
       // Synchronize offline points to Supabase / store
       const offlinePts = OfflineTrackingStorage.getOfflinePoints();
       if (offlinePts.length > 0 && activeTrip) {
-        offlinePts.forEach((pt) => {
+        const pointsForTrip = offlinePts.filter((pt) => pt.tripId === activeTrip.id);
+        pointsForTrip.forEach((pt) => {
           recordLocationPoint(activeTrip.id, pt);
         });
-        OfflineTrackingStorage.clearOfflinePoints(offlinePts.map((p) => p.id));
-        setOfflinePendingCount(0);
+        OfflineTrackingStorage.clearOfflinePoints(pointsForTrip.map((p) => p.id));
+        setOfflinePendingCount(OfflineTrackingStorage.getOfflinePoints().length);
       }
     };
 
@@ -60,15 +77,7 @@ export const EmployeeTripTab: React.FC<EmployeeTripTabProps> = ({ onTripEnded })
       window.removeEventListener('online', updateOnline);
       window.removeEventListener('offline', updateOffline);
     };
-  }, []);
-
-  // Find employee's active trip session
-  const activeTrip = tripSessions.find(
-    (t) => (t.employeeId === currentUser.employeeId || t.employeeId === currentUser.id || t.employeeName === currentUser.name) &&
-           t.status === 'Active'
-  ) || tripSessions.find(t => t.status === 'Active');
-
-  const assignment = fieldAssignments.find((a) => a.id === activeTrip?.assignmentId);
+  }, [activeTrip?.id]);
 
   // Setup battery-efficient location tracking when trip is active
   useEffect(() => {
@@ -108,6 +117,7 @@ export const EmployeeTripTab: React.FC<EmployeeTripTabProps> = ({ onTripEnded })
 
     return () => {
       if (id >= 0) defaultLocationProvider.clearWatch(id);
+      setWatchId(null);
     };
   }, [activeTrip?.id]);
 

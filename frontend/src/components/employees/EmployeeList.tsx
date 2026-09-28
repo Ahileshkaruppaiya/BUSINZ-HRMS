@@ -643,11 +643,15 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
           if (eligibleEmps.length === 0 || isDeleting) return;
           setIsDeleting(true);
           try {
-            const idsToDelete = eligibleEmps.map(e => e.id);
+            const idsToDelete = eligibleEmps.map(e => e.id || e.employeeId);
+            let res: any;
             if (idsToDelete.length === 1) {
-              await deleteEmployee(idsToDelete[0]);
+              res = await deleteEmployee(idsToDelete[0]);
             } else {
-              await deleteMultipleEmployees(idsToDelete);
+              res = await deleteMultipleEmployees(idsToDelete);
+            }
+            if (res && res.success === false) {
+              return;
             }
             setSelectedEmpIds(prev => prev.filter(id => !idsToDelete.includes(id)));
             setDeleteTargetEmps([]);

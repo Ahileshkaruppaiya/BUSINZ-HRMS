@@ -25,8 +25,15 @@ export const OvertimePolicySettings: React.FC = () => {
   // Dynamic department overtime policy mapping:
   // Only display departments actively created in Organization!
   const activeDepartmentPolicies = departments.map(dept => {
+    const normalizedDeptId = dept.id.toLowerCase();
+    const normalizedDeptName = dept.name.toLowerCase();
     const existing = departmentOtPolicies.find(
-      p => p.department.toLowerCase() === dept.name.toLowerCase() || p.id === dept.id
+      p => (
+        p.department.toLowerCase() === normalizedDeptName ||
+        p.id.toLowerCase() === normalizedDeptId ||
+        p.id.toLowerCase() === `dot-${normalizedDeptId}` ||
+        p.id.toLowerCase() === `dot-${normalizedDeptName.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
+      )
     );
     return existing || {
       id: `DOT-${dept.id}`,
