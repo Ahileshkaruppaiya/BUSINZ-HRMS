@@ -52,5 +52,8 @@ Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
+.playwright-mcp/
+*playwright*.json
+*interactive_flow*.json
+

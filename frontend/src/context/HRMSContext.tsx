@@ -2499,10 +2499,31 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { success: true, message: `Attendance for ${fullName} on ${entry.date} successfully recorded!` };
   };
 
+  const normalizeOtAllowedValue = (value: unknown, fallback = true): boolean => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['no', 'false', '0', 'off', 'disabled'].includes(normalized)) return false;
+      if (['yes', 'true', '1', 'on', 'enabled'].includes(normalized)) return true;
+    }
+    return fallback;
+  };
+
+  const normalizeDepartmentOtPolicy = (policy: DepartmentOtPolicy): DepartmentOtPolicy => ({
+    ...policy,
+    otAllowed: normalizeOtAllowedValue((policy as any).otAllowed, true)
+  });
+
   const updateDepartmentOtPolicy = (idOrDeptName: string, policy: Partial<DepartmentOtPolicy>) => {
     setDepartmentOtPolicies(prev => {
+      const normalizedPolicy: Partial<DepartmentOtPolicy> = {
+        ...policy,
+        ...(Object.prototype.hasOwnProperty.call(policy, 'otAllowed')
+          ? { otAllowed: normalizeOtAllowedValue((policy as any).otAllowed, true) }
+          : {})
+      };
       const normalizedKey = idOrDeptName.trim().toLowerCase();
-      const nextDepartment = (policy.department || idOrDeptName).trim();
+      const nextDepartment = (normalizedPolicy.department || idOrDeptName).trim();
       const normalizedDepartment = nextDepartment.toLowerCase();
       const stableId = idOrDeptName.startsWith('DOT-')
         ? idOrDeptName
@@ -2519,21 +2540,21 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         );
       });
       if (idx >= 0) {
-        return prev.map((p, i) => i === idx ? { ...p, ...policy } : p);
+        return prev.map((p, i) => i === idx ? normalizeDepartmentOtPolicy({ ...p, ...normalizedPolicy }) : p);
       } else {
         const newPolicy: DepartmentOtPolicy = {
           id: stableId,
           department: nextDepartment,
-          otAllowed: policy.otAllowed ?? true,
+          otAllowed: normalizeOtAllowedValue((normalizedPolicy as any).otAllowed, true),
           policyId: 'OTP-001',
-          maxOtHoursDaily: policy.maxOtHoursDaily ?? 4.0,
-          maxOtHoursMonthly: policy.maxOtHoursMonthly ?? 60,
-          minOtDurationMinutes: policy.minOtDurationMinutes ?? 30,
-          approvalRequired: policy.approvalRequired ?? true,
-          calculationMethod: policy.calculationMethod ?? 'Shift End Based',
-          standardShiftHours: policy.standardShiftHours ?? 9,
-          otHourlyRate: policy.otHourlyRate ?? 100,
-          ...policy
+          maxOtHoursDaily: normalizedPolicy.maxOtHoursDaily ?? 4.0,
+          maxOtHoursMonthly: normalizedPolicy.maxOtHoursMonthly ?? 60,
+          minOtDurationMinutes: normalizedPolicy.minOtDurationMinutes ?? 30,
+          approvalRequired: normalizedPolicy.approvalRequired ?? true,
+          calculationMethod: normalizedPolicy.calculationMethod ?? 'Shift End Based',
+          standardShiftHours: normalizedPolicy.standardShiftHours ?? 9,
+          otHourlyRate: normalizedPolicy.otHourlyRate ?? 100,
+          ...normalizedPolicy
         };
         return [...prev, newPolicy];
       }
@@ -7845,7 +7866,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         // Department OT Policies
         if (Array.isArray(settings.department_ot_policies_data) && settings.department_ot_policies_data.length > 0) {
-          setDepartmentOtPolicies(settings.department_ot_policies_data);
+          setDepartmentOtPolicies(settings.department_ot_policies_data.map(normalizeDepartmentOtPolicy));
         }
 
         // Designations

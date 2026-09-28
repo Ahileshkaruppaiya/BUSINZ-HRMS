@@ -10,6 +10,7 @@ export const OvertimePolicySettings: React.FC = () => {
   const {
     departments,
     departmentOtPolicies,
+    overtimePolicy,
     updateDepartmentOtPolicy,
     currentUser
   } = useHRMS();
@@ -21,6 +22,16 @@ export const OvertimePolicySettings: React.FC = () => {
     currentUser?.role === 'Super Admin' ||
     currentUser?.role === 'Management' ||
     currentUser?.role === 'ERP Administrator';
+
+  const normalizeOtAllowed = (value: unknown, fallback = true): boolean => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['no', 'false', '0', 'off', 'disabled'].includes(normalized)) return false;
+      if (['yes', 'true', '1', 'on', 'enabled'].includes(normalized)) return true;
+    }
+    return fallback;
+  };
 
   // Dynamic department overtime policy mapping:
   // Only display departments actively created in Organization!
@@ -35,7 +46,10 @@ export const OvertimePolicySettings: React.FC = () => {
         p.id.toLowerCase() === `dot-${normalizedDeptName.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
       )
     );
-    return existing || {
+    return existing ? {
+      ...existing,
+      otAllowed: normalizeOtAllowed((existing as any).otAllowed, true)
+    } : {
       id: `DOT-${dept.id}`,
       department: dept.name,
       otAllowed: true,
@@ -101,6 +115,8 @@ export const OvertimePolicySettings: React.FC = () => {
               </tr>
             ) : (
               activeDepartmentPolicies.map(dept => {
+                const isDepartmentOtAllowed = normalizeOtAllowed((dept as any).otAllowed, true);
+                const isOtAllowed = overtimePolicy.enabled !== false && isDepartmentOtAllowed;
                 const shiftHours = dept.standardShiftHours ?? 9;
                 const hourlyRate = dept.otHourlyRate ?? 100;
                 return (
@@ -142,7 +158,9 @@ export const OvertimePolicySettings: React.FC = () => {
                       {isHrOrCeo ? (
                         <button
                           type="button"
-                          onClick={() => updateDepartmentOtPolicy(dept.id, { department: dept.department, otAllowed: !dept.otAllowed })}
+                          onClick={() => updateDepartmentOtPolicy(dept.id, { department: dept.department, otAllowed: !isDepartmentOtAllowed })}
+                          disabled={overtimePolicy.enabled === false}
+                          title={overtimePolicy.enabled === false ? 'Company overtime policy is off' : 'Toggle department overtime'}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -152,13 +170,14 @@ export const OvertimePolicySettings: React.FC = () => {
                             border: 'none',
                             fontSize: '0.75rem',
                             fontWeight: 750,
-                            cursor: 'pointer',
-                            backgroundColor: dept.otAllowed ? '#DCFCE7' : '#F1F5F9',
-                            color: dept.otAllowed ? '#15803D' : '#64748B',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                            cursor: overtimePolicy.enabled === false ? 'not-allowed' : 'pointer',
+                            backgroundColor: isOtAllowed ? '#DCFCE7' : '#F1F5F9',
+                            color: isOtAllowed ? '#15803D' : '#64748B',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                            opacity: overtimePolicy.enabled === false ? 0.72 : 1
                           }}
                         >
-                          {dept.otAllowed ? (
+                          {isOtAllowed ? (
                             <>
                               <ToggleRight size={16} color="#15803D" /> YES
                             </>
@@ -174,10 +193,10 @@ export const OvertimePolicySettings: React.FC = () => {
                           borderRadius: '9999px',
                           fontSize: '0.75rem',
                           fontWeight: 700,
-                          backgroundColor: dept.otAllowed ? '#DCFCE7' : '#F1F5F9',
-                          color: dept.otAllowed ? '#15803D' : '#64748B'
+                          backgroundColor: isOtAllowed ? '#DCFCE7' : '#F1F5F9',
+                          color: isOtAllowed ? '#15803D' : '#64748B'
                         }}>
-                          {dept.otAllowed ? 'YES' : 'NO'}
+                          {isOtAllowed ? 'YES' : 'NO'}
                         </span>
                       )}
                     </td>
@@ -192,7 +211,7 @@ export const OvertimePolicySettings: React.FC = () => {
                             min="0"
                             value={hourlyRate}
                             onChange={e => updateDepartmentOtPolicy(dept.id, { department: dept.department, otHourlyRate: Number(e.target.value) })}
-                            disabled={!dept.otAllowed}
+                            disabled={!isOtAllowed}
                             style={{
                               width: '72px',
                               padding: '6px 8px',
@@ -200,21 +219,21 @@ export const OvertimePolicySettings: React.FC = () => {
                               border: '1px solid #E2E8F0',
                               fontSize: '0.82rem',
                               fontFamily: 'monospace',
-                              color: !dept.otAllowed ? '#94A3B8' : '#1E293B',
-                              backgroundColor: !dept.otAllowed ? '#F8FAFC' : '#FFFFFF'
+                              color: !isOtAllowed ? '#94A3B8' : '#1E293B',
+                              backgroundColor: !isOtAllowed ? '#F8FAFC' : '#FFFFFF'
                             }}
                           />
                           <span style={{ color: '#64748B', fontSize: '0.78rem' }}>/ hr</span>
                         </div>
                       ) : (
-                        <span style={{ color: dept.otAllowed ? '#0E7490' : '#94A3B8', fontWeight: 700 }}>
+                        <span style={{ color: isOtAllowed ? '#0E7490' : '#94A3B8', fontWeight: 700 }}>
                           ₹{hourlyRate} / hr
                         </span>
                       )}
                     </td>
 
                     <td style={{ padding: '14px 16px' }}>
-                      {dept.otAllowed ? (
+                      {isOtAllowed ? (
                         <div style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                           <span style={{
                             padding: '2px 8px',

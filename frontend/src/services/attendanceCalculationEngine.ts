@@ -65,6 +65,15 @@ export function resolveEmployeeOtEligibility(
 } {
   const empPolicy = empPolicies.find(p => p.employeeId === employeeId);
   const deptPolicy = deptPolicies.find(p => p.department.toLowerCase() === department.toLowerCase());
+  const normalizeOtAllowed = (value: unknown, fallback = true): boolean => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['no', 'false', '0', 'off', 'disabled'].includes(normalized)) return false;
+      if (['yes', 'true', '1', 'on', 'enabled'].includes(normalized)) return true;
+    }
+    return fallback;
+  };
 
   // 1. Check explicit Individual Exception first
   if (empPolicy) {
@@ -90,7 +99,7 @@ export function resolveEmployeeOtEligibility(
 
   // 2. Follow Department Policy
   if (deptPolicy) {
-    if (!deptPolicy.otAllowed) {
+    if (!normalizeOtAllowed((deptPolicy as any).otAllowed, true)) {
       return {
         isEligible: false,
         reason: `Department (${department}) is not eligible for Overtime`,
