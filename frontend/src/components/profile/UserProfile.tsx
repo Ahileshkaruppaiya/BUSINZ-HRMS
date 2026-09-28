@@ -530,22 +530,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   </div>
 
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <label style={{ ...labelStyle, margin: 0 }}>System Role</label>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.72rem',
-                        color: '#64748B',
-                        backgroundColor: '#F1F5F9',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontWeight: 600
-                      }}>
-                        <Lock size={10} color="#64748B" /> Fixed by HR/CEO
-                      </span>
-                    </div>
+                    <label style={labelStyle}>System Role</label>
                     <input
                       type="text"
                       value={assignedRole}
@@ -553,31 +538,13 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                       readOnly
                       style={fixedInputStyle}
                     />
-                    <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '3px', display: 'block' }}>
-                      System access permission role configured upon employee creation
-                    </span>
                   </div>
                 </div>
 
-                {/* Row 3: Designation / Job Title (Fixed by HR/CEO) | Department (Fixed by HR/CEO) */}
+                {/* Row 3: Designation / Job Title | Department */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <label style={{ ...labelStyle, margin: 0 }}>Designation / Job Title</label>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.72rem',
-                        color: '#64748B',
-                        backgroundColor: '#F1F5F9',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontWeight: 600
-                      }}>
-                        <Lock size={10} color="#64748B" /> Fixed by HR/CEO
-                      </span>
-                    </div>
+                    <label style={labelStyle}>Designation / Job Title</label>
                     <input
                       type="text"
                       value={assignedDesignation}
@@ -585,28 +552,10 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                       readOnly
                       style={fixedInputStyle}
                     />
-                    <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '3px', display: 'block' }}>
-                      Designation assigned by HR or CEO upon adding employee (No changes allowed)
-                    </span>
                   </div>
 
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <label style={{ ...labelStyle, margin: 0 }}>Department</label>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.72rem',
-                        color: '#64748B',
-                        backgroundColor: '#F1F5F9',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontWeight: 600
-                      }}>
-                        <Lock size={10} color="#64748B" /> Fixed by HR/CEO
-                      </span>
-                    </div>
+                    <label style={labelStyle}>Department</label>
                     <input
                       type="text"
                       value={assignedDepartment}
@@ -614,31 +563,13 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                       readOnly
                       style={fixedInputStyle}
                     />
-                    <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '3px', display: 'block' }}>
-                      Assigned organizational department unit (Fixed)
-                    </span>
                   </div>
                 </div>
 
-                {/* Row 4: Primary Work Location (Fixed) | Employee ID / Code (Fixed) */}
+                {/* Row 4: Primary Work Location | Employee Code / ID */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <label style={{ ...labelStyle, margin: 0 }}>Primary Work Location</label>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.72rem',
-                        color: '#64748B',
-                        backgroundColor: '#F1F5F9',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontWeight: 600
-                      }}>
-                        <Lock size={10} color="#64748B" /> Fixed
-                      </span>
-                    </div>
+                    <label style={labelStyle}>Primary Work Location</label>
                     <input
                       type="text"
                       value={assignedLocation}
@@ -649,22 +580,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   </div>
 
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <label style={{ ...labelStyle, margin: 0 }}>Employee Code / ID</label>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.72rem',
-                        color: '#64748B',
-                        backgroundColor: '#F1F5F9',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontWeight: 600
-                      }}>
-                        <Lock size={10} color="#64748B" /> Fixed
-                      </span>
-                    </div>
+                    <label style={labelStyle}>Employee Code / ID</label>
                     <input
                       type="text"
                       value={assignedEmployeeId}
