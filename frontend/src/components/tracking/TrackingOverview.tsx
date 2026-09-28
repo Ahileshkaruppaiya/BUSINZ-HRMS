@@ -21,7 +21,7 @@ export interface TrackingOverviewProps {
 }
 
 export const TrackingOverview: React.FC<TrackingOverviewProps> = () => {
-  const { fieldAssignments, tripSessions, trackingAlerts } = useHRMS();
+  const { fieldAssignments, tripSessions, trackingAlerts, departments: orgDepartments } = useHRMS();
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -97,12 +97,17 @@ export const TrackingOverview: React.FC<TrackingOverviewProps> = () => {
     });
   }, [tableData, searchQuery, departmentFilter, statusFilter]);
 
-  // Unique departments for filter
+  // Departments for filter: show Organization departments even when today's table is empty.
   const departments = useMemo(() => {
     const set = new Set<string>();
-    tableData.forEach(r => set.add(r.department));
-    return Array.from(set);
-  }, [tableData]);
+    orgDepartments.forEach(d => {
+      if (d.name?.trim()) set.add(d.name.trim());
+    });
+    tableData.forEach(r => {
+      if (r.department?.trim()) set.add(r.department.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [orgDepartments, tableData]);
 
   // Compute 4 KPI values from actual data
   const fieldEmployeesToday = todayAssignments.length;

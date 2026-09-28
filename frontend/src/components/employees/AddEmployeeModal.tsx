@@ -449,7 +449,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     return d.toISOString().split('T')[0];
   }, []);
 
-  const isCEO = formData.department?.toUpperCase() === 'CEO' || formData.role === 'CEO' || formData.designation?.toUpperCase() === 'CEO';
+  const isCEO = 
+    formData.department?.trim().toUpperCase() === 'CEO' || 
+    formData.role === 'CEO' || 
+    formData.designation?.trim().toUpperCase() === 'CEO';
 
   const salaryInputValue = (key: string, value: number) => (
     Object.prototype.hasOwnProperty.call(salaryInputDrafts, key) ? salaryInputDrafts[key] : value
@@ -608,6 +611,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     const isAccountsDept = deptName.toLowerCase().includes('account') || deptName.toLowerCase().includes('finance');
 
     if (accessProfile.role === 'CEO') {
+      if ([5, 6, 7, 8].includes(step)) {
+        setStep(2);
+      }
       setFormData(prev => ({
         ...prev,
         department: accessProfile.department,
@@ -693,6 +699,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         employeeConfig?.idStartingNumber || 1
       );
       const manager = getCreatorReportingManager();
+      const initialDept = departments.find(d => !['ceo'].includes(d.name?.trim().toLowerCase()))?.name || 'Accounts';
+      const initialProfile = getDepartmentAccessProfile(initialDept);
+
       setFormData({
         ...defaultFormData,
         employeeId: nextAutoId,
@@ -714,11 +723,18 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         emergencyName: '',
         emergencyMobile: '',
         emergencyAltMobile: '',
-        department: departments[0]?.name || 'HR',
+        department: initialDept,
+        role: (initialProfile.role === 'CEO' ? 'Employee' : initialProfile.role) as Role,
+        designation: initialProfile.designation || dynamicDesignations[0] || 'Staff Employee',
         reportingManagerId: manager.id,
         reportingManagerName: manager.name,
         workLocation: defaultWorkLocation,
-        shift: shifts[0]?.shiftName || defaultFormData.shift
+        shift: shifts[0]?.shiftName || defaultFormData.shift,
+        attendanceMethod: 'Face Scan' as Employee['attendanceMethod'],
+        gpsAllowed: true,
+        monthlyCtc: 15000,
+        basicSalary: 15000,
+        permissions: initialProfile.permissions
       });
       setDocuments([]);
       setIsSuccess(false);

@@ -46,13 +46,16 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
     switchRole, 
     businessSettings,
     employees,
-    changeEmployeePassword
+    designations,
+    changeEmployeePassword,
+    updateEmployee
   } = useHRMS();
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('profile');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showPortalPassword, setShowPortalPassword] = useState(false);
   const [copiedPass, setCopiedPass] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   const matchingEmp = employees.find(
     e => e.id === currentUser.id || 
@@ -72,11 +75,33 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const sanitizePhone = (value: string) => {
+    if (!value) return '';
+    const clean = value.toString().replace(/^\+91\s*/, '').replace(/^91(?=\d{10})/, '');
+    return clean.replace(/\D/g, '').slice(0, 10);
+  };
+
+  const sanitizeName = (value: string) => {
+    if (!value) return '';
+    return value.replace(/[^A-Za-z\s.'-]/g, '').replace(/\s{2,}/g, ' ');
+  };
+
+  const designationOptions = Array.from(new Set([
+    ...designations.map(d => d.title).filter(Boolean),
+    currentUser.designation,
+    matchingEmp?.designation,
+    'CEO',
+    'Managing Director',
+    'HR Manager',
+    'Department Head',
+    'Employee'
+  ].filter(Boolean) as string[]));
+
   // Profile Form State
   const [profileForm, setProfileForm] = useState({
-    name: currentUser.name || 'Businz Admin',
+    name: sanitizeName(currentUser.name || 'Businz Admin').slice(0, 80),
     email: currentUser.email || 'admin@businz.com',
-    phone: '+91 98765 43210',
+    phone: sanitizePhone((matchingEmp?.phone || (currentUser as any).phone || '').toString()),
     department: currentUser.department || 'Management',
     designation: currentUser.designation || 'Super Administrator',
     employeeId: currentUser.employeeId || 'EMP-000',
@@ -85,15 +110,67 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
     bio: 'Overseeing corporate operations, business strategy, and enterprise digital workforce management across company facilities.'
   });
 
+  // Sync profile form if current user or matching employee updates and user has not typed
+  React.useEffect(() => {
+    if (!isDirty) {
+      setProfileForm({
+        name: sanitizeName(currentUser.name || 'Businz Admin').slice(0, 80),
+        email: currentUser.email || 'admin@businz.com',
+        phone: sanitizePhone((matchingEmp?.phone || (currentUser as any).phone || '').toString()),
+        department: currentUser.department || 'Management',
+        designation: currentUser.designation || 'Super Administrator',
+        employeeId: currentUser.employeeId || 'EMP-000',
+        location: 'Businz Towers, Tech Corridor, Chennai',
+        joiningDate: '01 Jan 2020',
+        bio: 'Overseeing corporate operations, business strategy, and enterprise digital workforce management across company facilities.'
+      });
+    }
+  }, [currentUser.name, currentUser.email, currentUser.department, currentUser.designation, currentUser.employeeId, matchingEmp?.phone, isDirty]);
+
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanName = sanitizeName(profileForm.name).trim();
+    if (!cleanName) {
+      showToast('Full name is mandatory.');
+      return;
+    }
+    if (/\d/.test(profileForm.name)) {
+      showToast('Full name cannot contain numeric digits.');
+      return;
+    }
+    if (!profileForm.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileForm.email.trim())) {
+      showToast('Please enter a valid corporate email address.');
+      return;
+    }
+    if (profileForm.phone && profileForm.phone.length !== 10) {
+      showToast('Phone number must be exactly 10 digits.');
+      return;
+    }
+    if (profileForm.phone && !/^\d{10}$/.test(profileForm.phone)) {
+      showToast('Phone number must contain only numeric digits (0-9).');
+      return;
+    }
+
     updateCurrentUser({
-      name: profileForm.name,
-      email: profileForm.email,
+      name: cleanName,
+      email: profileForm.email.trim().toLowerCase(),
       department: profileForm.department,
       designation: profileForm.designation,
-      employeeId: profileForm.employeeId
-    });
+      employeeId: profileForm.employeeId,
+      phone: profileForm.phone
+    } as any);
+
+    if (matchingEmp?.id && updateEmployee) {
+      updateEmployee(matchingEmp.id, {
+        firstName: cleanName.split(' ')[0] || cleanName,
+        lastName: cleanName.split(' ').slice(1).join(' ') || '',
+        phone: profileForm.phone,
+        department: profileForm.department,
+        designation: profileForm.designation
+      });
+    }
+
+    setIsDirty(false);
     showToast('Profile information updated successfully!');
   };
 
@@ -388,18 +465,36 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                     <input
                       type="text"
                       required
+                      maxLength={80}
+                      placeholder="e.g. John Doe"
                       value={profileForm.name}
-                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (/[0-9]/.test(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      onChange={(e) => {
+                        setIsDirty(true);
+                        setProfileForm({ ...profileForm, name: sanitizeName(e.target.value).slice(0, 80) });
+                      }}
                       style={inputStyle}
                     />
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px', display: 'block' }}>
+                      Alphabetic characters only (letters and spaces)
+                    </span>
                   </div>
                   <div>
                     <label style={labelStyle}>Official Corporate Email *</label>
                     <input
                       type="email"
                       required
+                      maxLength={120}
+                      placeholder="name@company.com"
                       value={profileForm.email}
-                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                      onChange={(e) => {
+                        setIsDirty(true);
+                        setProfileForm({ ...profileForm, email: e.target.value.slice(0, 120) });
+                      }}
                       style={inputStyle}
                     />
                   </div>
@@ -409,20 +504,52 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   <div>
                     <label style={labelStyle}>Phone Number</label>
                     <input
-                      type="text"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel"
+                      maxLength={10}
+                      pattern="[0-9]{10}"
+                      title="Phone number must be exactly 10 digits."
+                      placeholder="Enter 10-digit phone number"
                       value={profileForm.phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (
+                          !/^[0-9]$/.test(e.key) &&
+                          !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) &&
+                          !e.ctrlKey &&
+                          !e.metaKey
+                        ) {
+                          e.preventDefault();
+                        }
+                      }}
+                      onPaste={(e) => {
+                        e.preventDefault();
+                        const pasteText = e.clipboardData.getData('text');
+                        const sanitized = sanitizePhone(pasteText);
+                        setIsDirty(true);
+                        setProfileForm(prev => ({ ...prev, phone: sanitized }));
+                      }}
+                      onChange={(e) => {
+                        setIsDirty(true);
+                        setProfileForm({ ...profileForm, phone: sanitizePhone(e.target.value) });
+                      }}
                       style={inputStyle}
                     />
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px', display: 'block' }}>
+                      10-digit numeric numbers only (0-9)
+                    </span>
                   </div>
                   <div>
                     <label style={labelStyle}>Designation / Job Title</label>
-                    <input
-                      type="text"
+                    <select
                       value={profileForm.designation}
                       onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })}
                       style={inputStyle}
-                    />
+                    >
+                      {designationOptions.map(title => (
+                        <option key={title} value={title}>{title}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -431,8 +558,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                     <label style={labelStyle}>Department</label>
                     <input
                       type="text"
+                      maxLength={80}
                       value={profileForm.department}
-                      onChange={(e) => setProfileForm({ ...profileForm, department: e.target.value })}
+                      onChange={(e) => setProfileForm({ ...profileForm, department: e.target.value.slice(0, 80) })}
                       style={inputStyle}
                     />
                   </div>
@@ -440,8 +568,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                     <label style={labelStyle}>Primary Work Location</label>
                     <input
                       type="text"
+                      maxLength={140}
                       value={profileForm.location}
-                      onChange={(e) => setProfileForm({ ...profileForm, location: e.target.value })}
+                      onChange={(e) => setProfileForm({ ...profileForm, location: e.target.value.slice(0, 140) })}
                       style={inputStyle}
                     />
                   </div>
@@ -451,8 +580,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   <label style={labelStyle}>Professional Bio / About</label>
                   <textarea
                     rows={3}
+                    maxLength={500}
                     value={profileForm.bio}
-                    onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                    onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value.slice(0, 500) })}
                     style={{ ...inputStyle, resize: 'vertical' }}
                   />
                 </div>
@@ -836,4 +966,3 @@ const toggleRowStyle: React.CSSProperties = {
   borderRadius: '10px',
   border: '1px solid #e2e8f0'
 };
-

@@ -10,7 +10,7 @@ import { formatTimeAmPm } from '../../services/trackingEngine';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
 export const FieldAssignmentsTab: React.FC = () => {
-  const { fieldAssignments, cancelFieldAssignment, tripSessions } = useHRMS();
+  const { fieldAssignments, cancelFieldAssignment, tripSessions, departments: orgDepartments } = useHRMS();
 
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -30,12 +30,17 @@ export const FieldAssignmentsTab: React.FC = () => {
   // Interactive Row Selection
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
 
-  // Unique departments
+  // Departments for filter: include Organization departments even before assignments exist.
   const departments = useMemo(() => {
     const set = new Set<string>();
-    fieldAssignments.forEach((a) => set.add(a.department));
-    return Array.from(set);
-  }, [fieldAssignments]);
+    orgDepartments.forEach((d) => {
+      if (d.name?.trim()) set.add(d.name.trim());
+    });
+    fieldAssignments.forEach((a) => {
+      if (a.department?.trim()) set.add(a.department.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [orgDepartments, fieldAssignments]);
 
   // Filtered Assignments
   const filteredAssignments = useMemo(() => {

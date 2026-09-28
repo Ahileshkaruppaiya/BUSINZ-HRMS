@@ -8,7 +8,7 @@ import { formatKm, formatTimeAmPm } from '../../services/trackingEngine';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
 export const TravelHistoryTab: React.FC = () => {
-  const { fieldAssignments, tripSessions, employees, trackingAlerts } = useHRMS();
+  const { fieldAssignments, tripSessions, employees, trackingAlerts, departments: orgDepartments } = useHRMS();
 
   // Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -28,12 +28,17 @@ export const TravelHistoryTab: React.FC = () => {
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Departments list
+  // Departments list: include Organization departments even before travel history exists.
   const departments = useMemo(() => {
     const s = new Set<string>();
-    fieldAssignments.forEach((a) => s.add(a.department));
-    return Array.from(s);
-  }, [fieldAssignments]);
+    orgDepartments.forEach((d) => {
+      if (d.name?.trim()) s.add(d.name.trim());
+    });
+    fieldAssignments.forEach((a) => {
+      if (a.department?.trim()) s.add(a.department.trim());
+    });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }, [orgDepartments, fieldAssignments]);
 
   // Combine trips with assignments
   const historyRecords = useMemo(() => {

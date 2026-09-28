@@ -83,6 +83,10 @@ export const RecruitmentPipeline: React.FC = () => {
     jobId: jobOpenings[0]?.id || 'JOB-01',
     notes: ''
   });
+  const [referralError, setReferralError] = useState<string | null>(null);
+
+  const sanitizeCandidateName = (value: string) => value.replace(/[^A-Za-z\s.'-]/g, '').replace(/\s{2,}/g, ' ');
+  const sanitizePhoneNumber = (value: string) => value.replace(/\D/g, '').slice(0, 10);
 
   const handleCreateJob = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,14 +107,29 @@ export const RecruitmentPipeline: React.FC = () => {
 
   const handleReferral = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!referralForm.name) return;
+    const candidateName = referralForm.name.trim();
+    const phoneNumber = sanitizePhoneNumber(referralForm.phone);
+
+    if (!candidateName) {
+      setReferralError('Candidate full name is required.');
+      return;
+    }
+    if (!/^[A-Za-z][A-Za-z\s.'-]*$/.test(candidateName)) {
+      setReferralError('Candidate name must contain letters only.');
+      return;
+    }
+    if (phoneNumber && phoneNumber.length !== 10) {
+      setReferralError('Phone number must be exactly 10 digits.');
+      return;
+    }
+
     const targetJob = jobOpenings.find(j => j.id === referralForm.jobId);
     referCandidate({
       jobId: referralForm.jobId,
       jobTitle: targetJob?.title || 'Open Role',
-      name: referralForm.name,
+      name: candidateName,
       email: referralForm.email,
-      phone: referralForm.phone,
+      phone: phoneNumber,
       referrerEmployeeId: currentUser.employeeId || '',
       referrerName: `${currentUser.name} (Employee)`,
       rating: 5,
@@ -123,6 +142,7 @@ export const RecruitmentPipeline: React.FC = () => {
       jobId: jobOpenings[0]?.id || 'JOB-01',
       notes: ''
     });
+    setReferralError(null);
     setShowReferralModal(false);
   };
 
@@ -234,7 +254,10 @@ export const RecruitmentPipeline: React.FC = () => {
           {canReferCandidate && (
             <button 
               className={`btn ${canPostJob ? 'btn-secondary' : 'btn-primary'} btn-sm`} 
-              onClick={() => setShowReferralModal(true)}
+              onClick={() => {
+                setReferralError(null);
+                setShowReferralModal(true);
+              }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, borderRadius: '12px', padding: '9px 18px' }}
             >
               <UserPlus size={16} /> Refer Candidate
@@ -459,7 +482,10 @@ export const RecruitmentPipeline: React.FC = () => {
                           <div style={{ marginTop: '6px' }}>
                             <button 
                               className="btn btn-primary btn-sm" 
-                              onClick={() => setShowReferralModal(true)}
+                              onClick={() => {
+                                setReferralError(null);
+                                setShowReferralModal(true);
+                              }}
                               style={{ fontSize: '0.75rem' }}
                             >
                               Refer First Candidate
@@ -760,6 +786,7 @@ export const RecruitmentPipeline: React.FC = () => {
                     <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
                       <button
                         onClick={() => {
+                          setReferralError(null);
                           setReferralForm({ ...referralForm, jobId: j.id });
                           setShowReferralModal(true);
                         }}
@@ -830,6 +857,24 @@ export const RecruitmentPipeline: React.FC = () => {
             </div>
             <form onSubmit={handleReferral}>
               <div className="modal-body" style={{ padding: '16px' }}>
+                {referralError && (
+                  <div style={{
+                    background: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    color: '#B91C1C',
+                    padding: '9px 10px',
+                    borderRadius: '8px',
+                    marginBottom: '12px',
+                    fontSize: '0.76rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                    <span>{referralError}</span>
+                  </div>
+                )}
                 <div style={{ 
                   background: '#ECFEFF', 
                   border: '1px solid #CFFAFE', 
@@ -854,7 +899,12 @@ export const RecruitmentPipeline: React.FC = () => {
                     className="form-control" 
                     placeholder="e.g. Anandha Kumar" 
                     value={referralForm.name} 
-                    onChange={e => setReferralForm({ ...referralForm, name: e.target.value })} 
+                    onChange={e => {
+                      setReferralError(null);
+                      setReferralForm({ ...referralForm, name: sanitizeCandidateName(e.target.value) });
+                    }}
+                    pattern="[A-Za-z\s.'-]+"
+                    title="Candidate name must contain letters only."
                     required 
                   />
                 </div>
@@ -875,9 +925,16 @@ export const RecruitmentPipeline: React.FC = () => {
                     <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Phone Number</label>
                     <input 
                       className="form-control" 
-                      placeholder="+91 98765 43210" 
+                      placeholder="9876543210"
+                      inputMode="numeric"
+                      maxLength={10}
+                      pattern="\d{10}"
+                      title="Phone number must be exactly 10 digits."
                       value={referralForm.phone} 
-                      onChange={e => setReferralForm({ ...referralForm, phone: e.target.value })} 
+                      onChange={e => {
+                        setReferralError(null);
+                        setReferralForm({ ...referralForm, phone: sanitizePhoneNumber(e.target.value) });
+                      }}
                     />
                   </div>
                 </div>
@@ -905,7 +962,16 @@ export const RecruitmentPipeline: React.FC = () => {
                 </div>
               </div>
               <div className="modal-footer" style={{ borderTop: '1px solid #E2E8F0', padding: '12px 16px' }}>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowReferralModal(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setReferralError(null);
+                    setShowReferralModal(false);
+                  }}
+                >
+                  Cancel
+                </button>
                 <button type="submit" className="btn btn-primary btn-sm" style={{ fontWeight: 700 }}>Submit Referral</button>
               </div>
             </form>

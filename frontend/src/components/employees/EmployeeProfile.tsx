@@ -1335,10 +1335,30 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               </span>
               <input 
                 type="tel" 
-                value={formData.phone.replace(/^\+91\s*/, '')} 
+                inputMode="numeric"
+                autoComplete="tel"
+                maxLength={10}
+                pattern="[0-9]{10}"
+                value={formData.phone.replace(/^\+91\s*/, '').replace(/\D/g, '').slice(0, 10)} 
+                onKeyDown={(e) => {
+                  if (
+                    !/^[0-9]$/.test(e.key) &&
+                    !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) &&
+                    !e.ctrlKey &&
+                    !e.metaKey
+                  ) {
+                    e.preventDefault();
+                  }
+                }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pasteText = e.clipboardData.getData('text');
+                  const sanitized = pasteText.replace(/\D/g, '').slice(0, 10);
+                  handleChange('phone', sanitized ? `+91 ${sanitized}` : '');
+                }}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                  handleChange('phone', `+91 ${val}`);
+                  handleChange('phone', val ? `+91 ${val}` : '');
                 }} 
                 style={{
                   ...inputStyle,
@@ -1346,7 +1366,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                   borderBottomLeftRadius: 0,
                   flex: 1
                 }} 
-                placeholder="98765 43210"
+                placeholder="9876543210"
               />
             </div>
           ) : (

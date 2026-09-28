@@ -106,6 +106,7 @@ export const AssetManagement: React.FC = () => {
     condition: 'New' as AssetItem['condition'],
     notes: ''
   });
+  const [addFormError, setAddFormError] = useState<string | null>(null);
 
   // Assign Asset Form
   const [assignEmployeeId, setAssignEmployeeId] = useState<string>(employees[0]?.employeeId || '');
@@ -143,6 +144,10 @@ export const AssetManagement: React.FC = () => {
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addForm.name || !addForm.assetTag) return;
+    if (addForm.purchaseDate && addForm.warrantyExpiry && addForm.warrantyExpiry < addForm.purchaseDate) {
+      setAddFormError('Warranty expiry date must be after the purchase date.');
+      return;
+    }
 
     addAsset({
       assetTag: addForm.assetTag,
@@ -158,6 +163,7 @@ export const AssetManagement: React.FC = () => {
     });
 
     setShowAddModal(false);
+    setAddFormError(null);
     setAddForm({
       assetTag: '',
       name: '',
@@ -751,11 +757,29 @@ export const AssetManagement: React.FC = () => {
           <div className="modal-content" style={{ maxWidth: '520px', width: '90%', borderRadius: '18px', padding: '24px' }}>
             <div className="modal-header" style={{ borderBottom: 'none', paddingBottom: '8px' }}>
               <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Register New Corporate Asset</h2>
-              <button onClick={() => setShowAddModal(false)}><X size={18} /></button>
+              <button onClick={() => {
+                setAddFormError(null);
+                setShowAddModal(false);
+              }}><X size={18} /></button>
             </div>
 
             <form onSubmit={handleAddSubmit}>
               <div className="modal-body" style={{ padding: 0 }}>
+                {addFormError && (
+                  <div style={{
+                    backgroundColor: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    color: '#B91C1C',
+                    borderRadius: '10px',
+                    padding: '9px 12px',
+                    marginBottom: '12px',
+                    fontSize: '0.78rem',
+                    fontWeight: 600
+                  }}>
+                    {addFormError}
+                  </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Asset Tag / ID *</label>
@@ -825,7 +849,15 @@ export const AssetManagement: React.FC = () => {
                       className="form-control" 
                       type="date" 
                       value={addForm.purchaseDate} 
-                      onChange={e => setAddForm({ ...addForm, purchaseDate: e.target.value })} 
+                      onChange={e => {
+                        const purchaseDate = e.target.value;
+                        setAddFormError(null);
+                        setAddForm({
+                          ...addForm,
+                          purchaseDate,
+                          warrantyExpiry: addForm.warrantyExpiry && addForm.warrantyExpiry < purchaseDate ? purchaseDate : addForm.warrantyExpiry
+                        });
+                      }}
                     />
                   </div>
 
@@ -834,8 +866,16 @@ export const AssetManagement: React.FC = () => {
                     <input 
                       className="form-control" 
                       type="date" 
+                      min={addForm.purchaseDate}
                       value={addForm.warrantyExpiry} 
-                      onChange={e => setAddForm({ ...addForm, warrantyExpiry: e.target.value })} 
+                      onChange={e => {
+                        const warrantyExpiry = e.target.value;
+                        setAddFormError(null);
+                        setAddForm({
+                          ...addForm,
+                          warrantyExpiry: warrantyExpiry && warrantyExpiry < addForm.purchaseDate ? addForm.purchaseDate : warrantyExpiry
+                        });
+                      }}
                     />
                   </div>
                 </div>
@@ -867,7 +907,10 @@ export const AssetManagement: React.FC = () => {
               </div>
 
               <div className="modal-footer" style={{ borderTop: 'none', padding: 0, marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowAddModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => {
+                  setAddFormError(null);
+                  setShowAddModal(false);
+                }}>Cancel</button>
                 <button type="submit" className="btn btn-primary btn-sm">Add Asset</button>
               </div>
             </form>

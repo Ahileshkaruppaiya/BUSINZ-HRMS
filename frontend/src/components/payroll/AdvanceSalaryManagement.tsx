@@ -163,6 +163,23 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     neededByDate: new Date().toISOString().split('T')[0]
   });
 
+  const normalizeRepaymentMonthsInput = (value: string, maxMonths: number): number => {
+    const digitsOnly = value.replace(/\D/g, '');
+    if (!digitsOnly) return 0;
+    const withoutLeadingZeros = digitsOnly.replace(/^0+/, '') || '0';
+    const parsed = Number(withoutLeadingZeros);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.min(Math.max(parsed, 0), maxMonths || parsed);
+  };
+
+  const getTodayDateString = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Review Form State
   const [reviewFormData, setReviewFormData] = useState<{
     action: 'Approve' | 'Reject';
@@ -344,13 +361,14 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   const openRequestModal = () => {
     const elig = calculateEmployeeLoanEligibility(targetEmployee.employeeId);
     const maxAmt = Math.max(elig.maxEligibleAmount || 50000, 30000);
+    const requestDate = getTodayDateString();
     setRequestFormData({
       requestType: 'Advance Salary',
       requestedAmount: Math.min(30000, maxAmt),
       installmentMonths: 6,
       purpose: 'Emergency Medical & Personal Expense',
       reasonDetails: '',
-      neededByDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0]
+      neededByDate: requestDate
     });
     setIsRequestModalOpen(true);
   };
@@ -367,6 +385,20 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
     if (requestFormData.requestedAmount > elig.maxEligibleAmount) {
       showFeedback('error', `Requested amount exceeds maximum eligible limit of ${formatCurrency(elig.maxEligibleAmount)}.`);
+      return;
+    }
+
+    if (
+      requestFormData.installmentMonths < elig.policy.minRepaymentMonths ||
+      requestFormData.installmentMonths > elig.policy.maxRepaymentMonths
+    ) {
+      showFeedback('error', `Repayment period must be between ${elig.policy.minRepaymentMonths} and ${elig.policy.maxRepaymentMonths} months.`);
+      return;
+    }
+
+    const requestDate = getTodayDateString();
+    if (requestFormData.neededByDate && requestFormData.neededByDate < requestDate) {
+      showFeedback('error', 'Funds needed by date cannot be before the request date.');
       return;
     }
 
@@ -1493,13 +1525,25 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                         </span>
                       </div>
                       <input 
-                        type="number"
-                        min={modalElig.policy.minRepaymentMonths}
-                        max={modalElig.policy.maxRepaymentMonths}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         required
                         className="form-control"
-                        value={requestFormData.installmentMonths}
-                        onChange={e => setRequestFormData({ ...requestFormData, installmentMonths: Number(e.target.value) })}
+                        value={requestFormData.installmentMonths || ''}
+                        onChange={e => {
+                          const months = normalizeRepaymentMonthsInput(
+                            e.target.value,
+                            modalElig.policy.maxRepaymentMonths
+                          );
+                          setRequestFormData({ ...requestFormData, installmentMonths: months });
+                        }}
+                        onBlur={() => {
+                          const minMonths = modalElig.policy.minRepaymentMonths;
+                          const maxMonths = modalElig.policy.maxRepaymentMonths;
+                          const months = Math.min(Math.max(requestFormData.installmentMonths || minMonths, minMonths), maxMonths);
+                          setRequestFormData({ ...requestFormData, installmentMonths: months });
+                        }}
                         style={{ height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                       />
                     </div>
@@ -1511,8 +1555,16 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                       <input 
                         type="date"
                         className="form-control"
+                        min={getTodayDateString()}
                         value={requestFormData.neededByDate}
-                        onChange={e => setRequestFormData({ ...requestFormData, neededByDate: e.target.value })}
+                        onChange={e => {
+                          const requestDate = getTodayDateString();
+                          const selectedDate = e.target.value;
+                          setRequestFormData({
+                            ...requestFormData,
+                            neededByDate: selectedDate && selectedDate < requestDate ? requestDate : selectedDate
+                          });
+                        }}
                         style={{ height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                       />
                     </div>
