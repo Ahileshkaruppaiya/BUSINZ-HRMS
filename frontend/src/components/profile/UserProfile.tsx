@@ -86,46 +86,32 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
     return value.replace(/[^A-Za-z\s.'-]/g, '').replace(/\s{2,}/g, ' ');
   };
 
-  const designationOptions = Array.from(new Set([
-    ...designations.map(d => d.title).filter(Boolean),
-    currentUser.designation,
-    matchingEmp?.designation,
-    'CEO',
-    'Managing Director',
-    'HR Manager',
-    'Department Head',
-    'Employee'
-  ].filter(Boolean) as string[]));
+  const assignedRole = (matchingEmp as any)?.role || currentUser.role || 'Employee';
+  const assignedDesignation = matchingEmp?.designation || currentUser.designation || (assignedRole === 'CEO' ? 'CEO' : 'Employee');
+  const assignedDepartment = matchingEmp?.department || currentUser.department || 'General';
+  const assignedEmployeeId = matchingEmp?.employeeId || currentUser.employeeId || 'EMP-000';
+  const assignedLocation = (matchingEmp as any)?.branch || (matchingEmp as any)?.workLocation || (currentUser as any).location || 'Headquarters';
+  const assignedJoiningDate = matchingEmp?.joiningDate || (currentUser as any).joiningDate || '01 Jan 2020';
 
-  // Profile Form State
+  // Profile Form State (Only editable personal contact details)
   const [profileForm, setProfileForm] = useState({
-    name: sanitizeName(currentUser.name || 'Businz Admin').slice(0, 80),
-    email: currentUser.email || 'admin@businz.com',
+    name: sanitizeName(currentUser.name || (matchingEmp ? `${matchingEmp.firstName} ${matchingEmp.lastName}`.trim() : 'User')).slice(0, 80),
+    email: currentUser.email || matchingEmp?.email || '',
     phone: sanitizePhone((matchingEmp?.phone || (currentUser as any).phone || '').toString()),
-    department: currentUser.department || 'Management',
-    designation: currentUser.designation || 'Super Administrator',
-    employeeId: currentUser.employeeId || 'EMP-000',
-    location: 'Businz Towers, Tech Corridor, Chennai',
-    joiningDate: '01 Jan 2020',
-    bio: 'Overseeing corporate operations, business strategy, and enterprise digital workforce management across company facilities.'
+    bio: (matchingEmp as any)?.bio || 'Overseeing corporate operations, business strategy, and enterprise digital workforce management across company facilities.'
   });
 
   // Sync profile form if current user or matching employee updates and user has not typed
   React.useEffect(() => {
     if (!isDirty) {
       setProfileForm({
-        name: sanitizeName(currentUser.name || 'Businz Admin').slice(0, 80),
-        email: currentUser.email || 'admin@businz.com',
+        name: sanitizeName(currentUser.name || (matchingEmp ? `${matchingEmp.firstName} ${matchingEmp.lastName}`.trim() : 'User')).slice(0, 80),
+        email: currentUser.email || matchingEmp?.email || '',
         phone: sanitizePhone((matchingEmp?.phone || (currentUser as any).phone || '').toString()),
-        department: currentUser.department || 'Management',
-        designation: currentUser.designation || 'Super Administrator',
-        employeeId: currentUser.employeeId || 'EMP-000',
-        location: 'Businz Towers, Tech Corridor, Chennai',
-        joiningDate: '01 Jan 2020',
-        bio: 'Overseeing corporate operations, business strategy, and enterprise digital workforce management across company facilities.'
+        bio: (matchingEmp as any)?.bio || 'Overseeing corporate operations, business strategy, and enterprise digital workforce management across company facilities.'
       });
     }
-  }, [currentUser.name, currentUser.email, currentUser.department, currentUser.designation, currentUser.employeeId, matchingEmp?.phone, isDirty]);
+  }, [currentUser.name, currentUser.email, matchingEmp?.phone, isDirty]);
 
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,13 +137,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
       return;
     }
 
+    // Role, designation, and department are fixed corporate assignments configured by HR/CEO upon onboarding
     updateCurrentUser({
       name: cleanName,
       email: profileForm.email.trim().toLowerCase(),
-      department: profileForm.department,
-      designation: profileForm.designation,
-      employeeId: profileForm.employeeId,
-      phone: profileForm.phone
+      phone: profileForm.phone,
+      department: assignedDepartment,
+      designation: assignedDesignation,
+      employeeId: assignedEmployeeId
     } as any);
 
     if (matchingEmp?.id && updateEmployee) {
@@ -165,8 +152,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
         firstName: cleanName.split(' ')[0] || cleanName,
         lastName: cleanName.split(' ').slice(1).join(' ') || '',
         phone: profileForm.phone,
-        department: profileForm.department,
-        designation: profileForm.designation
+        department: assignedDepartment,
+        designation: assignedDesignation
       });
     }
 
@@ -435,7 +422,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                      {currentUser.name}
+                      {profileForm.name || currentUser.name}
                     </h3>
                     <span style={{
                       backgroundColor: '#ECFEFF',
@@ -445,20 +432,21 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                       padding: '2px 8px',
                       borderRadius: '999px'
                     }}>
-                      {currentUser.role}
+                      {assignedRole}
                     </span>
                   </div>
                   <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: '4px' }}>
-                    {currentUser.designation || 'CEO'} • {currentUser.department || 'Management'}
+                    {assignedDesignation} • {assignedDepartment}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>
-                    Employee Code: <strong>{profileForm.employeeId}</strong> • Member since {formatDateDDMMYYYY(profileForm.joiningDate)}
+                    Employee Code: <strong>{assignedEmployeeId}</strong> • Member since {formatDateDDMMYYYY(assignedJoiningDate)}
                   </div>
                 </div>
               </div>
 
               {/* Profile Details Form */}
               <form onSubmit={handleProfileSave}>
+                {/* Row 1: Full Name * | Official Corporate Email * */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div>
                     <label style={labelStyle}>Full Name *</label>
@@ -500,6 +488,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                   </div>
                 </div>
 
+                {/* Row 2: Phone Number | System Role (Fixed by HR/CEO) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div>
                     <label style={labelStyle}>Phone Number</label>
@@ -539,50 +528,164 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                       10-digit numeric numbers only (0-9)
                     </span>
                   </div>
+
                   <div>
-                    <label style={labelStyle}>Designation / Job Title</label>
-                    <select
-                      value={profileForm.designation}
-                      onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })}
-                      style={inputStyle}
-                    >
-                      {designationOptions.map(title => (
-                        <option key={title} value={title}>{title}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <label style={{ ...labelStyle, margin: 0 }}>System Role</label>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.72rem',
+                        color: '#64748B',
+                        backgroundColor: '#F1F5F9',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontWeight: 600
+                      }}>
+                        <Lock size={10} color="#64748B" /> Fixed by HR/CEO
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={assignedRole}
+                      disabled
+                      readOnly
+                      style={fixedInputStyle}
+                    />
+                    <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '3px', display: 'block' }}>
+                      System access permission role configured upon employee creation
+                    </span>
                   </div>
                 </div>
 
+                {/* Row 3: Designation / Job Title (Fixed by HR/CEO) | Department (Fixed by HR/CEO) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div>
-                    <label style={labelStyle}>Department</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <label style={{ ...labelStyle, margin: 0 }}>Designation / Job Title</label>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.72rem',
+                        color: '#64748B',
+                        backgroundColor: '#F1F5F9',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontWeight: 600
+                      }}>
+                        <Lock size={10} color="#64748B" /> Fixed by HR/CEO
+                      </span>
+                    </div>
                     <input
                       type="text"
-                      maxLength={80}
-                      value={profileForm.department}
-                      onChange={(e) => setProfileForm({ ...profileForm, department: e.target.value.slice(0, 80) })}
-                      style={inputStyle}
+                      value={assignedDesignation}
+                      disabled
+                      readOnly
+                      style={fixedInputStyle}
+                    />
+                    <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '3px', display: 'block' }}>
+                      Designation assigned by HR or CEO upon adding employee (No changes allowed)
+                    </span>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <label style={{ ...labelStyle, margin: 0 }}>Department</label>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.72rem',
+                        color: '#64748B',
+                        backgroundColor: '#F1F5F9',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontWeight: 600
+                      }}>
+                        <Lock size={10} color="#64748B" /> Fixed by HR/CEO
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={assignedDepartment}
+                      disabled
+                      readOnly
+                      style={fixedInputStyle}
+                    />
+                    <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '3px', display: 'block' }}>
+                      Assigned organizational department unit (Fixed)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Row 4: Primary Work Location (Fixed) | Employee ID / Code (Fixed) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <label style={{ ...labelStyle, margin: 0 }}>Primary Work Location</label>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.72rem',
+                        color: '#64748B',
+                        backgroundColor: '#F1F5F9',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontWeight: 600
+                      }}>
+                        <Lock size={10} color="#64748B" /> Fixed
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={assignedLocation}
+                      disabled
+                      readOnly
+                      style={fixedInputStyle}
                     />
                   </div>
+
                   <div>
-                    <label style={labelStyle}>Primary Work Location</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <label style={{ ...labelStyle, margin: 0 }}>Employee Code / ID</label>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.72rem',
+                        color: '#64748B',
+                        backgroundColor: '#F1F5F9',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontWeight: 600
+                      }}>
+                        <Lock size={10} color="#64748B" /> Fixed
+                      </span>
+                    </div>
                     <input
                       type="text"
-                      maxLength={140}
-                      value={profileForm.location}
-                      onChange={(e) => setProfileForm({ ...profileForm, location: e.target.value.slice(0, 140) })}
-                      style={inputStyle}
+                      value={assignedEmployeeId}
+                      disabled
+                      readOnly
+                      style={fixedInputStyle}
                     />
                   </div>
                 </div>
 
+                {/* Row 5: Professional Bio / About */}
                 <div style={{ marginBottom: '24px' }}>
                   <label style={labelStyle}>Professional Bio / About</label>
                   <textarea
                     rows={3}
                     maxLength={500}
                     value={profileForm.bio}
-                    onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value.slice(0, 500) })}
+                    onChange={(e) => {
+                      setIsDirty(true);
+                      setProfileForm({ ...profileForm, bio: e.target.value.slice(0, 500) });
+                    }}
                     style={{ ...inputStyle, resize: 'vertical' }}
                   />
                 </div>
@@ -632,7 +735,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                         display: 'flex',
                         alignItems: 'center'
                       }}>
-                        {profileForm.employeeId || currentUser.employeeId || 'EMP-000'}
+                        {assignedEmployeeId || currentUser.employeeId || 'EMP-000'}
                       </div>
                     </div>
 
@@ -940,6 +1043,16 @@ const inputStyle: React.CSSProperties = {
   outline: 'none',
   boxSizing: 'border-box',
   backgroundColor: '#ffffff'
+};
+
+const fixedInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  backgroundColor: '#F8FAFC',
+  color: '#475569',
+  border: '1.5px solid #E2E8F0',
+  cursor: 'not-allowed',
+  fontWeight: 600,
+  userSelect: 'none'
 };
 
 const primaryBtnStyle: React.CSSProperties = {
