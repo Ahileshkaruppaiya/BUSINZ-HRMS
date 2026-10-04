@@ -31,12 +31,12 @@ async function cleanMockData() {
 
     // 3. Deduplicate public.departments
     // Canonical departments to keep:
-    // HR: 09c2c794-d68d-47eb-b2cc-369d389a7623
+    // HR: 7ca37f4f-f388-47e8-b522-2b4a56a60a2f
     // CEO: 277d9f58-b196-4593-9f58-cf9048a37937
     // Sales: 545d5be0-9076-450a-ba6f-3262773edc8c
     // Accounts: 8fc3ae7b-15c9-4656-bbc9-6ded583794ea
     const canonicalIds = [
-      '09c2c794-d68d-47eb-b2cc-369d389a7623',
+      '7ca37f4f-f388-47e8-b522-2b4a56a60a2f',
       '277d9f58-b196-4593-9f58-cf9048a37937',
       '545d5be0-9076-450a-ba6f-3262773edc8c',
       '8fc3ae7b-15c9-4656-bbc9-6ded583794ea'
@@ -45,22 +45,25 @@ async function cleanMockData() {
     // Re-point any employees referencing duplicate departments to canonical
     await client.query(`
       UPDATE public.employees 
-      SET department_id = '09c2c794-d68d-47eb-b2cc-369d389a7623'
-      WHERE department_id IN ('1d36985b-9c7f-427b-bafa-fa19e159a372', '756aab34-1735-4e7f-bff9-75d99d1079e1', '2d2b8501-3d4c-4a64-bed9-1bf4148f998a');
+      SET department_id = '7ca37f4f-f388-47e8-b522-2b4a56a60a2f'
+      WHERE department_id IS NOT NULL AND department_id NOT IN ('7ca37f4f-f388-47e8-b522-2b4a56a60a2f', '277d9f58-b196-4593-9f58-cf9048a37937', '545d5be0-9076-450a-ba6f-3262773edc8c', '8fc3ae7b-15c9-4656-bbc9-6ded583794ea')
+      AND department_id IN (SELECT id FROM public.departments WHERE LOWER(name) LIKE '%hr%');
     `);
     await client.query(`
       UPDATE public.employees 
       SET department_id = '277d9f58-b196-4593-9f58-cf9048a37937'
-      WHERE department_id = 'abe50f16-e18a-4543-ab76-d83e27efac94';
+      WHERE department_id IS NOT NULL AND department_id NOT IN ('7ca37f4f-f388-47e8-b522-2b4a56a60a2f', '277d9f58-b196-4593-9f58-cf9048a37937', '545d5be0-9076-450a-ba6f-3262773edc8c', '8fc3ae7b-15c9-4656-bbc9-6ded583794ea')
+      AND department_id IN (SELECT id FROM public.departments WHERE LOWER(name) LIKE '%ceo%');
     `);
     await client.query(`
       UPDATE public.employees 
-      SET department_id = '8fc3ae7b-15c9-4656-bbc9-6ded583794ea'
-      WHERE department_id IN ('f3b30b36-e7bf-4b8c-a338-67ad89ce3010', '908ae5a8-d9a1-4cac-b0fc-d6e20f876d5a', '804bd993-c99b-4a1e-8a3b-1661e4218316');
+      SET department_id = '545d5be0-9076-450a-ba6f-3262773edc8c'
+      WHERE department_id IS NOT NULL AND department_id NOT IN ('7ca37f4f-f388-47e8-b522-2b4a56a60a2f', '277d9f58-b196-4593-9f58-cf9048a37937', '545d5be0-9076-450a-ba6f-3262773edc8c', '8fc3ae7b-15c9-4656-bbc9-6ded583794ea')
+      AND department_id IN (SELECT id FROM public.departments WHERE LOWER(name) LIKE '%sale%');
     `);
 
     // Standardize department casing and names
-    await client.query("UPDATE public.departments SET name = 'HR' WHERE id = '09c2c794-d68d-47eb-b2cc-369d389a7623';");
+    await client.query("UPDATE public.departments SET name = 'HR' WHERE id = '7ca37f4f-f388-47e8-b522-2b4a56a60a2f';");
     await client.query("UPDATE public.departments SET name = 'CEO' WHERE id = '277d9f58-b196-4593-9f58-cf9048a37937';");
     await client.query("UPDATE public.departments SET name = 'Sales' WHERE id = '545d5be0-9076-450a-ba6f-3262773edc8c';");
     await client.query("UPDATE public.departments SET name = 'Accounts' WHERE id = '8fc3ae7b-15c9-4656-bbc9-6ded583794ea';");
@@ -106,7 +109,7 @@ async function cleanMockData() {
 
     // Canonical departments data in company_settings
     const canonicalDeptsData = [
-      { id: "09c2c794-d68d-47eb-b2cc-369d389a7623", code: "HR", name: "HR", budget: 0, headId: "ba8dc5c1-3eb3-489b-985a-b00e1736f54b", headName: "Mohamed AM", employeeCount: 3 },
+      { id: "7ca37f4f-f388-47e8-b522-2b4a56a60a2f", code: "HR", name: "HR", budget: 0, headId: "ba8dc5c1-3eb3-489b-985a-b00e1736f54b", headName: "Mohamed AM", employeeCount: 3 },
       { id: "277d9f58-b196-4593-9f58-cf9048a37937", code: "CEO", name: "CEO", budget: 0, headId: "261d056d-ff95-44a1-8100-fa0f9a8afabd", headName: "VELMURUKAN P", employeeCount: 1 },
       { id: "545d5be0-9076-450a-ba6f-3262773edc8c", code: "SALE", name: "Sales", budget: 0, headId: "61106c4f-e446-44a1-8290-d456f7dcf025", headName: "AJITH KUMAR", employeeCount: 1 },
       { id: "8fc3ae7b-15c9-4656-bbc9-6ded583794ea", code: "ACCO", name: "Accounts", budget: 0, headId: "", headName: "Unassigned", employeeCount: 0 }

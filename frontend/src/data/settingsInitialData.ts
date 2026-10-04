@@ -46,7 +46,7 @@ export const COMPANY_A_PROFILE: CompanyInfo = {
 export const COMPANY_B_PROFILE: CompanyInfo = {
   id: 'comp-b',
   company_id: 'company-b',
-  companyCode: 'BRANCH-B',
+  companyCode: '',
   logoUrl: '',
   companyName: '',
   legalCompanyName: '',
