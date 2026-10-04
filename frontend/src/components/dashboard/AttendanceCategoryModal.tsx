@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Employee, AttendanceRecord } from '../../types/hrms';
 import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
 import { ExportDropdown } from '../common/ExportDropdown';
+import { isAttendanceExemptEmployee } from '../../data/hrmsInitialData';
 import { 
   X, 
   Search, 
@@ -101,12 +102,8 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
     }
   }[category];
 
-  // Resolve Category Items dynamically (exclude system administrator Businz Admin)
-  const workforceEmployees = employees.filter(emp => 
-    emp.employeeId !== 'EMP-000' && 
-    emp.email?.toLowerCase() !== 'admin@businz.com' &&
-    emp.designation !== 'Super Administrator'
-  );
+  // Resolve Category Items dynamically (exclude owners/system accounts from attendance workforce)
+  const workforceEmployees = employees.filter(emp => !isAttendanceExemptEmployee(emp));
 
   const categoryItems: CategoryItem[] = workforceEmployees.map(emp => {
     const att = attendanceRecords.find(a => 

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 export const createLeaveSchema = z.object({
-    employeeId: z.string().optional(),
+    employeeId: z.string().max(50).optional(),
     leaveType: z.enum(['Casual', 'Sick', 'Earned', 'Maternity', 'Paternity', 'Unpaid']).default('Casual'),
-    startDate: z.string().min(1, 'startDate is required'),
-    endDate: z.string().min(1, 'endDate is required'),
-    reason: z.string().optional().default('Personal Leave'),
-    daysCount: z.number().positive().optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate must be in format YYYY-MM-DD'),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate must be in format YYYY-MM-DD'),
+    reason: z.string().max(500, 'Reason cannot exceed 500 characters').optional().default('Personal Leave'),
+    daysCount: z.number().positive().max(365, 'daysCount cannot exceed 365').optional(),
 }).refine((data) => {
     if (!data.startDate || !data.endDate)
         return true;
@@ -18,6 +18,6 @@ export const reviewLeaveSchema = z.object({
     decision: z.enum(['Approved', 'Rejected', 'approved', 'rejected'], {
         errorMap: () => ({ message: 'decision must be either Approved or Rejected' }),
     }),
-    comment: z.string().optional(),
+    comment: z.string().max(500, 'Comment cannot exceed 500 characters').optional(),
 });
 //# sourceMappingURL=leaveValidators.js.map

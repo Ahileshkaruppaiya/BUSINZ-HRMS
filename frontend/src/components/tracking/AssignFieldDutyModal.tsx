@@ -13,7 +13,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
   onClose,
   initialData
 }) => {
-  const { employees, createFieldAssignment, updateFieldAssignment, currentUser } = useHRMS();
+  const { employees, createFieldAssignment, updateFieldAssignment, currentUser, departments } = useHRMS();
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -40,6 +40,27 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
   const [allowedRadiusMeters, setAllowedRadiusMeters] = useState<number>(initialData?.allowedRadiusMeters || 200);
   const [notes, setNotes] = useState<string>(initialData?.notes || '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const getEmployeeDepartmentDisplay = (emp?: typeof employees[number]): string => {
+    if (!emp) return '';
+
+    const dept = (emp.department || '').trim();
+    if (dept && dept.toLowerCase() !== 'general') return dept;
+
+    const designation = (emp.designation || '').trim().toLowerCase();
+    const inferred =
+      designation === 'ceo' || designation.includes('chief executive') || designation.includes('owner') ? 'CEO' :
+      designation.includes('sales') ? 'Sales' :
+      designation.includes('hr') || designation.includes('human resource') ? 'HR' :
+      designation.includes('account') || designation.includes('finance') ? 'Accounts' :
+      '';
+
+    if (inferred) {
+      return departments.find(d => d.name.toLowerCase() === inferred.toLowerCase())?.name || inferred;
+    }
+
+    return dept || 'General';
+  };
 
   const handleMapPinSelect = (lat: number, lng: number) => {
     setSiteLat(lat);

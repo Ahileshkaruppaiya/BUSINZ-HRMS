@@ -44,15 +44,17 @@ export const BusinessSettings: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Business Data derived dynamically from HRMSContext businessSettings
+  const currentEntityName = businessSettings.businessName || 'Headquarters';
+  const currentEntityCode = businessSettings.businessCode || 'HQ-001';
   const businessData = {
     ...businessSettings,
-    logoStatus: businessSettings.logoStatus || 'Added',
+    logoStatus: businessSettings.logoStatus || (businessSettings.logoUrl ? 'Added' : 'Not Added'),
     policyDocumentsCount: policyDocuments.length,
-    availableEntities: [
-      { id: '1', name: 'Businz HQ', code: 'BSZ001', isCurrent: businessSettings.activeEntity === 'Businz HQ' || !businessSettings.activeEntity || businessSettings.activeEntity === 'VRM Structures (Madhavaram HQ)' },
-      { id: '2', name: 'Regional Office (North)', code: 'BSZ002', isCurrent: businessSettings.activeEntity === 'Regional Office (North)' },
-      { id: '3', name: 'Operations Center (South)', code: 'BSZ003', isCurrent: businessSettings.activeEntity === 'Operations Center (South)' }
-    ],
+    availableEntities: (businessSettings as any).availableEntities && (businessSettings as any).availableEntities.length > 0
+      ? (businessSettings as any).availableEntities
+      : [
+          { id: '1', name: currentEntityName, code: currentEntityCode, isCurrent: true }
+        ],
     policies: policyDocuments
   };
 

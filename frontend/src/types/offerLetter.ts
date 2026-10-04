@@ -6,6 +6,8 @@ export interface OfferLetterTemplate {
   description: string;
   subject: string;
   content: string;
+  company_id?: string;
+  companyId?: string;
 }
 
 export interface OfferLetterPlaceholder {

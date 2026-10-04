@@ -264,12 +264,21 @@ export const FaceAttendance: React.FC = () => {
     }
 
     // Record Attendance & Add Face Log
-    markAttendance(selectedEmpId, 'Present', 'Face Recognition', {
+    const punchResult = markAttendance(selectedEmpId, 'Present', (type === 'Check-In' ? 'Face Check-In' : 'Face Check-Out') as any, {
       lat: userLat,
       lng: userLng,
       address: addressText,
       inGeofence: isInsideGeofence
     });
+
+    if (!punchResult.success) {
+      setScanResult({
+        status: 'error',
+        message: punchResult.message
+      });
+      setIsScanning(false);
+      return;
+    }
 
     addFaceLog({
       employeeId: selectedEmpId,
@@ -422,12 +431,20 @@ export const FaceAttendance: React.FC = () => {
       return;
     }
 
-    markAttendance(selectedEmpId, 'Present', (type === 'Check-In' ? 'GPS Check-In' : 'GPS Check-Out') as any, {
+    const punchResult = markAttendance(selectedEmpId, 'Present', (type === 'Check-In' ? 'GPS Check-In' : 'GPS Check-Out') as any, {
       lat,
       lng,
       address: addr,
       inGeofence: isInside
     });
+
+    if (!punchResult.success) {
+      setScanResult({
+        status: 'error',
+        message: punchResult.message
+      });
+      return;
+    }
 
     addFaceLog({
       employeeId: selectedEmpId,

@@ -5,9 +5,10 @@ import {
   updateGeofenceSettingsSchema,
 } from '../validators/settingsValidators.js';
 
-export const getCompanySettings = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const getCompanySettings = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const company = await settingsRepository.getCompanySettings();
+    const companyId = req.user?.company_id || (req.query.company_id as string) || (req.headers['x-company-id'] as string);
+    const company = await settingsRepository.getCompanySettings(companyId);
     res.status(200).json({
       success: true,
       data: company,
@@ -20,7 +21,8 @@ export const getCompanySettings = async (_req: Request, res: Response, next: Nex
 export const updateCompanySettings = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const validated = updateCompanySettingsSchema.parse(req.body);
-    const updated = await settingsRepository.updateCompanySettings(validated);
+    const companyId = req.user?.company_id || validated.company_id || (req.headers['x-company-id'] as string);
+    const updated = await settingsRepository.updateCompanySettings(validated, companyId);
     res.status(200).json({
       success: true,
       data: updated,

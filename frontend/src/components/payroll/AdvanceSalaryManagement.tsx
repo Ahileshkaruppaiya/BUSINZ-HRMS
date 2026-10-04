@@ -83,11 +83,26 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
   // Target Employee for Personal Advance Salary Application (Strictly own application)
   const targetEmployee = useMemo(() => {
-    return employees.find(e => 
+    const found = employees.find(e => 
       (currentUser.employeeId && e.employeeId === currentUser.employeeId) ||
       (currentUser.email && e.email?.toLowerCase().trim() === currentUser.email?.toLowerCase().trim()) ||
       (currentUser.name && `${e.firstName} ${e.lastName}`.trim().toLowerCase() === currentUser.name?.trim().toLowerCase())
     ) || (currentUser.employeeId ? employees.find(e => e.employeeId === currentUser.employeeId) : null) || employees[0];
+
+    if (found) return found;
+
+    return {
+      id: currentUser.employeeId || 'EMP-001',
+      employeeId: currentUser.employeeId || 'EMP-001',
+      firstName: currentUser.name?.split(' ')[0] || 'Admin',
+      lastName: currentUser.name?.split(' ').slice(1).join(' ') || 'User',
+      email: currentUser.email || 'admin@businz.com',
+      department: currentUser.department || 'Management',
+      designation: currentUser.designation || currentUser.role || 'Staff',
+      basicSalary: 30000,
+      joiningDate: '2023-01-01',
+      role: currentUser.role || 'Employee'
+    } as any;
   }, [employees, currentUser]);
 
   const targetEmployeeId = targetEmployee?.employeeId || currentUser.employeeId || employees[0]?.employeeId || '';
@@ -157,19 +172,20 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   }>({
     requestType: 'Advance Salary',
     requestedAmount: 30000,
-    installmentMonths: 6,
+    installmentMonths: 3,
     purpose: 'Emergency Medical & Personal Expense',
     reasonDetails: '',
     neededByDate: new Date().toISOString().split('T')[0]
   });
 
-  const normalizeRepaymentMonthsInput = (value: string, maxMonths: number): number => {
+  const normalizeRepaymentMonthsInput = (value: string, maxMonths: number, minMonths: number = 1): number => {
     const digitsOnly = value.replace(/\D/g, '');
     if (!digitsOnly) return 0;
     const withoutLeadingZeros = digitsOnly.replace(/^0+/, '') || '0';
     const parsed = Number(withoutLeadingZeros);
-    if (!Number.isFinite(parsed)) return 0;
-    return Math.min(Math.max(parsed, 0), maxMonths || parsed);
+    if (!Number.isFinite(parsed)) return minMonths;
+    const safeMax = Math.max(maxMonths || 12, minMonths);
+    return Math.min(Math.max(parsed, 0), safeMax);
   };
 
   const getTodayDateString = () => {
@@ -359,13 +375,18 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
   // Open Request Modal (Strictly for applicant's own advance salary)
   const openRequestModal = () => {
-    const elig = calculateEmployeeLoanEligibility(targetEmployee.employeeId);
-    const maxAmt = Math.max(elig.maxEligibleAmount || 50000, 30000);
+    const empId = targetEmployee?.employeeId || currentUser?.employeeId || 'EMP-001';
+    const elig = calculateEmployeeLoanEligibility(empId);
+    const maxAmt = elig.maxEligibleAmount || 50000;
     const requestDate = getTodayDateString();
+    const policyMin = elig.policy?.minRepaymentMonths ?? 1;
+    const policyMax = elig.policy?.maxRepaymentMonths ?? 3;
+    const defaultMonths = Math.min(Math.max(3, policyMin), policyMax);
+    const initialAmt = Math.min(20000, maxAmt);
     setRequestFormData({
       requestType: 'Advance Salary',
-      requestedAmount: Math.min(30000, maxAmt),
-      installmentMonths: 6,
+      requestedAmount: initialAmt,
+      installmentMonths: defaultMonths,
       purpose: 'Emergency Medical & Personal Expense',
       reasonDetails: '',
       neededByDate: requestDate
@@ -388,11 +409,15 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       return;
     }
 
+    const minMonths = elig.policy?.minRepaymentMonths ?? 1;
+    const maxMonths = elig.policy?.maxRepaymentMonths ?? 12;
+
     if (
-      requestFormData.installmentMonths < elig.policy.minRepaymentMonths ||
-      requestFormData.installmentMonths > elig.policy.maxRepaymentMonths
+      !requestFormData.installmentMonths ||
+      requestFormData.installmentMonths < minMonths ||
+      requestFormData.installmentMonths > maxMonths
     ) {
-      showFeedback('error', `Repayment period must be between ${elig.policy.minRepaymentMonths} and ${elig.policy.maxRepaymentMonths} months.`);
+      showFeedback('error', `Repayment period must be between ${minMonths} and ${maxMonths} months.`);
       return;
     }
 
@@ -1517,32 +1542,35 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', margin: 0 }}>
+                        <label htmlFor="repayment-period-months" style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', margin: 0 }}>
                           Repayment Period (Months) *
                         </label>
                         <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
-                          Allowed: {modalElig.policy.minRepaymentMonths}–{modalElig.policy.maxRepaymentMonths} mos
+                          Allowed: {modalElig?.policy?.minRepaymentMonths ?? 1}–{modalElig?.policy?.maxRepaymentMonths ?? 3} mos
                         </span>
                       </div>
                       <input 
+                        id="repayment-period-months"
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
                         required
                         className="form-control"
-                        value={requestFormData.installmentMonths || ''}
+                        value={requestFormData.installmentMonths > 0 ? requestFormData.installmentMonths : ''}
                         onChange={e => {
-                          const months = normalizeRepaymentMonthsInput(
-                            e.target.value,
-                            modalElig.policy.maxRepaymentMonths
-                          );
-                          setRequestFormData({ ...requestFormData, installmentMonths: months });
+                          const minM = modalElig?.policy?.minRepaymentMonths ?? 1;
+                          const maxM = modalElig?.policy?.maxRepaymentMonths ?? 12;
+                          const months = normalizeRepaymentMonthsInput(e.target.value, maxM, minM);
+                          setRequestFormData(prev => ({ ...prev, installmentMonths: months }));
                         }}
                         onBlur={() => {
-                          const minMonths = modalElig.policy.minRepaymentMonths;
-                          const maxMonths = modalElig.policy.maxRepaymentMonths;
-                          const months = Math.min(Math.max(requestFormData.installmentMonths || minMonths, minMonths), maxMonths);
-                          setRequestFormData({ ...requestFormData, installmentMonths: months });
+                          const minMonths = modalElig?.policy?.minRepaymentMonths ?? 1;
+                          const maxMonths = modalElig?.policy?.maxRepaymentMonths ?? 12;
+                          const current = Number(requestFormData.installmentMonths);
+                          const months = (!current || isNaN(current) || current < minMonths)
+                            ? minMonths
+                            : Math.min(current, maxMonths);
+                          setRequestFormData(prev => ({ ...prev, installmentMonths: months }));
                         }}
                         style={{ height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                       />

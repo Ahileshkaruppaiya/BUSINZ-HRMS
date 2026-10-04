@@ -3135,10 +3135,12 @@ input:-webkit-autofill:active {
   body * {
     visibility: hidden;
   }
-  #printable-offer-letter, #printable-offer-letter * {
+  #printable-offer-letter, #printable-offer-letter *,
+  #printable-payslip-content, #printable-payslip-content * {
     visibility: visible;
   }
-  #printable-offer-letter {
+  #printable-offer-letter,
+  #printable-payslip-content {
     position: absolute;
     left: 0;
     top: 0;
@@ -4751,4 +4753,3 @@ input:-webkit-autofill:active {
     display: block !important;
   }
 }
-

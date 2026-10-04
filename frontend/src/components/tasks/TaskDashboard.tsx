@@ -220,11 +220,32 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({ onNavigateTab, onS
 
     ctx.clearRect(0, 0, width, height);
 
-    const labels = ['Week 31', 'Week 32', 'Week 33', 'Week 34', 'Week 35 (Current)'];
-    const completedWeekly = [3, 5, 4, 8, completedCount];
-    const createdWeekly = [4, 6, 5, 9, totalCount];
+    const now = new Date();
+    const weeks = [4, 3, 2, 1, 0].map(weeksAgo => {
+      const d = new Date(now.getTime() - weeksAgo * 7 * 24 * 3600 * 1000);
+      const weekLabel = weeksAgo === 0 ? 'This Week' : `${weeksAgo}w ago`;
+      const startMs = d.getTime() - 3.5 * 24 * 3600 * 1000;
+      const endMs = d.getTime() + 3.5 * 24 * 3600 * 1000;
 
-    const maxVal = Math.max(...createdWeekly, 10);
+      const createdInW = filteredTasks.filter(t => {
+        const tDate = new Date(t.createdAt || t.taskDate || t.dueDate || now).getTime();
+        return tDate >= startMs && tDate <= endMs;
+      }).length;
+
+      const completedInW = filteredTasks.filter(t => {
+        const isDone = t.overallStatus === 'COMPLETED' || t.overallStatus === 'CLOSED';
+        const tDate = new Date(t.updatedAt || t.dueDate || now).getTime();
+        return isDone && tDate >= startMs && tDate <= endMs;
+      }).length;
+
+      return { label: weekLabel, created: createdInW, completed: completedInW };
+    });
+
+    const labels = weeks.map(w => w.label);
+    const completedWeekly = weeks.map(w => w.completed);
+    const createdWeekly = weeks.map(w => w.created);
+
+    const maxVal = Math.max(...createdWeekly, ...completedWeekly, 10);
     const barW = 28;
     const gap = (width - 60 - labels.length * (barW * 2 + 8)) / (labels.length + 1);
 
@@ -268,7 +289,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({ onNavigateTab, onS
       ctx.textAlign = 'center';
       ctx.fillText(label, groupX + barW + 2, 180);
     });
-  }, [completedCount, totalCount]);
+  }, [filteredTasks, completedCount, totalCount]);
 
   return (
     <div className="task-dashboard-container">

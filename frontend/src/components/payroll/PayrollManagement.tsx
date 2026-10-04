@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
-import { CreditCard, IndianRupee, CheckCircle2, FileText, Download, X, Edit3, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { CreditCard, IndianRupee, CheckCircle2, FileText, Download, X, Edit3, ShieldAlert, ShieldCheck, Printer } from 'lucide-react';
 import { PayrollRecord, Employee } from '../../types/hrms';
 import { SalaryComponentConfig } from '../../types/settings';
 import { toNum, formatCurrency } from '../../utils/numbers';
@@ -8,6 +8,18 @@ import { downloadElementAsPDF, downloadCSV, downloadExcel, downloadPDF } from '.
 import { ExportDropdown } from '../common/ExportDropdown';
 import { StandardFloatingActionBar } from '../common/StandardFloatingActionBar';
 import { StandardTablePagination } from '../common/StandardTablePagination';
+import {
+  AuthorizedSignatory,
+  CompanyFooter,
+  CompanyHeader,
+  DynamicAmountTable,
+  AmountLine,
+  EmployeeDetailsGrid,
+  NetPaySection,
+  buildCompanyDocumentProfile,
+  mapPayrollLines
+} from '../documents/CompanyDocumentParts';
+import { resolveEmployeeWithPf } from '../../services/policyEngine';
 
 export const PayrollManagement: React.FC = () => {
   const { 
@@ -23,7 +35,9 @@ export const PayrollManagement: React.FC = () => {
     activeLoanPolicy,
     loanPolicies,
     loanRecords,
-    payrollSettingsConfig
+    payrollSettingsConfig,
+    companyInfo,
+    companyBranches
   } = useHRMS();
 
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
@@ -38,6 +52,10 @@ export const PayrollManagement: React.FC = () => {
   // Pagination state (Standardized to [5, 10] per design system)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  const documentProfile = useMemo(
+    () => buildCompanyDocumentProfile(companyInfo, businessSettings, companyBranches),
+    [companyInfo, businessSettings, companyBranches]
+  );
 
   // Define strict approval authority: CEO, Super Admin, HR Manager, HR Admin
   const isApprovalAuthority = 
@@ -183,6 +201,80 @@ export const PayrollManagement: React.FC = () => {
       .reduce((sum, c) => sum + c.defaultValue, 0);
     return `Salary Formula: ${parts.join(' + ')}${totalPercent > 0 ? ` = ${totalPercent}% CTC` : ''}`;
   }, [activeEarnings]);
+
+  const getEmployeeForPayroll = (p: PayrollRecord) =>
+    employees.find(e => e.employeeId === p.employeeId || e.id === p.employeeId);
+
+  const formatPayrollMonth = (p: PayrollRecord) => {
+    const rawMonth = String(p.month || '').trim();
+    if (/^\d{4}-\d{2}/.test(rawMonth)) {
+      const date = new Date(`${rawMonth.slice(0, 7)}-01T00:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+    }
+    return `${rawMonth || 'Payroll'} ${p.year || ''}`.trim();
+  };
+
+  const getPayslipRows = (p: PayrollRecord) => {
+    const earnings = mapPayrollLines(p.earningsBreakdown);
+    const deductions = mapPayrollLines(p.deductionsBreakdown);
+    const emp = getEmployeeForPayroll(p);
+    const withPf = p.withPf ?? resolveEmployeeWithPf(emp);
+    const hasDeduction = (label: string) =>
+      deductions.some(row => row.label.toLowerCase().includes(label.toLowerCase()));
+    const addDeduction = (line: AmountLine) => {
+      if (!hasDeduction(line.label)) deductions.push(line);
+    };
+
+    if (earnings.length === 0) {
+      const basic = toNum(p.basicSalary);
+      const allowances = toNum(p.allowances);
+      if (basic > 0) earnings.push({ label: 'Basic Salary', amount: basic });
+      if (toNum(p.da) > 0) earnings.push({ label: 'Dearness Allowance', amount: toNum(p.da) });
+      if (toNum(p.hra) > 0) earnings.push({ label: 'House Rent Allowance', amount: toNum(p.hra) });
+      if (toNum(p.conveyance) > 0) earnings.push({ label: 'Conveyance Allowance', amount: toNum(p.conveyance) });
+      if (allowances > 0 && !p.da && !p.hra && !p.conveyance) earnings.push({ label: 'Allowances', amount: allowances });
+      if (toNum(p.attendanceBonus) > 0) earnings.push({ label: 'Attendance Bonus', amount: toNum(p.attendanceBonus) });
+      if (toNum(p.overtimeAmount) > 0) earnings.push({ label: 'Overtime Earnings', amount: toNum(p.overtimeAmount) });
+      if (toNum(p.bonus) > 0) earnings.push({ label: 'Bonus', amount: toNum(p.bonus) });
+      if (toNum(p.rewardEarnings) > 0) earnings.push({ label: 'Rewards / Incentives', amount: toNum(p.rewardEarnings) });
+    }
+
+    if (deductions.length === 0) {
+      if (toNum(p.epfDeduction) > 0) deductions.push({ label: 'EPF Employee Contribution', amount: toNum(p.epfDeduction) });
+      if (toNum(p.esiDeduction) > 0) deductions.push({ label: 'ESIC Employee Contribution', amount: toNum(p.esiDeduction) });
+      if (toNum(p.professionalTax) > 0) deductions.push({ label: 'Professional Tax', amount: toNum(p.professionalTax) });
+      if (toNum(p.taxDeduction) > 0 && deductions.length === 0) deductions.push({ label: 'Statutory / Tax Deductions', amount: toNum(p.taxDeduction) });
+      if (toNum(p.leaveDeduction) > 0) deductions.push({ label: 'Loss of Pay Deduction', amount: toNum(p.leaveDeduction) });
+      if (toNum(p.lateAttendanceDeduction) > 0) deductions.push({ label: 'Late Attendance Deduction', amount: toNum(p.lateAttendanceDeduction) });
+      if (toNum(p.advanceDeduction) > 0) deductions.push({ label: 'Advance Salary / Loan Recovery', amount: toNum(p.advanceDeduction) });
+    }
+
+    if (withPf) {
+      if (toNum(p.epfDeduction) > 0) {
+        addDeduction({ label: 'EPF Employee Contribution', amount: toNum(p.epfDeduction), description: 'As per Payroll Settings PF formula' });
+      }
+      if (toNum(p.esiDeduction) > 0) {
+        addDeduction({ label: 'ESIC Employee Contribution', amount: toNum(p.esiDeduction), description: 'As per Payroll Settings ESIC formula' });
+      }
+    } else {
+      addDeduction({ label: 'EPF Employee Contribution', amount: 0, description: 'Exempt (< 6 Months)' });
+      addDeduction({ label: 'ESIC Contribution', amount: 0, description: 'Exempt (< 6 Months)' });
+    }
+
+    const grossEarnings = toNum(p.grossSalary, earnings.reduce((sum, row) => sum + toNum(row.amount), 0));
+    const derivedDeductions = deductions.reduce((sum, row) => sum + toNum(row.amount), 0);
+    const totalDeductions = toNum(p.totalDeductions, derivedDeductions || Math.max(0, grossEarnings - toNum(p.netSalary)));
+
+    return {
+      earnings,
+      deductions,
+      grossEarnings,
+      totalDeductions,
+      netPay: toNum(p.netSalary)
+    };
+  };
 
   // Export Handlers (Excel, PDF, CSV)
   const getPayrollExportData = () => {
@@ -597,6 +689,85 @@ export const PayrollManagement: React.FC = () => {
 
       {/* Printable Payslip Modal */}
       {selectedPayslip && (() => {
+        const emp = getEmployeeForPayroll(selectedPayslip);
+        const rows = getPayslipRows(selectedPayslip);
+        const paidDays = selectedPayslip.paidDays ?? selectedPayslip.presentDays;
+        const monthLabel = formatPayrollMonth(selectedPayslip);
+        const fileMonth = monthLabel.replace(/\s+/g, '_');
+
+        return (
+          <div className="modal-overlay">
+            <div className="modal-content" style={{ maxWidth: '780px' }}>
+              <div className="modal-header">
+                <h2>Official Employee Payslip</h2>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => downloadElementAsPDF('printable-payslip-content', `Payslip_${selectedPayslip.employeeName.replace(/\s+/g, '_')}_${fileMonth}`, documentProfile.companyName)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Printer size={14} /> Print
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => downloadElementAsPDF('printable-payslip-content', `Payslip_${selectedPayslip.employeeName.replace(/\s+/g, '_')}_${fileMonth}`, documentProfile.companyName)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#0E7490', border: 'none' }}
+                  >
+                    <Download size={14} /> Download PDF
+                  </button>
+                  <button onClick={() => setSelectedPayslip(null)}><X size={20} /></button>
+                </div>
+              </div>
+              <div className="modal-body">
+                <div className="payslip-container" id="printable-payslip-content">
+                  <CompanyHeader
+                    profile={documentProfile}
+                    title={`Payslip for ${monthLabel}`}
+                    rightMeta={[
+                      { label: 'Ref', value: selectedPayslip.id },
+                      { label: 'Status', value: selectedPayslip.status }
+                    ]}
+                  />
+
+                  <EmployeeDetailsGrid
+                    rows={[
+                      { label: 'Employee Name', value: selectedPayslip.employeeName },
+                      { label: 'Employee ID', value: selectedPayslip.employeeId },
+                      { label: 'Department', value: selectedPayslip.department },
+                      { label: 'Designation', value: selectedPayslip.designation },
+                      { label: 'Date of Joining', value: emp?.joiningDate || emp?.dateOfJoining },
+                      { label: 'Bank Account', value: emp?.bankDetails?.accountNumber },
+                      { label: 'PAN', value: emp?.salaryDetails?.panNumber },
+                      { label: 'UAN', value: emp?.salaryDetails?.uanNumber },
+                      { label: 'Working Days', value: selectedPayslip.workingDays },
+                      { label: 'Paid Days', value: paidDays },
+                      { label: 'Payroll Month', value: monthLabel },
+                      { label: 'Payment Status', value: selectedPayslip.status }
+                    ]}
+                  />
+
+                  <DynamicAmountTable
+                    earnings={rows.earnings}
+                    deductions={rows.deductions}
+                    grossEarnings={rows.grossEarnings}
+                    totalDeductions={rows.totalDeductions}
+                  />
+
+                  <NetPaySection netPay={rows.netPay} />
+                  <AuthorizedSignatory profile={documentProfile} />
+                  <CompanyFooter profile={documentProfile} />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Legacy payslip renderer disabled: new renderer above uses processed payroll output only. */}
+      {false && (() => {
+        const selectedPayslip = null as unknown as PayrollRecord;
         const basicSalary = toNum(selectedPayslip.basicSalary);
         const da = toNum(selectedPayslip.da ?? Math.round(basicSalary * 0.5));
         const conveyance = toNum(selectedPayslip.conveyance ?? Math.round(basicSalary * 0.125));

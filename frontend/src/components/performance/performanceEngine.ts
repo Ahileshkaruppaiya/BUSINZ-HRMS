@@ -310,7 +310,7 @@ export const calculateSingleEmployeePerformance = (
     if (idx === 8) {
       return { month: m, score: overallScore };
     }
-    return { month: m, score: overallScore > 0 ? Math.max(0, overallScore - ((8 - idx) * 2)) : 0 };
+    return { month: m, score: 0 };
   });
 
   return {

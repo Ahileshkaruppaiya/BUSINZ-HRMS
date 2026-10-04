@@ -98,6 +98,39 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
     e.designation !== 'Super Administrator'
   );
 
+  const getEmployeeDepartmentDisplay = (emp: Employee): string => {
+    const dept = (emp.department || '').trim();
+    if (dept && dept.toLowerCase() !== 'general') return dept;
+
+    const designation = (emp.designation || '').trim().toLowerCase();
+    const inferred =
+      designation === 'ceo' || designation.includes('chief executive') || designation.includes('owner') ? 'CEO' :
+      designation.includes('sales') ? 'Sales' :
+      designation.includes('hr') || designation.includes('human resource') ? 'HR' :
+      designation.includes('account') || designation.includes('finance') ? 'Accounts' :
+      '';
+    if (inferred) {
+      return departments.find(d => d.name.toLowerCase() === inferred.toLowerCase())?.name || inferred;
+    }
+    return dept || 'General';
+  };
+
+  const getReportingManagerDisplay = (emp: Employee): string => {
+    if (emp.reportingManagerName?.trim()) return emp.reportingManagerName;
+
+    const designation = (emp.designation || '').trim().toLowerCase();
+    if (designation === 'ceo' || designation.includes('chief executive') || designation.includes('owner')) {
+      return 'Self / Board of Directors';
+    }
+
+    const owner = roleScopedEmployees.find(e => {
+      const ownerDesignation = (e.designation || '').trim().toLowerCase();
+      return ownerDesignation === 'ceo' || ownerDesignation.includes('chief executive') || ownerDesignation.includes('owner');
+    });
+
+    return owner ? `${owner.firstName} ${owner.lastName}`.trim() : currentUser.name || '-';
+  };
+
   // Sync quick add trigger from layout header
   React.useEffect(() => {
     if (openAddModal) {
@@ -113,9 +146,10 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
       emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       emp.employeeId.toLowerCase().includes(searchQuery.toLowerCase());
 
+    const departmentDisplay = getEmployeeDepartmentDisplay(emp);
     const matchesDept = (isManagerRole || selectedDepartment === 'All') 
       ? true 
-      : emp.department === selectedDepartment;
+      : departmentDisplay.toLowerCase() === selectedDepartment.toLowerCase();
     const matchesDesignation = selectedDesignation === 'All' || emp.designation === selectedDesignation;
     const matchesLocation = selectedLocation === 'All' || 
       (emp.workLocation && emp.workLocation.toLowerCase().includes(selectedLocation.toLowerCase())) ||
@@ -141,7 +175,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
     firstName: e.firstName,
     lastName: e.lastName,
     email: e.email,
-    department: e.department,
+    department: getEmployeeDepartmentDisplay(e),
     designation: e.designation,
     workLocation: e.workLocation || 'Chennai HQ',
     status: e.status
@@ -206,6 +240,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
           {isCEO && (
             <button 
               type="button"
+              id="add-employee-btn"
               className="btn btn-primary btn-sm" 
               onClick={() => setIsAddModalOpen(true)}
               style={{
@@ -267,26 +302,85 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
         </div>
       </div>
 
-      {/* Filters Bar */}
-      {/* Filters Bar */}
+      {/* Unified Single-Line Filter Bar */}
       <div className="card" style={{ padding: '16px 20px', marginBottom: '20px' }}>
-
-        {/* Row 2: 4-Column Aligned Filter Grid */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-          gap: '14px',
-          paddingTop: '14px',
-          borderTop: '1px solid var(--color-border)'
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: '12px',
+          flexWrap: 'wrap'
         }}>
+          {/* Search by Employee ID / Name / Email */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1.4 1 240px', minWidth: '220px' }}>
+            <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Search Employee
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Search 
+                size={16} 
+                style={{ 
+                  position: 'absolute', 
+                  left: '12px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)', 
+                  color: '#64748B',
+                  pointerEvents: 'none' 
+                }} 
+              />
+              <input 
+                type="text"
+                id="employee-search-input"
+                placeholder="Search by Employee ID (e.g. EMP-001), Name, or Email..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="form-control"
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  paddingLeft: '38px',
+                  paddingRight: searchQuery ? '36px' : '12px',
+                  borderRadius: '10px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '0.84rem',
+                  backgroundColor: '#FFFFFF',
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#94A3B8',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderRadius: '6px'
+                  }}
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Department */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 160px', minWidth: '150px' }}>
             <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Department
             </label>
             <select 
               className="form-control" 
-              style={{ width: '100%', height: '38px', padding: '6px 12px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}
+              style={{ width: '100%', height: '40px', padding: '6px 12px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}
               value={isManagerRole ? currentUser.department : selectedDepartment} 
               onChange={e => setSelectedDepartment(e.target.value)}
               disabled={isManagerRole || isEmployeeRole}
@@ -299,13 +393,13 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
           </div>
 
           {/* Designation */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 160px', minWidth: '150px' }}>
             <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Designation
             </label>
             <select 
               className="form-control" 
-              style={{ width: '100%', height: '38px', padding: '6px 12px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}
+              style={{ width: '100%', height: '40px', padding: '6px 12px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}
               value={selectedDesignation} 
               onChange={e => setSelectedDesignation(e.target.value)}
             >
@@ -317,13 +411,13 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
           </div>
 
           {/* Location */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 150px', minWidth: '140px' }}>
             <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Location
             </label>
             <select 
               className="form-control" 
-              style={{ width: '100%', height: '38px', padding: '6px 12px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}
+              style={{ width: '100%', height: '40px', padding: '6px 12px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}
               value={selectedLocation} 
               onChange={e => setSelectedLocation(e.target.value)}
             >
@@ -335,13 +429,13 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
           </div>
 
           {/* Status */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 140px', minWidth: '130px' }}>
             <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Status
             </label>
             <select 
               className="form-control" 
-              style={{ width: '100%', height: '38px', padding: '6px 12px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}
+              style={{ width: '100%', height: '40px', padding: '6px 12px', fontSize: '0.84rem', borderRadius: '10px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF' }}
               value={selectedStatus} 
               onChange={e => setSelectedStatus(e.target.value)}
             >
@@ -351,6 +445,37 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
               <option value="Terminated">Terminated</option>
             </select>
           </div>
+
+          {/* Reset Filters */}
+          {(searchQuery || selectedDepartment !== 'All' || selectedDesignation !== 'All' || selectedLocation !== 'All' || selectedStatus !== 'All') && (
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flex: '0 0 auto' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedDepartment('All');
+                  setSelectedDesignation('All');
+                  setSelectedLocation('All');
+                  setSelectedStatus('All');
+                }}
+                style={{
+                  height: '40px',
+                  padding: '0 14px',
+                  borderRadius: '10px',
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#64748B'
+                }}
+                title="Reset all filters"
+              >
+                <RotateCcw size={14} /> Reset
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -436,9 +561,9 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
                         </div>
                       </div>
                     </td>
-                    <td>{emp.department}</td>
+                    <td>{getEmployeeDepartmentDisplay(emp)}</td>
                     <td>{emp.designation}</td>
-                    <td>{emp.reportingManagerName}</td>
+                    <td>{getReportingManagerDisplay(emp)}</td>
                     <td>{emp.employmentType}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{formatDateDDMMYYYY(emp.joiningDate)}</td>
                     <td>

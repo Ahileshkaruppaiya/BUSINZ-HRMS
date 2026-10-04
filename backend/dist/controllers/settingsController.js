@@ -1,8 +1,9 @@
 import { settingsRepository } from '../repositories/settingsRepository.js';
 import { updateCompanySettingsSchema, updateGeofenceSettingsSchema, } from '../validators/settingsValidators.js';
-export const getCompanySettings = async (_req, res, next) => {
+export const getCompanySettings = async (req, res, next) => {
     try {
-        const company = await settingsRepository.getCompanySettings();
+        const companyId = req.user?.company_id || req.query.company_id || req.headers['x-company-id'];
+        const company = await settingsRepository.getCompanySettings(companyId);
         res.status(200).json({
             success: true,
             data: company,
@@ -15,7 +16,8 @@ export const getCompanySettings = async (_req, res, next) => {
 export const updateCompanySettings = async (req, res, next) => {
     try {
         const validated = updateCompanySettingsSchema.parse(req.body);
-        const updated = await settingsRepository.updateCompanySettings(validated);
+        const companyId = req.user?.company_id || validated.company_id || req.headers['x-company-id'];
+        const updated = await settingsRepository.updateCompanySettings(validated, companyId);
         res.status(200).json({
             success: true,
             data: updated,

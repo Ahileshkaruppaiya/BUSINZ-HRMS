@@ -46,17 +46,8 @@ export const EmployeeDetailPerformanceView: React.FC<Props> = ({
     const dept = performance?.department || 'General';
     return {
       department: dept,
-      kpis: [
-        { title: `${dept} Delivery Milestones`, target: '100% on-time', weightage: 35, unit: '%' },
-        { title: 'Quality & Process Compliance', target: '98% SLA', weightage: 30, unit: '%' },
-        { title: 'Attendance & Shift Regularity', target: '95% attendance', weightage: 20, unit: '%' },
-        { title: 'Cross-functional Collaboration', target: 'Zero escalation', weightage: 15, unit: '%' }
-      ],
-      kras: [
-        { title: `${dept} Operational Excellence`, description: `Execute core functional deliverables for ${dept}`, targetMetric: 'Quarterly target', weightage: 40 },
-        { title: 'Punctuality & Shift Regularity', description: 'Maintain attendance integrity and on-time punch records', targetMetric: '95% attendance', weightage: 30 },
-        { title: 'Team Impact & Productivity', description: 'Deliver assigned task milestones within defined schedule', targetMetric: 'Zero SLA breach', weightage: 30 }
-      ]
+      kpis: [],
+      kras: []
     };
   }, [performance?.department]);
 
@@ -563,53 +554,61 @@ export const EmployeeDetailPerformanceView: React.FC<Props> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {deptTemplate.kpis.map((kpi, idx) => {
-                    const hasOverall = typeof performance?.overallScore === 'number' && performance.overallScore > 0;
-                    const progressVal = hasOverall ? Math.min(100, Math.round(performance.overallScore * (0.95 + (idx % 3) * 0.03))) : 0;
-                    const isExceeded = progressVal >= 95;
-                    const isOnTrack = progressVal >= 80 && progressVal < 95;
+                  {deptTemplate.kpis.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '32px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        No KPI metrics configured for this employee's department yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    deptTemplate.kpis.map((kpi, idx) => {
+                      const hasOverall = typeof performance?.overallScore === 'number' && performance.overallScore > 0;
+                      const progressVal = hasOverall ? performance.overallScore : 0;
+                      const isExceeded = progressVal >= 95;
+                      const isOnTrack = progressVal >= 80 && progressVal < 95;
 
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                        <td style={{ padding: '12px 16px' }}>
-                          <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>{kpi.title}</div>
-                        </td>
-                        <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0E7490' }}>
-                          {kpi.target}
-                        </td>
-                        <td style={{ padding: '12px 16px', fontWeight: 600, color: '#64748B' }}>
-                          {kpi.weightage}%
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ flex: 1, height: '8px', background: '#F1F5F9', borderRadius: '9999px', overflow: 'hidden' }}>
-                              <div style={{
-                                width: `${progressVal}%`,
-                                height: '100%',
-                                background: isExceeded ? '#10B981' : isOnTrack ? '#0E7490' : '#94A3B8',
-                                borderRadius: '9999px'
-                              }} />
+                      return (
+                        <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>{kpi.title}</div>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0E7490' }}>
+                            {kpi.target}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontWeight: 600, color: '#64748B' }}>
+                            {kpi.weightage}%
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ flex: 1, height: '8px', background: '#F1F5F9', borderRadius: '9999px', overflow: 'hidden' }}>
+                                <div style={{
+                                  width: `${progressVal}%`,
+                                  height: '100%',
+                                  background: isExceeded ? '#10B981' : isOnTrack ? '#0E7490' : '#94A3B8',
+                                  borderRadius: '9999px'
+                                }} />
+                              </div>
+                              <span style={{ fontSize: '0.74rem', fontWeight: 750, color: '#0F172A', minWidth: '34px' }}>
+                                {progressVal}%
+                              </span>
                             </div>
-                            <span style={{ fontSize: '0.74rem', fontWeight: 750, color: '#0F172A', minWidth: '34px' }}>
-                              {progressVal}%
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                            <span style={{
+                              padding: '3px 9px',
+                              borderRadius: '9999px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              background: hasOverall ? (isExceeded ? '#DCFCE7' : isOnTrack ? '#ECFEFF' : '#FEF3C7') : '#F1F5F9',
+                              color: hasOverall ? (isExceeded ? '#15803D' : isOnTrack ? '#0E7490' : '#B45309') : '#64748B'
+                            }}>
+                              {hasOverall ? (isExceeded ? 'Exceeded' : isOnTrack ? 'On Track' : 'Good') : 'Pending Review'}
                             </span>
-                          </div>
-                        </td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                          <span style={{
-                            padding: '3px 9px',
-                            borderRadius: '9999px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            background: hasOverall ? (isExceeded ? '#DCFCE7' : isOnTrack ? '#ECFEFF' : '#FEF3C7') : '#F1F5F9',
-                            color: hasOverall ? (isExceeded ? '#15803D' : isOnTrack ? '#0E7490' : '#B45309') : '#64748B'
-                          }}>
-                            {hasOverall ? (isExceeded ? 'Exceeded' : isOnTrack ? 'On Track' : 'Good') : 'Pending Review'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -703,35 +702,43 @@ export const EmployeeDetailPerformanceView: React.FC<Props> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {deptTemplate.kras.map((kra, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>{kra.title}</div>
-                      </td>
-                      <td style={{ padding: '12px 16px', color: '#64748B', fontSize: '12px', lineHeight: 1.4, maxWidth: '300px' }}>
-                        {kra.description}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0E7490' }}>
-                        {kra.targetMetric}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontWeight: 600, color: '#475569' }}>
-                        {kra.weightage}%
-                      </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <span style={{
-                          padding: '3px 9px',
-                          borderRadius: '9999px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          background: performance.overallScore > 0 ? '#ECFEFF' : '#F1F5F9',
-                          color: performance.overallScore > 0 ? '#0E7490' : '#64748B',
-                          border: `1px solid ${performance.overallScore > 0 ? '#A5F3FC' : '#E2E8F0'}`
-                        }}>
-                          {(performance.overallScore > 0 ? (performance.overallScore / 20).toFixed(1) : '0.0')} / 5.0
-                        </span>
+                  {deptTemplate.kras.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '32px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                        No KRA deliverables configured for this employee's department yet.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    deptTemplate.kras.map((kra, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>{kra.title}</div>
+                        </td>
+                        <td style={{ padding: '12px 16px', color: '#64748B', fontSize: '12px', lineHeight: 1.4, maxWidth: '300px' }}>
+                          {kra.description}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0E7490' }}>
+                          {kra.targetMetric}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontWeight: 600, color: '#475569' }}>
+                          {kra.weightage}%
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                          <span style={{
+                            padding: '3px 9px',
+                            borderRadius: '9999px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            background: performance.overallScore > 0 ? '#ECFEFF' : '#F1F5F9',
+                            color: performance.overallScore > 0 ? '#0E7490' : '#64748B',
+                            border: `1px solid ${performance.overallScore > 0 ? '#A5F3FC' : '#E2E8F0'}`
+                          }}>
+                            {(performance.overallScore > 0 ? (performance.overallScore / 20).toFixed(1) : '0.0')} / 5.0
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Building2,
   ToggleLeft,
@@ -14,6 +14,8 @@ export const OvertimePolicySettings: React.FC = () => {
     updateDepartmentOtPolicy,
     currentUser
   } = useHRMS();
+
+  const [inputDrafts, setInputDrafts] = useState<Record<string, string>>({});
 
   const isHrOrCeo =
     currentUser?.role === 'CEO' ||
@@ -31,6 +33,28 @@ export const OvertimePolicySettings: React.FC = () => {
       if (['yes', 'true', '1', 'on', 'enabled'].includes(normalized)) return true;
     }
     return fallback;
+  };
+
+  const getDraftValue = (key: string, value: number) => (
+    Object.prototype.hasOwnProperty.call(inputDrafts, key) ? inputDrafts[key] : String(value)
+  );
+
+  const handlePolicyNumberChange = (
+    key: string,
+    deptId: string,
+    department: string,
+    field: 'standardShiftHours' | 'otHourlyRate',
+    rawValue: string
+  ) => {
+    setInputDrafts(prev => ({ ...prev, [key]: rawValue }));
+    if (rawValue === '') {
+      updateDepartmentOtPolicy(deptId, { department, [field]: 0 });
+      return;
+    }
+    const parsed = Number(rawValue);
+    if (Number.isFinite(parsed)) {
+      updateDepartmentOtPolicy(deptId, { department, [field]: parsed });
+    }
   };
 
   // Dynamic department overtime policy mapping:
@@ -119,6 +143,8 @@ export const OvertimePolicySettings: React.FC = () => {
                 const isOtAllowed = overtimePolicy.enabled !== false && isDepartmentOtAllowed;
                 const shiftHours = dept.standardShiftHours ?? 9;
                 const hourlyRate = dept.otHourlyRate ?? 100;
+                const shiftDraftKey = `${dept.id}:standardShiftHours`;
+                const rateDraftKey = `${dept.id}:otHourlyRate`;
                 return (
                   <tr key={dept.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                     <td style={{ padding: '14px 16px', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -134,8 +160,8 @@ export const OvertimePolicySettings: React.FC = () => {
                             step="0.5"
                             min="4"
                             max="16"
-                            value={shiftHours}
-                            onChange={e => updateDepartmentOtPolicy(dept.id, { department: dept.department, standardShiftHours: Number(e.target.value) })}
+                            value={getDraftValue(shiftDraftKey, shiftHours)}
+                            onChange={e => handlePolicyNumberChange(shiftDraftKey, dept.id, dept.department, 'standardShiftHours', e.target.value)}
                             style={{
                               width: '58px',
                               padding: '6px 8px',
@@ -209,8 +235,8 @@ export const OvertimePolicySettings: React.FC = () => {
                             type="number"
                             step="10"
                             min="0"
-                            value={hourlyRate}
-                            onChange={e => updateDepartmentOtPolicy(dept.id, { department: dept.department, otHourlyRate: Number(e.target.value) })}
+                            value={getDraftValue(rateDraftKey, hourlyRate)}
+                            onChange={e => handlePolicyNumberChange(rateDraftKey, dept.id, dept.department, 'otHourlyRate', e.target.value)}
                             disabled={!isOtAllowed}
                             style={{
                               width: '72px',

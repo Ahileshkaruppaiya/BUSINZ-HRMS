@@ -522,6 +522,15 @@ export interface StatutoryDeductionsResult {
   ptActive?: boolean;
 }
 
+export const resolveEmployeeWithPf = (employee?: Pick<Employee, 'withPf' | 'salaryDetails'> | null): boolean => {
+  const scheme = employee?.salaryDetails?.salaryScheme;
+  if (scheme === 'WITH_PF') return true;
+  if (scheme === 'WITHOUT_PF') return false;
+  if (employee?.salaryDetails?.withPf !== undefined) return Boolean(employee.salaryDetails.withPf);
+  if (employee?.withPf !== undefined) return Boolean(employee.withPf);
+  return true;
+};
+
 export const evaluateStatutoryContributions = (
   basicSalary: number,
   grossSalary: number,
@@ -869,6 +878,7 @@ export interface FullPayrollCalculationResult {
   // Days
   workingDays: number;
   presentDays: number;
+  paidDays: number;
   paidLeaves: number;
   unpaidLeaves: number;
 
@@ -877,6 +887,8 @@ export interface FullPayrollCalculationResult {
   leaveDetails: LeaveDeductionResult;
   statutoryDetails: StatutoryDeductionsResult;
   rewardDetails: RewardEarningsResult;
+  earningsBreakdown: { name: string; category: 'EARNING'; amount: number; description?: string }[];
+  deductionsBreakdown: { name: string; category: 'DEDUCTION'; amount: number; description?: string }[];
 }
 
 export const calculateEmployeePayroll = (
@@ -899,6 +911,15 @@ export const calculateEmployeePayroll = (
     ? basicComp.defaultValue
     : 40;
   const totalCtc = employee.salaryDetails?.monthlyCtc || (basic > 0 ? Math.round(basic / (basicPercentage / 100)) : 15000);
+  const earningsBreakdown: { name: string; category: 'EARNING'; amount: number; description?: string }[] = [];
+  if (basic > 0) {
+    earningsBreakdown.push({
+      name: basicComp?.name || 'Basic Salary',
+      category: 'EARNING',
+      amount: basic,
+      description: basicComp?.calculationMethod === 'PERCENTAGE' ? `${basicComp.defaultValue}% ${basicComp.percentageBase || 'CTC'}` : undefined
+    });
+  }
 
   // Dynamic component earnings calculation
   let calculatedAllowances = 0;
@@ -925,6 +946,14 @@ export const calculateEmployeePayroll = (
 
       const employeeCustom = (employee.allowances as any)?.[comp.code.toLowerCase()] ?? (employee.allowances as any)?.[comp.code];
       const actualVal = (employeeCustom !== undefined && employeeCustom !== null && toNum(employeeCustom) > 0) ? toNum(employeeCustom) : compAmount;
+      if (actualVal > 0) {
+        earningsBreakdown.push({
+          name: comp.name,
+          category: 'EARNING',
+          amount: actualVal,
+          description: comp.calculationMethod === 'PERCENTAGE' ? `${comp.defaultValue}% ${comp.percentageBase || 'CTC'}` : undefined
+        });
+      }
 
       if (comp.code === 'DA') {
         foundDa = actualVal;
@@ -948,6 +977,9 @@ export const calculateEmployeePayroll = (
     if (!dynamicConveyance) dynamicConveyance = Math.round(totalCtc * 0.05);
     if (!dynamicHra) dynamicHra = Math.round(totalCtc * 0.35);
     calculatedAllowances = dynamicDa + dynamicConveyance + dynamicHra;
+    if (dynamicDa > 0) earningsBreakdown.push({ name: 'Dearness Allowance (DA)', category: 'EARNING', amount: dynamicDa });
+    if (dynamicConveyance > 0) earningsBreakdown.push({ name: 'Conveyance Allowance', category: 'EARNING', amount: dynamicConveyance });
+    if (dynamicHra > 0) earningsBreakdown.push({ name: 'House Rent Allowance (HRA)', category: 'EARNING', amount: dynamicHra });
   }
 
   const da = dynamicDa;
@@ -986,28 +1018,53 @@ export const calculateEmployeePayroll = (
   // 4. Rewards Evaluation
   const rewardDetails = evaluateEmployeeRewards(employee.employeeId, rewardRecords);
 
+  const approvedPaidLeaveDays = leaveRequests
+    .filter(l => l.employeeId === employee.employeeId && l.status === 'Approved')
+    .filter(l => {
+      const leaveName = (l.leaveType || '').toLowerCase();
+      return !leaveName.includes('unpaid') && !leaveName.includes('lop') && !leaveName.includes('loss of pay');
+    })
+    .reduce((sum, l) => sum + toNum(l.daysCount), 0);
+  const paidDays = Math.min(standardDays, Math.max(0, presentDays + approvedPaidLeaveDays));
+  const salaryProrationFactor = standardDays > 0 ? paidDays / standardDays : 1;
+  const prorateSalary = (value: number) => Math.round(toNum(value) * salaryProrationFactor);
+  const payableBasic = prorateSalary(basic);
+  const payableDa = prorateSalary(da);
+  const payableConveyance = prorateSalary(conveyance);
+  const payableHra = prorateSalary(hra);
+  const payableAllowances = prorateSalary(allowances);
+
+  earningsBreakdown.forEach(item => {
+    item.amount = prorateSalary(item.amount);
+    item.description = [item.description, `Paid ${paidDays}/${standardDays} days`].filter(Boolean).join(' | ');
+  });
+
   // Attendance bonus: granted dynamically ONLY when employee achieves 100% attendance
   const isFullAttendance = presentDays >= standardDays && standardDays > 0 && (leaveDetails.totalUnpaidDays || 0) === 0;
   const attendanceBonus = isFullAttendance ? 1000 : 0;
 
   const bonus = 0;
-  const grossSalary = basic + allowances + attendanceBonus + bonus + rewardDetails.totalRewardEarnings;
+  if (attendanceBonus > 0) {
+    earningsBreakdown.push({ name: 'Attendance Bonus', category: 'EARNING', amount: attendanceBonus });
+  }
+  rewardDetails.rewardBreakdown.forEach(item => {
+    if (toNum(item.amount) > 0) {
+      earningsBreakdown.push({ name: item.title, category: 'EARNING', amount: toNum(item.amount), description: 'Reward configured for payroll' });
+    }
+  });
+  const grossSalary = payableBasic + payableAllowances + attendanceBonus + bonus + rewardDetails.totalRewardEarnings;
 
-  const withPf = employee.withPf !== undefined 
-    ? employee.withPf 
-    : (employee.salaryDetails?.withPf !== undefined 
-        ? employee.salaryDetails.withPf 
-        : (employee.salaryDetails?.salaryScheme ? employee.salaryDetails.salaryScheme === 'WITH_PF' : true));
+  const withPf = resolveEmployeeWithPf(employee);
 
   // 5. Statutory Deductions
   const statutoryDetails = evaluateStatutoryContributions(
-    basic,
+    payableBasic,
     grossSalary,
     payrollConfig,
     withPf,
-    da,
-    conveyance,
-    hra,
+    payableDa,
+    payableConveyance,
+    payableHra,
     attendanceBonus,
     0
   );
@@ -1035,12 +1092,32 @@ export const calculateEmployeePayroll = (
   }
 
   // Low Salary Protection: Cap loan deduction to available net salary
-  const preLoanDeductions = statutoryDetails.totalStatutory + lateDetails.deductionAmount + leaveDetails.deductionAmount;
+  const leaveDeductionAmount = 0;
+  const preLoanDeductions = statutoryDetails.totalStatutory + lateDetails.deductionAmount + leaveDeductionAmount;
   const availableSalary = Math.max(0, grossSalary - preLoanDeductions);
   const advanceDeduction = Math.min(scheduledLoanDeduction, availableSalary);
 
   const totalDeductions = preLoanDeductions + advanceDeduction;
   const netSalary = Math.max(0, grossSalary - totalDeductions);
+  const deductionsBreakdown: { name: string; category: 'DEDUCTION'; amount: number; description?: string }[] = [];
+  if (statutoryDetails.epfDeduction > 0) {
+    deductionsBreakdown.push({ name: 'EPF Employee Contribution', category: 'DEDUCTION', amount: statutoryDetails.epfDeduction, description: statutoryDetails.epfRule });
+  }
+  if (statutoryDetails.esiDeduction > 0) {
+    deductionsBreakdown.push({ name: 'ESIC Employee Contribution', category: 'DEDUCTION', amount: statutoryDetails.esiDeduction, description: statutoryDetails.esiRule });
+  }
+  if (statutoryDetails.professionalTax > 0) {
+    deductionsBreakdown.push({ name: 'Professional Tax', category: 'DEDUCTION', amount: statutoryDetails.professionalTax });
+  }
+  if (lateDetails.deductionAmount > 0) {
+    deductionsBreakdown.push({ name: 'Late Attendance Deduction', category: 'DEDUCTION', amount: lateDetails.deductionAmount, description: lateDetails.ruleApplied });
+  }
+  if (leaveDeductionAmount > 0) {
+    deductionsBreakdown.push({ name: 'Loss of Pay Deduction', category: 'DEDUCTION', amount: leaveDeductionAmount, description: leaveDetails.ruleApplied });
+  }
+  if (advanceDeduction > 0) {
+    deductionsBreakdown.push({ name: 'Advance Salary / Loan Recovery', category: 'DEDUCTION', amount: advanceDeduction });
+  }
 
   return {
     employeeId: employee.employeeId,
@@ -1049,11 +1126,11 @@ export const calculateEmployeePayroll = (
     designation: employee.designation,
     month,
     year,
-    basicSalary: basic,
-    allowances,
-    da,
-    conveyance,
-    hra,
+    basicSalary: payableBasic,
+    allowances: payableAllowances,
+    da: payableDa,
+    conveyance: payableConveyance,
+    hra: payableHra,
     withPf,
     bonus,
     attendanceBonus,
@@ -1066,7 +1143,7 @@ export const calculateEmployeePayroll = (
     statutoryDeductions: statutoryDetails.totalStatutory,
     advanceDeduction,
     lateAttendanceDeduction: lateDetails.deductionAmount,
-    unpaidLeaveDeduction: leaveDetails.deductionAmount,
+    unpaidLeaveDeduction: leaveDeductionAmount,
     sandwichUnpaidDays: leaveDetails.sandwichUnpaidDays || 0,
     sandwichDeduction: leaveDetails.sandwichDeduction || 0,
     totalDeductions,
@@ -1075,13 +1152,16 @@ export const calculateEmployeePayroll = (
 
     workingDays: standardDays,
     presentDays,
-    paidLeaves: 0,
+    paidDays,
+    paidLeaves: approvedPaidLeaveDays,
     unpaidLeaves: leaveDetails.totalUnpaidDays,
 
     lateDetails,
     leaveDetails,
     statutoryDetails,
-    rewardDetails
+    rewardDetails,
+    earningsBreakdown,
+    deductionsBreakdown
   };
 };
 

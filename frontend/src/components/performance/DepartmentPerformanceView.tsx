@@ -72,12 +72,25 @@ export const DepartmentPerformanceView: React.FC<DepartmentPerformanceViewProps>
   // Find department summary or construct fallback
   const currentDeptDetail = departments.find(d => 
     d.departmentName.toLowerCase() === effectiveDeptName.toLowerCase()
-  ) || departments[0];
+  ) || {
+    departmentName: effectiveDeptName,
+    employeeCount: 0,
+    headName: 'Unassigned',
+    avgOverallScore: 0,
+    avgKpiScore: 0,
+    avgKraScore: 0,
+    goalCompletionRate: 0,
+    attendanceImpactScore: 0,
+    taskCompletionRate: 0,
+    pipCount: 0,
+    reviewStatus: 'Pending Review',
+    status: 'Pending Review'
+  };
 
   // Template for current department
   const currentTemplate = DEPARTMENT_TEMPLATES.find(t => 
     t.department.toLowerCase() === effectiveDeptName.toLowerCase()
-  ) || DEPARTMENT_TEMPLATES[0];
+  ) || null;
 
   // Employees in this department
   const deptEmployees = employees.filter(e =>
@@ -354,45 +367,51 @@ export const DepartmentPerformanceView: React.FC<DepartmentPerformanceViewProps>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {currentTemplate.kras.map((kra, idx) => (
-              <div
-                key={idx}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '12px'
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <strong style={{ fontSize: '13px', color: '#1E293B', display: 'block' }}>
-                    {kra.title}
-                  </strong>
-                  <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
-                    {kra.description}
-                  </span>
-                </div>
-                <div style={{ textAlign: 'right', minWidth: '90px' }}>
-                  <span style={{
-                    padding: '3px 8px',
-                    borderRadius: '9999px',
-                    backgroundColor: '#ECFEFF',
-                    color: '#0E7490',
-                    fontSize: '11px',
-                    fontWeight: 700
-                  }}>
-                    Weight: {kra.weightage}%
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginTop: '3px' }}>
-                    {kra.targetMetric}
-                  </span>
-                </div>
+            {(!currentTemplate || !currentTemplate.kras || currentTemplate.kras.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '24px 16px', color: '#94A3B8', fontSize: '13px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px dashed #CBD5E1' }}>
+                No KRA templates configured for this department yet.
               </div>
-            ))}
+            ) : (
+              currentTemplate.kras.map((kra, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ fontSize: '13px', color: '#1E293B', display: 'block' }}>
+                      {kra.title}
+                    </strong>
+                    <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '2px' }}>
+                      {kra.description}
+                    </span>
+                  </div>
+                  <div style={{ textAlign: 'right', minWidth: '90px' }}>
+                    <span style={{
+                      padding: '3px 8px',
+                      borderRadius: '9999px',
+                      backgroundColor: '#ECFEFF',
+                      color: '#0E7490',
+                      fontSize: '11px',
+                      fontWeight: 700
+                    }}>
+                      Weight: {kra.weightage}%
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginTop: '3px' }}>
+                      {kra.targetMetric}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -417,42 +436,48 @@ export const DepartmentPerformanceView: React.FC<DepartmentPerformanceViewProps>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {currentTemplate.kpis.map((kpi, idx) => (
-              <div
-                key={idx}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '12px'
-                }}
-              >
-                <div>
-                  <strong style={{ fontSize: '13px', color: '#1E293B', display: 'block' }}>
-                    {kpi.title}
-                  </strong>
-                  <span style={{ fontSize: '11px', color: '#64748B' }}>
-                    Target: {kpi.target}
-                  </span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{
-                    padding: '3px 8px',
-                    borderRadius: '9999px',
-                    backgroundColor: '#DCFCE7',
-                    color: '#15803D',
-                    fontSize: '11px',
-                    fontWeight: 700
-                  }}>
-                    Weight: {kpi.weightage}%
-                  </span>
-                </div>
+            {(!currentTemplate || !currentTemplate.kpis || currentTemplate.kpis.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '24px 16px', color: '#94A3B8', fontSize: '13px', backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px dashed #CBD5E1' }}>
+                No KPI metrics configured for this department yet.
               </div>
-            ))}
+            ) : (
+              currentTemplate.kpis.map((kpi, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: '13px', color: '#1E293B', display: 'block' }}>
+                      {kpi.title}
+                    </strong>
+                    <span style={{ fontSize: '11px', color: '#64748B' }}>
+                      Target: {kpi.target}
+                    </span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{
+                      padding: '3px 8px',
+                      borderRadius: '9999px',
+                      backgroundColor: '#DCFCE7',
+                      color: '#15803D',
+                      fontSize: '11px',
+                      fontWeight: 700
+                    }}>
+                      Weight: {kpi.weightage}%
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

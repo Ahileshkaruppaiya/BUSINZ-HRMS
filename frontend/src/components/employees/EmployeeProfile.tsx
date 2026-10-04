@@ -46,6 +46,8 @@ import {
   ALL_DEGREE_OPTIONS, 
   normalizeQualification 
 } from './AddEmployeeModal';
+import { CountryCodeDropdown } from '../common/CountryCodeDropdown';
+import { COUNTRY_CODES } from '../../data/countryCodes';
 
 interface EmployeeProfileProps {
   employee: Employee;
@@ -199,6 +201,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   const [showStatusConfirmModal, setShowStatusConfirmModal] = useState<boolean>(false);
   const [statusToSet, setStatusToSet] = useState<'ACTIVE' | 'DISABLED'>('DISABLED');
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
+  const [profilePhoneCountryCode, setProfilePhoneCountryCode] = useState('+91');
+  const [profileEmergencyCountryCode, setProfileEmergencyCountryCode] = useState('+91');
+  const [profileAltEmergencyCountryCode, setProfileAltEmergencyCountryCode] = useState('+91');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -243,6 +248,20 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     setCurrentEmp(employee);
     const d = employee.educationalDetails?.degreeName;
     setIsCustomDegree(Boolean(d && !ALL_DEGREE_OPTIONS.includes(d)));
+
+    // Parse country codes from employee contact data if available
+    if (employee.phone?.startsWith('+')) {
+      const matched = COUNTRY_CODES.find(c => employee.phone?.startsWith(c.dialCode));
+      if (matched) setProfilePhoneCountryCode(matched.dialCode);
+    }
+    if (employee.emergencyContact?.mobile?.startsWith('+')) {
+      const matched = COUNTRY_CODES.find(c => employee.emergencyContact?.mobile?.startsWith(c.dialCode));
+      if (matched) setProfileEmergencyCountryCode(matched.dialCode);
+    }
+    if (employee.emergencyContact?.alternateMobile?.startsWith('+')) {
+      const matched = COUNTRY_CODES.find(c => employee.emergencyContact?.alternateMobile?.startsWith(c.dialCode));
+      if (matched) setProfileAltEmergencyCountryCode(matched.dialCode);
+    }
   }, [employee]);
 
   // 18+ DOB constraint
@@ -418,9 +437,18 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   const handleChange = (field: string, value: any) => {
     let sanitizedValue = value;
 
-    // Names & Alphabet-only fields
-    if (['firstName', 'lastName', 'emergencyName', 'currentCity', 'permanentCity', 'currentState', 'permanentState', 'currentCountry', 'permanentCountry'].includes(field)) {
-      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s]/g, '') : value;
+    // Names (Letters, spaces, '.', "'", '-' allowed, max 100)
+    if (['firstName', 'lastName', 'emergencyName'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s.'-]/g, '').slice(0, 100) : value;
+    }
+
+    if (['currentCity', 'permanentCity', 'currentState', 'permanentState', 'currentCountry', 'permanentCountry'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s]/g, '').slice(0, 100) : value;
+    }
+
+    // Phone & Emergency Mobile numbers (Digits only, max 10)
+    if (['phone', 'emergencyMobile', 'emergencyAltMobile'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/\D/g, '').slice(0, 10) : value;
     }
 
     // Address Lines (Letters, numbers, spaces, and , . - / #)
@@ -695,6 +723,122 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
 
   // Save changes
   const handleSaveChanges = () => {
+    // Validate First Name
+    const cleanFname = (formData.firstName || '').trim();
+    if (!cleanFname) {
+      alert('First Name is required.');
+      return;
+    }
+    if (cleanFname.length < 2) {
+      alert('First Name must be at least 2 characters.');
+      return;
+    }
+    if (cleanFname.length > 100) {
+      alert('First Name cannot exceed 100 characters.');
+      return;
+    }
+    if (!/^[a-zA-Z][a-zA-Z\s.'-]*$/.test(cleanFname)) {
+      alert('First Name must contain letters and spaces only. Numbers and invalid symbols are not allowed.');
+      return;
+    }
+    if (/(.)\1{3,}/i.test(cleanFname)) {
+      alert('First Name contains invalid repetitive characters.');
+      return;
+    }
+    if (/[bcdfghjklmnpqrstvwxyz]{6,}/i.test(cleanFname.replace(/[\s.'-]/g, ''))) {
+      alert('Please enter a realistic First Name.');
+      return;
+    }
+
+    // Validate Last Name
+    const cleanLname = (formData.lastName || '').trim();
+    if (cleanLname) {
+      if (cleanLname.length > 100) {
+        alert('Last Name cannot exceed 100 characters.');
+        return;
+      }
+      if (!/^[a-zA-Z][a-zA-Z\s.'-]*$/.test(cleanLname)) {
+        alert('Last Name must contain letters and spaces only.');
+        return;
+      }
+      if (/(.)\1{3,}/i.test(cleanLname)) {
+        alert('Last Name contains invalid repetitive characters.');
+        return;
+      }
+      if (/[bcdfghjklmnpqrstvwxyz]{6,}/i.test(cleanLname.replace(/[\s.'-]/g, ''))) {
+        alert('Please enter a realistic Last Name.');
+        return;
+      }
+    }
+
+    // Validate Phone
+    const cleanPhone = (formData.phone || '').replace(/\D/g, '');
+    if (cleanPhone) {
+      if (profilePhoneCountryCode === '+91') {
+        if (cleanPhone.length !== 10) {
+          alert('Phone number must contain exactly 10 digits.');
+          return;
+        }
+        if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+          alert('Phone number must contain exactly 10 digits starting with 6, 7, 8, or 9.');
+          return;
+        }
+        if (/^(\d)\1{9}$/.test(cleanPhone)) {
+          alert('Please enter a realistic mobile phone number.');
+          return;
+        }
+      } else {
+        if (cleanPhone.length < 6 || cleanPhone.length > 15) {
+          alert('International phone number must contain between 6 and 15 digits.');
+          return;
+        }
+      }
+    }
+
+    // Validate Emergency Numbers
+    if (formData.emergencyMobile) {
+      const emDigits = formData.emergencyMobile.replace(/\D/g, '');
+      if (profileEmergencyCountryCode === '+91') {
+        if (emDigits.length !== 10) {
+          alert('Emergency Contact Number must contain exactly 10 digits.');
+          return;
+        }
+        if (!/^[6-9]\d{9}$/.test(emDigits)) {
+          alert('Emergency Contact Number must contain exactly 10 digits starting with 6, 7, 8, or 9.');
+          return;
+        }
+      } else {
+        if (emDigits.length < 6 || emDigits.length > 15) {
+          alert('Emergency Contact Number must contain between 6 and 15 digits.');
+          return;
+        }
+      }
+    }
+    if (formData.emergencyAltMobile) {
+      const emAltDigits = formData.emergencyAltMobile.replace(/\D/g, '');
+      if (profileAltEmergencyCountryCode === '+91') {
+        if (emAltDigits.length !== 10) {
+          alert('Alternate Emergency Number must contain exactly 10 digits.');
+          return;
+        }
+        if (!/^[6-9]\d{9}$/.test(emAltDigits)) {
+          alert('Alternate Emergency Number must contain exactly 10 digits starting with 6, 7, 8, or 9.');
+          return;
+        }
+      } else {
+        if (emAltDigits.length < 6 || emAltDigits.length > 15) {
+          alert('Alternate Emergency Number must contain between 6 and 15 digits.');
+          return;
+        }
+      }
+    }
+
+    // Validate Basic Salary
+    if (formData.basicSalary !== undefined && Number(formData.basicSalary) < 0) {
+      alert('Basic salary cannot be negative.');
+      return;
+    }
+
     if (formData.dob) {
       const birthDate = new Date(formData.dob);
       const today = new Date();
@@ -802,9 +946,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     }
 
     const updatedData: Partial<Employee> = {
-      firstName: formData.firstName.trim(),
-      lastName: formData.lastName.trim(),
-      phone: formData.phone.trim(),
+      firstName: cleanFname,
+      lastName: cleanLname,
+      phone: cleanPhone ? (profilePhoneCountryCode === '+91' ? cleanPhone : `${profilePhoneCountryCode} ${cleanPhone}`) : '',
       personalEmail: cleanEmail,
       email: cleanEmail,
       gender: formData.gender,
@@ -842,8 +986,8 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
       emergencyContact: {
         name: formData.emergencyName,
         relationship: formData.emergencyRelationship,
-        mobile: formData.emergencyMobile,
-        alternateMobile: formData.emergencyAltMobile
+        mobile: formData.emergencyMobile ? (profileEmergencyCountryCode === '+91' ? formData.emergencyMobile.replace(/\D/g, '') : `${profileEmergencyCountryCode} ${formData.emergencyMobile.replace(/\D/g, '')}`) : '',
+        alternateMobile: formData.emergencyAltMobile ? (profileAltEmergencyCountryCode === '+91' ? formData.emergencyAltMobile.replace(/\D/g, '') : `${profileAltEmergencyCountryCode} ${formData.emergencyAltMobile.replace(/\D/g, '')}`) : ''
       },
 
       educationalDetails: {
@@ -1201,10 +1345,11 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
-              value={formData.firstName.replace(/[^a-zA-Z\s]/g, '')} 
-              onChange={(e) => handleChange('firstName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} 
+              maxLength={100}
+              value={formData.firstName} 
+              onChange={(e) => handleChange('firstName', e.target.value)} 
               onKeyDown={(e) => {
-                if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                if (e.key.length === 1 && !/^[a-zA-Z\s.'-]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
                   e.preventDefault();
                 }
               }}
@@ -1222,10 +1367,11 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
-              value={formData.lastName.replace(/[^a-zA-Z\s]/g, '')} 
-              onChange={(e) => handleChange('lastName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))} 
+              maxLength={100}
+              value={formData.lastName} 
+              onChange={(e) => handleChange('lastName', e.target.value)} 
               onKeyDown={(e) => {
-                if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                if (e.key.length === 1 && !/^[a-zA-Z\s.'-]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
                   e.preventDefault();
                 }
               }}
@@ -1314,32 +1460,17 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
         <div>
           <label style={labelStyle}>Primary Phone</label>
           {isEditing ? (
-            <div style={{ display: 'flex', alignItems: 'stretch' }}>
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0 12px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #CBD5E1',
-                borderRight: 'none',
-                borderTopLeftRadius: '10px',
-                borderBottomLeftRadius: '10px',
-                color: '#0F172A',
-                fontWeight: 700,
-                fontSize: '0.88rem',
-                letterSpacing: '0.02em',
-                userSelect: 'none'
-              }}>
-                +91
-              </span>
+            <div style={{ display: 'flex', alignItems: 'stretch', position: 'relative' }}>
+              <CountryCodeDropdown
+                value={profilePhoneCountryCode}
+                onChange={(dialCode) => setProfilePhoneCountryCode(dialCode)}
+              />
               <input 
                 type="tel" 
                 inputMode="numeric"
                 autoComplete="tel"
-                maxLength={10}
-                pattern="[0-9]{10}"
-                value={formData.phone.replace(/^\+91\s*/, '').replace(/\D/g, '').slice(0, 10)} 
+                maxLength={profilePhoneCountryCode === '+91' ? 10 : 15}
+                value={formData.phone.replace(/^\+[0-9]{1,4}\s*/, '').replace(/\D/g, '').slice(0, profilePhoneCountryCode === '+91' ? 10 : 15)} 
                 onKeyDown={(e) => {
                   if (
                     !/^[0-9]$/.test(e.key) &&
@@ -1353,12 +1484,14 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                 onPaste={(e) => {
                   e.preventDefault();
                   const pasteText = e.clipboardData.getData('text');
-                  const sanitized = pasteText.replace(/\D/g, '').slice(0, 10);
-                  handleChange('phone', sanitized ? `+91 ${sanitized}` : '');
+                  const limit = profilePhoneCountryCode === '+91' ? 10 : 15;
+                  const sanitized = pasteText.replace(/\D/g, '').slice(0, limit);
+                  handleChange('phone', sanitized);
                 }}
                 onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                  handleChange('phone', val ? `+91 ${val}` : '');
+                  const limit = profilePhoneCountryCode === '+91' ? 10 : 15;
+                  const val = e.target.value.replace(/\D/g, '').slice(0, limit);
+                  handleChange('phone', val);
                 }} 
                 style={{
                   ...inputStyle,
@@ -1366,11 +1499,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                   borderBottomLeftRadius: 0,
                   flex: 1
                 }} 
-                placeholder="9876543210"
+                placeholder={profilePhoneCountryCode === '+91' ? "9876543210" : "Enter mobile number"}
               />
             </div>
           ) : (
-            <div style={viewValueStyle}>{currentEmp.phone || '—'}</div>
+            <div style={viewValueStyle}>
+              {currentEmp.phone ? (currentEmp.phone.startsWith('+') ? currentEmp.phone : `+91 ${currentEmp.phone}`) : '—'}
+            </div>
           )}
         </div>
 
@@ -1922,31 +2057,18 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           <div>
             <label style={labelStyle}>Primary Emergency Mobile</label>
             {isEditing ? (
-              <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 12px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #CBD5E1',
-                  borderRight: 'none',
-                  borderTopLeftRadius: '10px',
-                  borderBottomLeftRadius: '10px',
-                  color: '#0F172A',
-                  fontWeight: 700,
-                  fontSize: '0.88rem',
-                  letterSpacing: '0.02em',
-                  userSelect: 'none'
-                }}>
-                  +91
-                </span>
+              <div style={{ display: 'flex', alignItems: 'stretch', position: 'relative' }}>
+                <CountryCodeDropdown
+                  value={profileEmergencyCountryCode}
+                  onChange={(dialCode) => setProfileEmergencyCountryCode(dialCode)}
+                />
                 <input 
                   type="tel" 
-                  value={formData.emergencyMobile.replace(/^\+91\s*/, '')} 
+                  value={formData.emergencyMobile.replace(/^\+[0-9]{1,4}\s*/, '')} 
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                    handleChange('emergencyMobile', `+91 ${val}`);
+                    const limit = profileEmergencyCountryCode === '+91' ? 10 : 15;
+                    const val = e.target.value.replace(/\D/g, '').slice(0, limit);
+                    handleChange('emergencyMobile', val);
                   }} 
                   style={{
                     ...inputStyle,
@@ -1954,7 +2076,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     borderBottomLeftRadius: 0,
                     flex: 1
                   }} 
-                  placeholder="98765 43210"
+                  placeholder={profileEmergencyCountryCode === '+91' ? "98765 43210" : "Enter emergency number"}
                 />
               </div>
             ) : (
@@ -1965,31 +2087,18 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           <div>
             <label style={labelStyle}>Alternate Contact (Optional)</label>
             {isEditing ? (
-              <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 12px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #CBD5E1',
-                  borderRight: 'none',
-                  borderTopLeftRadius: '10px',
-                  borderBottomLeftRadius: '10px',
-                  color: '#0F172A',
-                  fontWeight: 700,
-                  fontSize: '0.88rem',
-                  letterSpacing: '0.02em',
-                  userSelect: 'none'
-                }}>
-                  +91
-                </span>
+              <div style={{ display: 'flex', alignItems: 'stretch', position: 'relative' }}>
+                <CountryCodeDropdown
+                  value={profileAltEmergencyCountryCode}
+                  onChange={(dialCode) => setProfileAltEmergencyCountryCode(dialCode)}
+                />
                 <input 
                   type="tel" 
-                  value={formData.emergencyAltMobile.replace(/^\+91\s*/, '')} 
+                  value={formData.emergencyAltMobile.replace(/^\+[0-9]{1,4}\s*/, '')} 
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                    handleChange('emergencyAltMobile', val ? `+91 ${val}` : '');
+                    const limit = profileAltEmergencyCountryCode === '+91' ? 10 : 15;
+                    const val = e.target.value.replace(/\D/g, '').slice(0, limit);
+                    handleChange('emergencyAltMobile', val);
                   }} 
                   style={{
                     ...inputStyle,
@@ -1997,7 +2106,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     borderBottomLeftRadius: 0,
                     flex: 1
                   }} 
-                  placeholder="98765 43210"
+                  placeholder={profileAltEmergencyCountryCode === '+91' ? "98765 43210" : "Enter alternate number"}
                 />
               </div>
             ) : (
@@ -4023,29 +4132,6 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             </div>
           )}
 
-          {/* EDIT MODE NOTICE BANNER */}
-          {isEditing && (
-            <div style={{
-              marginBottom: '20px',
-              padding: '12px 18px',
-              borderRadius: '12px',
-              backgroundColor: '#FFFBEB',
-              border: '1px solid #FDE68A',
-              color: '#B45309',
-              fontSize: '0.84rem',
-              fontWeight: 650,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertCircle size={16} color="#B45309" />
-                <span>
-                  <strong>CEO & HR Edit Mode Active:</strong> You can edit personal information, employment role, salary structure, and bank credentials. Click <strong>Save Changes</strong> above when finished.
-                </span>
-              </div>
-            </div>
-          )}
 
           {/* RENDER SECTIONS ONE BY ONE */}
           {renderPersonalSection()}

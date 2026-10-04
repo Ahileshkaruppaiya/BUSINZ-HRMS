@@ -7,6 +7,7 @@ import { TodayAttendanceCard } from './TodayAttendanceCard';
 import { EmployeeMonthlyAttendanceCard } from './EmployeeMonthlyAttendanceCard';
 import { Employee, LeaveRequest, TaskItem, HolidayItem } from '../../types/hrms';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { isAttendanceExemptEmployee } from '../../data/hrmsInitialData';
 import { 
   Users, 
   UserCheck, 
@@ -303,7 +304,8 @@ export const Dashboard: React.FC = () => {
     return true;
   });
 
-  const filteredEmpIds = new Set(filteredEmployees.map(e => e.employeeId));
+  const attendanceWorkforceEmployees = filteredEmployees.filter(emp => !isAttendanceExemptEmployee(emp));
+  const filteredEmpIds = new Set(attendanceWorkforceEmployees.map(e => e.employeeId));
   const hasActiveFilters = activeFilterCount > 0;
 
   // Compute live stats from context data matching AttendanceCategoryModal logic
@@ -311,9 +313,9 @@ export const Dashboard: React.FC = () => {
     ? attendanceRecords.filter(a => filteredEmpIds.has(a.employeeId))
     : attendanceRecords;
 
-  const totalStaff = filteredEmployees.length;
+  const totalStaff = attendanceWorkforceEmployees.length;
 
-  const presentEmployees = filteredEmployees.filter(emp => {
+  const presentEmployees = attendanceWorkforceEmployees.filter(emp => {
     const att = filteredAttendance.find(a => 
       a.employeeId === emp.employeeId || 
       `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
@@ -326,7 +328,7 @@ export const Dashboard: React.FC = () => {
     );
   });
 
-  const earlyEmployees = filteredEmployees.filter(emp => {
+  const earlyEmployees = attendanceWorkforceEmployees.filter(emp => {
     const att = filteredAttendance.find(a => 
       a.employeeId === emp.employeeId || 
       `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
@@ -337,7 +339,7 @@ export const Dashboard: React.FC = () => {
     );
   });
 
-  const missClockOutEmployees = filteredEmployees.filter(emp => {
+  const missClockOutEmployees = attendanceWorkforceEmployees.filter(emp => {
     const att = filteredAttendance.find(a => 
       a.employeeId === emp.employeeId || 
       `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
@@ -345,7 +347,7 @@ export const Dashboard: React.FC = () => {
     return att && att.checkIn && !att.checkOut;
   });
 
-  const absentEmployees = filteredEmployees.filter(emp => {
+  const absentEmployees = attendanceWorkforceEmployees.filter(emp => {
     const att = filteredAttendance.find(a => 
       a.employeeId === emp.employeeId || 
       `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
@@ -391,9 +393,9 @@ export const Dashboard: React.FC = () => {
   const displayedTasks = isCEO ? dueTasks : ownTasks;
 
   // Metrics for Today's Attendance Donut Card
-  const totalAttendanceCount = filteredEmployees.length;
+  const totalAttendanceCount = totalStaff;
   const donutPresent = presentToday;
-  const donutLeave = leaveRequests.filter(l => l.status === 'Approved').length;
+  const donutLeave = leaveRequests.filter(l => l.status === 'Approved' && filteredEmpIds.has(l.employeeId)).length;
   const donutAbsent = Math.max(0, totalAttendanceCount - donutPresent - donutLeave);
 
   // Dynamic Celebrations derived from real employees

@@ -55,6 +55,8 @@ export interface AuthenticatedUser {
   name?: string;
   department?: string;
   designation?: string;
+  company_id?: string;
+  companyId?: string;
   mustChangePassword?: boolean;
   accountStatus?: AccountStatus;
   credentialEmailStatus?: CredentialEmailStatus;

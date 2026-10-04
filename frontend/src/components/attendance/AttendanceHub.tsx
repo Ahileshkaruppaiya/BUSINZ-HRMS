@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { AttendanceList } from './AttendanceList';
 import { FilterReportsModal, FilterReportsState, initialFilterReportsState } from '../common/FilterReportsModal';
@@ -183,29 +183,50 @@ export const AttendanceHub: React.FC = () => {
   const absentPct = totalStaffCount > 0 ? Math.round((absentCount / totalStaffCount) * 100) : 100;
   const missedPct = totalStaffCount > 0 ? Math.round((missedClockoutCount / totalStaffCount) * 100) : 0;
 
-  // Timeline Activity Chart Points (06:00 to 22:00)
-  const [activityData, setActivityData] = useState<ActivityPoint[]>([
-    { time: '06:00', count: 0, label: 'Early Shift In' },
-    { time: '08:00', count: presentCount > 0 ? 1 : 0, label: 'Morning Shift Start' },
-    { time: '10:00', count: presentCount > 1 ? 3 : 0, label: 'Peak Punch Window' },
-    { time: '12:00', count: presentCount > 2 ? 4 : 0, label: 'Mid-Day Sync' },
-    { time: '14:00', count: presentCount > 2 ? 3 : 0, label: 'Post-Lunch Window' },
-    { time: '16:00', count: presentCount > 1 ? 2 : 0, label: 'Afternoon Check' },
-    { time: '18:00', count: completedRecords.length > 0 ? 2 : 0, label: 'Evening Shift Out' },
-    { time: '20:00', count: 0, label: 'Overtime Clock-Out' },
-    { time: '22:00', count: 0, label: 'Night Shift Transition' }
-  ]);
+  // Timeline Activity Chart Points (06:00 to 22:00) calculated from real today attendance punches
+  const activityData: ActivityPoint[] = useMemo(() => {
+    const parseHour = (timeStr?: string | null) => {
+      if (!timeStr) return -1;
+      const parts = timeStr.split(':').map(Number);
+      return isNaN(parts[0]) ? -1 : parts[0];
+    };
 
-  // Refresh action simulation
+    const slots = [
+      { time: '06:00', start: 6, end: 8, label: 'Early Shift In' },
+      { time: '08:00', start: 8, end: 10, label: 'Morning Shift Start' },
+      { time: '10:00', start: 10, end: 12, label: 'Peak Punch Window' },
+      { time: '12:00', start: 12, end: 14, label: 'Mid-Day Sync' },
+      { time: '14:00', start: 14, end: 16, label: 'Post-Lunch Window' },
+      { time: '16:00', start: 16, end: 18, label: 'Afternoon Check' },
+      { time: '18:00', start: 18, end: 20, label: 'Evening Shift Out' },
+      { time: '20:00', start: 20, end: 22, label: 'Overtime Clock-Out' },
+      { time: '22:00', start: 22, end: 24, label: 'Night Shift Transition' }
+    ];
+
+    return slots.map(s => {
+      const count = todayRecords.filter(r => {
+        const inH = parseHour(r.checkIn);
+        const outH = parseHour(r.checkOut);
+        if (s.start >= 18) {
+          return (outH >= s.start && outH < s.end) || (inH >= s.start && inH < s.end);
+        }
+        return inH >= s.start && inH < s.end;
+      }).length;
+
+      return {
+        time: s.time,
+        count,
+        label: s.label
+      };
+    });
+  }, [todayRecords]);
+
+  // Refresh action
   const handleRefresh = () => {
     setIsRefreshing(true);
     setTimeout(() => {
       setIsRefreshing(false);
-      setActivityData(prev => prev.map(p => ({
-        ...p,
-        count: p.count > 0 ? Math.max(0, p.count + (Math.random() > 0.5 ? 0 : 0)) : p.count
-      })));
-    }, 600);
+    }, 400);
   };
 
   // Pending leaves count

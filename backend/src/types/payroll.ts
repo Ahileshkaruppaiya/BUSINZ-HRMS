@@ -190,11 +190,25 @@ export interface PayrollRunModel {
 
 export interface PayslipResponseData {
   company: {
+    company_id?: string;
     companyName: string;
     legalName: string;
+    logoUrl?: string;
     address: string;
+    registeredAddress?: string;
+    branchAddress?: string;
+    email?: string;
+    phone?: string;
+    website?: string;
     pan: string;
     gst: string;
+    cin?: string;
+    registrationNumber?: string;
+    ownerName?: string;
+    authorizedSignatoryName?: string;
+    authorizedSignatoryDesignation?: string;
+    signatureImageUrl?: string;
+    stampImageUrl?: string;
   };
   employee: {
     id: string;

@@ -435,56 +435,6 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
 
         {isPrivileged && (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {loanPolicies.length === 0 && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  createLoanPolicy({
-                    policyName: 'Advance Salary',
-                    policyType: 'Advance Salary',
-                    description: 'Standard enterprise advance salary policy with predefined caps and recovery schedule.',
-                    applicableEmployees: 'ALL',
-                    applicableDepartments: 'ALL',
-                    applicableBranches: 'ALL',
-                    minimumEmploymentMonths: 3,
-                    maxLoanAmount: 20000,
-                    minLoanAmount: 2000,
-                    maxSalaryPercent: 50,
-                    maxLoanLimitType: 'PERCENTAGE_SALARY',
-                    maxLoanLimitValue: 50,
-                    requestLimit: 'ONCE_IN_3_MONTHS',
-                    allowPreviousPending: false,
-                    maxActiveLoans: 1,
-                    repaymentType: 'MONTHLY_EMI',
-                    maxRepaymentMonths: 6,
-                    minRepaymentMonths: 1,
-                    deductionStart: 'NEXT_MONTH',
-                    deductionStartRule: 'NEXT_PAYROLL_CYCLE',
-                    approvalBy: 'HR_OR_CEO',
-                    approvalWorkflow: 'HR_OR_CEO',
-                    reasonRequired: true,
-                    status: 'Active',
-                    lowSalaryRule: 'DEDUCT_AVAILABLE_CARRY_FORWARD',
-                    payslipVisibility: 'GENERIC',
-                    effectiveFrom: new Date().toISOString().split('T')[0],
-                    effectiveTo: ''
-                  } as any);
-                }}
-                style={{
-                  fontSize: '0.82rem',
-                  padding: '7px 14px',
-                  borderRadius: '10px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Sparkles size={14} color="#0E7490" />
-                <span>Initialize 13 Standard Settings</span>
-              </button>
-            )}
-
             <button 
               type="button" 
               className="btn btn-primary btn-sm"

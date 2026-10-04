@@ -48,6 +48,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
     updateHolidayPolicy, 
     deleteHolidayPolicy, 
     weeklySchedules, 
+    addWeeklySchedule,
     updateWeeklySchedule,
     currentUser,
     branches,
@@ -198,7 +199,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
     }
 
     // Check Primary Off Day (e.g. Sunday)
-    if (isDateWeeklyOffBySchedule(dateObj, weeklySchedules)) {
+    if (primaryOffDays.includes(dayName) || isDateWeeklyOffBySchedule(dateObj, weeklySchedules)) {
       return {
         dateStr,
         dayNum,
@@ -392,6 +393,13 @@ export const WeekOffCalendarSettings: React.FC = () => {
     if (defaultWeeklySchedule) {
       updateWeeklySchedule(defaultWeeklySchedule.id, {
         name: defaultWeeklySchedule.name || 'Default Weekly Off Schedule',
+        workingDays: workingDaysText,
+        offDays: offDaysText,
+        isDefault: true
+      });
+    } else {
+      addWeeklySchedule({
+        name: 'Default Weekly Off Schedule',
         workingDays: workingDaysText,
         offDays: offDaysText,
         isDefault: true

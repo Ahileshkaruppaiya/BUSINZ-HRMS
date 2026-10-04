@@ -67,6 +67,7 @@ export class AuthRepository {
                         employeeId: data.employee_id,
                         department: data.department || 'General',
                         designation: data.designation || 'Staff',
+                        company_id: (cleanLower.includes('nexus') || cleanLower.includes('companyb')) ? 'company-b' : 'company-a',
                         isActive: accountStatus === 'ACTIVE',
                         mustChangePassword: data.must_change_password !== undefined ? data.must_change_password : false,
                         accountStatus,
@@ -80,6 +81,42 @@ export class AuthRepository {
             catch (err) {
                 console.warn('Supabase auth query error:', err);
             }
+        }
+        // Built-in company accounts for multi-company isolation and testing
+        const defaultHash = await bcrypt.hash('admin123', 10);
+        if (cleanLower === 'admin@companyb.com' || cleanLower === 'emp-b001' || cleanLower === 'admin@nexus-solutions.com') {
+            return {
+                id: 'usr-company-b-admin',
+                email: 'admin@nexus-solutions.com',
+                passwordHash: defaultHash,
+                plainPassword: 'admin123',
+                name: 'Nexus Admin',
+                role: 'Super Admin',
+                employeeId: 'EMP-B001',
+                department: 'Corporate',
+                designation: 'Managing Director',
+                company_id: 'company-b',
+                isActive: true,
+                mustChangePassword: false,
+                accountStatus: 'ACTIVE',
+            };
+        }
+        if (cleanLower === 'admin@businz.com' || cleanLower === 'admin@companya.com' || cleanLower === 'emp-000') {
+            return {
+                id: 'usr-company-a-admin',
+                email: 'admin@businz.com',
+                passwordHash: defaultHash,
+                plainPassword: 'admin123',
+                name: 'Businz Super Admin',
+                role: 'Super Admin',
+                employeeId: 'EMP-000',
+                department: 'Management',
+                designation: 'Super Administrator',
+                company_id: 'company-a',
+                isActive: true,
+                mustChangePassword: false,
+                accountStatus: 'ACTIVE',
+            };
         }
         return null;
     }
@@ -323,6 +360,7 @@ export class AuthRepository {
             name: user.name,
             department: user.department,
             designation: user.designation,
+            company_id: user.company_id || 'company-a',
             mustChangePassword: user.mustChangePassword,
             accountStatus: user.accountStatus,
             credentialEmailStatus: user.credentialEmailStatus,

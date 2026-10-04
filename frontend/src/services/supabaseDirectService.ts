@@ -10,6 +10,47 @@ const getHeaders = () => ({
   'Content-Type': 'application/json',
 });
 
+const resolveDepartmentId = async (departmentName?: string, departmentId?: string): Promise<string | undefined> => {
+  if (departmentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(departmentId)) {
+    return departmentId;
+  }
+  const cleanName = departmentName?.trim();
+  if (!cleanName) return undefined;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/departments?select=id,name&name=ilike.${encodeURIComponent(cleanName)}&limit=1`, {
+      headers: getHeaders(),
+    });
+    if (res.ok) {
+      const rows = await res.json();
+      const match = Array.isArray(rows) ? rows[0] : null;
+      if (match?.id) return match.id;
+    }
+
+    const cleanCode = cleanName.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'DEPT';
+    const createRes = await fetch(`${SUPABASE_URL}/rest/v1/departments`, {
+      method: 'POST',
+      headers: {
+        ...getHeaders(),
+        'Prefer': 'return=representation',
+      },
+      body: JSON.stringify({
+        name: cleanName,
+        code: cleanCode,
+      }),
+    });
+    if (createRes.ok) {
+      const created = await createRes.json();
+      const row = Array.isArray(created) ? created[0] : created;
+      return row?.id;
+    }
+  } catch (err) {
+    console.warn('[SupabaseDirect] resolveDepartmentId notice:', err);
+  }
+
+  return undefined;
+};
+
 export const supabaseDirect = {
   /**
    * Fetches all active employees directly from Supabase REST
@@ -43,6 +84,9 @@ export const supabaseDirect = {
     email: string;
     password?: string;
     designation?: string;
+    department?: string;
+    department_id?: string;
+    reporting_manager_name?: string;
     basic_salary?: number;
     phone?: string;
     status?: string;
@@ -52,13 +96,17 @@ export const supabaseDirect = {
     attendance_method?: string;
   }): Promise<{ success: boolean; data?: any; error?: any }> {
     try {
+      const departmentId = await resolveDepartmentId(emp.department, emp.department_id);
+
       const payload = {
         employee_id: emp.employee_id,
         first_name: emp.first_name,
         last_name: emp.last_name || '',
         email: emp.email.toLowerCase().trim(),
         password: emp.password || 'Password@123',
+        department_id: departmentId || null,
         designation: emp.designation || 'Staff',
+        reporting_manager_name: emp.reporting_manager_name || null,
         basic_salary: Number(emp.basic_salary) || 15000,
         phone: emp.phone || null,
         status: emp.status || 'Active',

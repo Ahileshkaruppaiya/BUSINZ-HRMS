@@ -229,23 +229,57 @@ export function downloadElementAsPDF(
   <meta charset="utf-8">
   <title>${escapeHtml(title)} - ${escapeHtml(companyName)}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;700&display=swap');
+    
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Plus Jakarta Sans', 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       color: #0F172A;
-      padding: 24px;
+      padding: 16px;
       margin: 0;
       background: #ffffff;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
+
+    img {
+      max-width: 100%;
+      height: auto;
+      object-fit: contain !important;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      page-break-inside: auto;
+    }
+
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+
+    th, td {
+      word-wrap: break-word;
+    }
+
     @media print {
       @page {
-        margin: 8mm;
-        size: auto;
+        margin: 10mm;
+        size: A4 portrait;
+      }
+      body {
+        padding: 0;
       }
       .no-print {
         display: none !important;
+      }
+      .page-break-avoid {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
     }
   </style>
@@ -254,11 +288,12 @@ export function downloadElementAsPDF(
   ${elem.outerHTML}
   <div class="no-print" style="margin-top: 24px; text-align: center;">
     <button onclick="window.print()" style="padding: 10px 24px; background: #0E7490; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px;">
-      Save as PDF
+      Print / Save as PDF
     </button>
   </div>
 </body>
 </html>`;
+
 
   // Use hidden iframe first to prevent Apple Safari pop-up blockers
   try {
@@ -303,6 +338,8 @@ export function downloadElementAsPDF(
     alert('Pop-up was blocked. Please allow pop-ups in Safari / Chrome to save as PDF.');
   }
 }
+
+export const printElement = downloadElementAsPDF;
 
 function escapeHtml(unsafe: string): string {
   return String(unsafe).replace(/[<>&'"]/g, c => {

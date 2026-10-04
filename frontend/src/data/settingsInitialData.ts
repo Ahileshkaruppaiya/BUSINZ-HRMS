@@ -11,8 +11,13 @@ import {
   EmployeeRewardRecord,
   PolicyAuditLog 
 } from '../types/settings';
+import { Employee, PayrollRecord } from '../types/hrms';
 
-export const INITIAL_COMPANY_INFO: CompanyInfo = {
+
+export const COMPANY_A_PROFILE: CompanyInfo = {
+  id: 'comp-a',
+  company_id: 'company-a',
+  companyCode: '',
   logoUrl: '',
   companyName: '',
   legalCompanyName: '',
@@ -25,10 +30,50 @@ export const INITIAL_COMPANY_INFO: CompanyInfo = {
   website: '',
   officialEmail: '',
   officialPhone: '',
-  createdAt: new Date().toISOString(),
-  createdBy: '',
+  registeredAddress: '',
+  branchAddress: '',
+  ownerName: '',
+  authorizedSignatoryName: '',
+  authorizedSignatoryDesignation: '',
+  signatureImageUrl: '',
+  stampImageUrl: '',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  createdBy: 'System',
   updatedAt: new Date().toISOString(),
-  updatedBy: ''
+  updatedBy: 'System'
+};
+
+export const COMPANY_B_PROFILE: CompanyInfo = {
+  id: 'comp-b',
+  company_id: 'company-b',
+  companyCode: 'BRANCH-B',
+  logoUrl: '',
+  companyName: '',
+  legalCompanyName: '',
+  companyType: '',
+  industry: '',
+  registrationNumber: '',
+  gstNumber: '',
+  panNumber: '',
+  cinNumber: '',
+  website: '',
+  officialEmail: '',
+  officialPhone: '',
+  registeredAddress: '',
+  branchAddress: '',
+  ownerName: '',
+  authorizedSignatoryName: '',
+  authorizedSignatoryDesignation: '',
+  signatureImageUrl: '',
+  stampImageUrl: '',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  createdBy: 'System',
+  updatedAt: new Date().toISOString(),
+  updatedBy: 'System'
+};
+
+export const INITIAL_COMPANY_INFO: CompanyInfo = {
+  ...COMPANY_A_PROFILE
 };
 
 export const INITIAL_COMPANY_BRANCHES: CompanyBranch[] = [];
@@ -92,3 +137,11 @@ export const INITIAL_REWARD_POLICIES: RewardPolicy[] = [];
 export const INITIAL_EMPLOYEE_REWARDS: EmployeeRewardRecord[] = [];
 
 export const INITIAL_POLICY_AUDIT_LOGS: PolicyAuditLog[] = [];
+
+export const SAMPLE_COMPANY_A_EMPLOYEES: Employee[] = [];
+
+export const SAMPLE_COMPANY_B_EMPLOYEES: Employee[] = [];
+
+export const SAMPLE_COMPANY_A_PAYROLL: PayrollRecord[] = [];
+
+export const SAMPLE_COMPANY_B_PAYROLL: PayrollRecord[] = [];

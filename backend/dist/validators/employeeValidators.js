@@ -370,6 +370,141 @@ export const statutoryDetailsSchema = z.object({
     panNumber: panNumberSchema,
     uanNumber: uanNumberSchema.optional(),
 });
+/**
+ * Indian Mobile Phone Schema:
+ * - Exactly 10 digits
+ * - First digit must be 6, 7, 8, or 9
+ * - Rejects values longer or shorter than 10 digits
+ * - Rejects alphabets and symbols
+ * - Rejects all-repeated unrealistic digits (e.g. 1111111111)
+ */
+export const phoneSchema = z.preprocess((val) => {
+    if (val === null || val === undefined || val === '')
+        return undefined;
+    if (typeof val === 'number')
+        return String(val).trim();
+    if (typeof val === 'string')
+        return val.trim();
+    return val;
+}, z.string({
+    required_error: 'Phone number is required.',
+    invalid_type_error: 'Phone number must be a string.',
+})
+    .refine((val) => {
+    // 1. Indian 10-digit mobile (starts with 6-9, no all-repeated digits)
+    if (/^[6-9]\d{9}$/.test(val)) {
+        return !/^(\d)\1{9}$/.test(val);
+    }
+    // 2. International phone with country code (e.g. +1 2025550143 or +971 501234567)
+    if (/^\+[1-9]\d{0,3}[\s-]?[0-9]{6,14}$/.test(val)) {
+        const rawDigits = val.replace(/\D/g, '');
+        return !/^(\d)\1{6,}$/.test(rawDigits);
+    }
+    return false;
+}, {
+    message: 'Phone number must contain exactly 10 digits starting with 6, 7, 8, or 9.',
+}));
+export const optionalPhoneSchema = z.preprocess((val) => {
+    if (val === null || val === undefined || val === '')
+        return undefined;
+    if (typeof val === 'number')
+        return String(val).trim();
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        return trimmed === '' ? undefined : trimmed;
+    }
+    return val;
+}, z.string({
+    invalid_type_error: 'Phone number must be a string.',
+})
+    .refine((val) => {
+    if (/^[6-9]\d{9}$/.test(val)) {
+        return !/^(\d)\1{9}$/.test(val);
+    }
+    if (/^\+[1-9]\d{0,3}[\s-]?[0-9]{6,14}$/.test(val)) {
+        const rawDigits = val.replace(/\D/g, '');
+        return !/^(\d)\1{6,}$/.test(rawDigits);
+    }
+    return false;
+}, {
+    message: 'Phone number must contain exactly 10 digits starting with 6, 7, 8, or 9.',
+})
+    .optional());
+/**
+ * First Name Schema:
+ * - Min 2 characters, Max 100 characters
+ * - Letters and spaces only, allowing legitimate '.', "'", '-'
+ * - Must start with a letter
+ * - Rejects numbers and random special characters
+ * - Rejects 4+ consecutive identical characters (e.g. kkkk, aaaa)
+ * - Rejects unrealistic consonant keyboard mash (e.g. dfxcvbn, asdfghhjkklll)
+ */
+export const firstNameSchema = z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string({
+    required_error: 'First Name is required.',
+    invalid_type_error: 'First Name must be a string.',
+})
+    .min(2, 'First Name must be at least 2 characters.')
+    .max(100, 'First Name cannot exceed 100 characters.')
+    .regex(/^[A-Za-z][A-Za-z\s.'-]*$/, 'First Name must contain letters and spaces only. Numbers and invalid symbols are not allowed.')
+    .refine((val) => !/(.)\1{3,}/i.test(val), {
+    message: 'First Name contains invalid repetitive characters.',
+})
+    .refine((val) => !/[bcdfghjklmnpqrstvwxyz]{6,}/i.test(val.replace(/[\s.'-]/g, '')), {
+    message: 'Please enter a realistic name.',
+}));
+/**
+ * Last Name Schema:
+ * - Max 100 characters
+ * - Letters and spaces only, allowing legitimate '.', "'", '-'
+ * - Rejects numbers and random symbols
+ * - Rejects 4+ consecutive identical characters
+ */
+export const lastNameSchema = z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string({
+    invalid_type_error: 'Last Name must be a string.',
+})
+    .max(100, 'Last Name cannot exceed 100 characters.')
+    .regex(/^[A-Za-z\s.'-]*$/, 'Last Name must contain letters and spaces only.')
+    .refine((val) => !/(.)\1{3,}/i.test(val), {
+    message: 'Last Name contains invalid repetitive characters.',
+})
+    .refine((val) => val === '' || !/[bcdfghjklmnpqrstvwxyz]{6,}/i.test(val.replace(/[\s.'-]/g, '')), {
+    message: 'Please enter a realistic name.',
+})
+    .optional()
+    .default(''));
+/**
+ * Salary Schema:
+ * - Non-negative number (0 or positive)
+ * - Not float for precision issues; validated as number/decimal >= 0
+ * - Max realistic upper bound
+ */
+export const basicSalarySchema = z.preprocess((val) => {
+    if (val === null || val === undefined || val === '')
+        return undefined;
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (/^[0-9]+(\.[0-9]+)?$/.test(trimmed))
+            return parseFloat(trimmed);
+        return NaN;
+    }
+    return val;
+}, z.number({
+    invalid_type_error: 'Salary must be a valid number.',
+})
+    .min(0, 'Salary cannot be negative.')
+    .max(100000000, 'Salary exceeds maximum allowed limit.'));
+/**
+ * Employee ID Schema:
+ * - String, 2 to 50 characters
+ * - Alphanumeric, hyphen, underscore
+ */
+export const employeeIdSchema = z.preprocess((val) => (typeof val === 'string' ? val.trim() : val), z.string({
+    required_error: 'Employee ID is required.',
+    invalid_type_error: 'Employee ID must be a string.',
+})
+    .min(2, 'Employee ID must be at least 2 characters.')
+    .max(50, 'Employee ID cannot exceed 50 characters.')
+    .regex(/^[A-Za-z0-9\-_]+$/, 'Employee ID can only contain letters, numbers, hyphens, and underscores.'));
 // ============================================================================
 // 3. COMPOSITE CREATE EMPLOYEE SCHEMA
 // Supports standard fields + nested objects OR flat address/education/banking fields.
@@ -386,6 +521,7 @@ export const employeeEmailSchema = z.preprocess((val) => (typeof val === 'string
     invalid_type_error: 'Email ID must be a string.',
 })
     .min(1, 'Email ID is required.')
+    .max(255, 'Email ID cannot exceed 255 characters.')
     .refine((val) => !/\s/.test(val), {
     message: 'Please enter a valid email ID.',
 })
@@ -394,18 +530,21 @@ export const employeeEmailSchema = z.preprocess((val) => (typeof val === 'string
 }));
 export const createEmployeeSchema = z.object({
     // Core Identification & Contact
-    firstName: z.string().min(1, 'First Name is required').regex(/^[A-Za-z\s]+$/, 'First Name must contain letters and spaces only'),
-    lastName: z.string().regex(/^[A-Za-z\s]*$/, 'Last Name must contain letters and spaces only').optional().default(''),
+    firstName: firstNameSchema,
+    lastName: lastNameSchema,
     email: employeeEmailSchema,
-    department: z.string().optional().default('General'),
-    designation: z.string().optional().default('Staff'),
-    basicSalary: z.number().positive().optional().default(15000),
-    grossSalary: z.number().positive().optional(),
-    employeeId: z.string().optional(),
-    password: z.string().optional(),
-    phone: z.string().optional(),
-    branch: z.string().optional(),
-    role: z.string().optional(),
+    department: z.string().max(100).optional().default('General'),
+    designation: z.string().max(100).optional().default('Staff'),
+    basicSalary: basicSalarySchema.optional().default(15000),
+    grossSalary: basicSalarySchema.optional(),
+    employeeId: employeeIdSchema.optional(),
+    password: z.string().min(6, 'Password must be at least 6 characters.').optional(),
+    phone: optionalPhoneSchema,
+    mobile: optionalPhoneSchema,
+    emergencyMobile: optionalPhoneSchema,
+    emergencyAltMobile: optionalPhoneSchema,
+    branch: z.string().max(100).optional(),
+    role: z.string().max(50).optional(),
     // Nested structures (as sent from frontend onboarding)
     currentAddress: currentAddressSchema.optional(),
     permanentAddress: z.object({
@@ -423,8 +562,8 @@ export const createEmployeeSchema = z.object({
     salaryDetails: z.object({
         panNumber: panNumberSchema.optional(),
         uanNumber: uanNumberSchema.optional(),
-        basicSalary: z.number().optional(),
-        monthlyCtc: z.number().optional(),
+        basicSalary: basicSalarySchema.optional(),
+        monthlyCtc: basicSalarySchema.optional(),
     }).passthrough().optional(),
     // Flat field validations (when supplied at top level)
     addressLine1: addressLine1Schema.optional(),
@@ -490,17 +629,20 @@ export const createEmployeeSchema = z.object({
 // All fields optional, but if supplied MUST pass field-level validation strictly.
 // ============================================================================
 export const updateEmployeeSchema = z.object({
-    firstName: z.string().min(1, 'First Name cannot be empty').regex(/^[A-Za-z\s]+$/, 'First Name must contain letters and spaces only').optional(),
-    lastName: z.string().regex(/^[A-Za-z\s]*$/, 'Last Name must contain letters and spaces only').optional(),
+    firstName: firstNameSchema.optional(),
+    lastName: lastNameSchema.optional(),
     email: employeeEmailSchema.optional(),
-    department: z.string().optional(),
-    designation: z.string().optional(),
-    basicSalary: z.number().positive().optional(),
-    grossSalary: z.number().positive().optional(),
-    employeeId: z.string().optional(),
-    password: z.string().optional(),
-    phone: z.string().optional(),
-    branch: z.string().optional(),
+    department: z.string().max(100).optional(),
+    designation: z.string().max(100).optional(),
+    basicSalary: basicSalarySchema.optional(),
+    grossSalary: basicSalarySchema.optional(),
+    employeeId: employeeIdSchema.optional(),
+    password: z.string().min(6).optional(),
+    phone: optionalPhoneSchema,
+    mobile: optionalPhoneSchema,
+    emergencyMobile: optionalPhoneSchema,
+    emergencyAltMobile: optionalPhoneSchema,
+    branch: z.string().max(100).optional(),
     status: z.string().optional(),
     mustChangePassword: z.boolean().optional(),
     accountStatus: z.string().optional(),
@@ -521,8 +663,8 @@ export const updateEmployeeSchema = z.object({
     salaryDetails: z.object({
         panNumber: panNumberSchema.optional(),
         uanNumber: uanNumberSchema.optional(),
-        basicSalary: z.number().optional(),
-        monthlyCtc: z.number().optional(),
+        basicSalary: basicSalarySchema.optional(),
+        monthlyCtc: basicSalarySchema.optional(),
     }).passthrough().optional(),
     // Flat field validations
     addressLine1: addressLine1Schema.optional(),

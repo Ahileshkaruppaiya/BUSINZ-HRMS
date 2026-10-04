@@ -154,8 +154,8 @@ export class PayrollService {
             return true;
         });
     }
-    async getPayslip(employeeId, month, year) {
-        let payslip = await payrollRepository.generatePayslip(employeeId, month, year);
+    async getPayslip(employeeId, month, year, companyId) {
+        let payslip = await payrollRepository.generatePayslip(employeeId, month, year, companyId);
         if (!payslip) {
             // If no past processed run exists for this month, calculate a preview payslip on the fly!
             const preview = await this.previewPayroll({
@@ -165,13 +165,29 @@ export class PayrollService {
             });
             const emp = await employeeRepository.getEmployeeById(employeeId);
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const targetCompanyId = companyId || emp?.branch || 'company-a';
+            const compSettings = await settingsRepository.getCompanySettings(targetCompanyId);
             payslip = {
                 company: {
-                    companyName: 'Businz Technologies Private Limited',
-                    legalName: 'Businz Technologies Pvt Ltd',
-                    address: 'Businz Towers, Tech Corridor, OMR, Chennai, Tamil Nadu - 600096',
-                    pan: 'AAACB1234F',
-                    gst: '33AAACB1234F1Z5',
+                    company_id: compSettings.company_id || targetCompanyId,
+                    companyName: compSettings.companyName || 'Corporate Organization',
+                    legalName: compSettings.legalCompanyName || compSettings.legalEntity || compSettings.companyName || 'Corporate Organization',
+                    logoUrl: compSettings.logoUrl || '',
+                    address: compSettings.address || '',
+                    registeredAddress: compSettings.registeredAddress || compSettings.address || '',
+                    branchAddress: compSettings.branchAddress || '',
+                    email: compSettings.officialEmail || compSettings.contactEmail || '',
+                    phone: compSettings.officialPhone || compSettings.contactPhone || '',
+                    website: compSettings.website || '',
+                    pan: compSettings.panNumber || '',
+                    gst: compSettings.gstNumber || compSettings.taxIdGst || '',
+                    cin: compSettings.cinNumber || '',
+                    registrationNumber: compSettings.registrationNumber || '',
+                    ownerName: compSettings.ownerName || '',
+                    authorizedSignatoryName: compSettings.authorizedSignatoryName || '',
+                    authorizedSignatoryDesignation: compSettings.authorizedSignatoryDesignation || 'Authorized Signatory',
+                    signatureImageUrl: compSettings.signatureImageUrl || '',
+                    stampImageUrl: compSettings.stampImageUrl || '',
                 },
                 employee: {
                     id: emp?.id || employeeId,

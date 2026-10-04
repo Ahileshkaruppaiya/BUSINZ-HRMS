@@ -22,7 +22,16 @@ export const ReportsAnalytics: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<string>('All');
   const [selectedLeaveType, setSelectedLeaveType] = useState<string>('All');
   const [selectedPolicy, setSelectedPolicy] = useState<string>('All');
-  const [dateRange, setDateRange] = useState({ start: '2026-08-01', end: '2026-09-30' });
+  const [dateRange, setDateRange] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+    return {
+      start: `${y}-${m}-01`,
+      end: `${y}-${m}-${String(lastDay).padStart(2, '0')}`
+    };
+  });
 
   const filteredAttendance = useMemo(() => {
     return attendanceRecords.filter(a => {

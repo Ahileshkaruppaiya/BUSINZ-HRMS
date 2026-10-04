@@ -32,6 +32,16 @@ interface LeaveManagementProps {
   onCloseQuickAdd?: () => void;
 }
 
+const DEFAULT_LEAVE_CATEGORY_OPTIONS = [
+  { id: 'default-cl', value: 'Casual Leave (CL)', label: 'Casual Leave (CL)' },
+  { id: 'default-sl', value: 'Sick Leave (SL)', label: 'Sick Leave (SL)' },
+  { id: 'default-el', value: 'Earned Leave (EL)', label: 'Earned Leave (EL)' },
+  { id: 'default-eml', value: 'Emergency Leave', label: 'Emergency Leave' },
+  { id: 'default-pl', value: 'Paid Leave', label: 'Paid Leave' },
+  { id: 'default-ul', value: 'Unpaid Leave', label: 'Unpaid Leave' },
+  { id: 'default-co', value: 'Compensatory Off', label: 'Compensatory Off' }
+];
+
 export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal, openWfhModal, onCloseQuickAdd }) => {
   const { 
     leaveRequests, 
@@ -801,11 +811,9 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
                             label: `${p.name} (${p.quotaDays} Days/Year • ${p.monthlyAccrual})`
                           }));
 
-                      if (options.length === 0) {
-                        return <option value="">-- No Active Leave Policies (Configure in Settings) --</option>;
-                      }
+                      const finalOptions = options.length > 0 ? options : DEFAULT_LEAVE_CATEGORY_OPTIONS;
 
-                      return options.map(item => (
+                      return finalOptions.map(item => (
                         <option key={item.id} value={item.value}>
                           {item.label}
                         </option>

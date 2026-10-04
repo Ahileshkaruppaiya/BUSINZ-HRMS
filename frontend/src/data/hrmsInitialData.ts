@@ -26,12 +26,43 @@ import {
 // ----------------------------------------------------------------------------
 // 1. EMPLOYEES ROSTER (Clean Workforce Directory - Master Super Admin excluded)
 // ----------------------------------------------------------------------------
-export const isSystemAdmin = (emp?: { employeeId?: string; email?: string; designation?: string; role?: string } | null): boolean => {
+export const isSystemAdmin = (emp?: {
+  employeeId?: string;
+  email?: string;
+  designation?: string;
+  role?: string | { name?: string; key?: string };
+} | null): boolean => {
   if (!emp) return false;
   return (
     emp.employeeId === 'EMP-000' ||
     emp.email?.toLowerCase() === 'admin@businz.com' ||
     emp.designation === 'Super Administrator'
+  );
+};
+
+export const isAttendanceExemptEmployee = (emp?: {
+  employeeId?: string;
+  email?: string;
+  designation?: string;
+  role?: string | { name?: string; key?: string };
+  attendanceMethod?: string;
+} | null): boolean => {
+  if (!emp) return false;
+
+  const designation = (emp.designation || '').trim().toLowerCase();
+  const roleValue = typeof emp.role === 'string'
+    ? emp.role
+    : emp.role?.key || emp.role?.name || '';
+  const role = roleValue.trim().toLowerCase();
+
+  return (
+    isSystemAdmin(emp) ||
+    emp.attendanceMethod === 'Exempt' ||
+    designation === 'ceo' ||
+    designation.includes('chief executive officer') ||
+    designation.includes('owner') ||
+    role === 'ceo' ||
+    role === 'owner'
   );
 };
 

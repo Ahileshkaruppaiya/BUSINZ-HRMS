@@ -62,6 +62,8 @@ export interface User {
   department: string;
   designation: string;
   employeeId: string;
+  company_id?: string;
+  companyId?: string;
 }
 
 export interface BankDetails {
@@ -74,6 +76,8 @@ export interface BankDetails {
 export interface Employee {
   id: string;
   employeeId: string;
+  company_id?: string;
+  companyId?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -138,6 +142,7 @@ export interface Employee {
   skills?: string[];
   role?: Role | string;
   maritalStatus?: 'Single' | 'Married' | 'Divorced' | 'Widowed';
+  bloodGroup?: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | '';
   workLocation?: string;
   currentAddress?: {
     line1?: string;
@@ -436,6 +441,8 @@ export interface NotificationItem {
 export interface PayrollRecord {
   id: string;
   employeeId: string;
+  company_id?: string;
+  companyId?: string;
   employeeName: string;
   department: string;
   designation: string;
@@ -463,6 +470,10 @@ export interface PayrollRecord {
   lopDays?: number;
   overtimeHours?: number;
   overtimeAmount?: number;
+  grossSalary?: number;
+  totalDeductions?: number;
+  earningsBreakdown?: PayrollComponentLineItem[];
+  deductionsBreakdown?: PayrollComponentLineItem[];
   netSalary: number;
   rewardEarnings?: number;
   lateAttendanceDeduction?: number;
@@ -470,6 +481,13 @@ export interface PayrollRecord {
   sandwichDeduction?: number;
   internalDetails?: PayrollInternalDetails;
   status: 'Pending' | 'Verified' | 'Processed' | 'Paid';
+}
+
+export interface PayrollComponentLineItem {
+  name: string;
+  category?: 'EARNING' | 'DEDUCTION' | string;
+  amount: number;
+  description?: string;
 }
 
 export interface PayrollInternalDetails {

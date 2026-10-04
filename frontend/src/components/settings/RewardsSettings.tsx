@@ -340,49 +340,6 @@ export const RewardsSettings: React.FC = () => {
                 <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                   <button
                     type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => {
-                      addRewardPolicy({
-                        rewardName: 'Employee of the Month',
-                        rewardType: 'Employee of the Month',
-                        description: 'Monthly recognition for exceptional performance and teamwork.',
-                        applicableEmployees: 'ALL',
-                        applicableDepartments: 'ALL',
-                        eligibilityRule: 'All full-time employees with at least 3 months tenure.',
-                        valueType: 'FIXED_AMOUNT',
-                        amountValue: 5000,
-                        giftDescription: 'Certificate of Excellence + Cash Award',
-                        addToPayroll: true,
-                        status: 'Active'
-                      });
-                      addRewardPolicy({
-                        rewardName: 'Spot Excellence Award',
-                        rewardType: 'Spot Award',
-                        description: 'Instant quarterly recognition for extraordinary client appreciation or delivery.',
-                        applicableEmployees: 'ALL',
-                        applicableDepartments: 'ALL',
-                        eligibilityRule: 'Nominated by department manager or HR.',
-                        valueType: 'FIXED_AMOUNT',
-                        amountValue: 2500,
-                        giftDescription: 'Instant Memento & Payroll Credit',
-                        addToPayroll: true,
-                        status: 'Active'
-                      });
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontSize: '0.82rem',
-                      padding: '8px 16px',
-                      borderRadius: '10px'
-                    }}
-                  >
-                    <Trophy size={15} color="#0E7490" />
-                    <span>Initialize Sample Policies</span>
-                  </button>
-                  <button
-                    type="button"
                     className="btn btn-primary btn-sm"
                     onClick={openAddPolicyModal}
                     style={{

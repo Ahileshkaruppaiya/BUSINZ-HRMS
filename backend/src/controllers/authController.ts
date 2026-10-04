@@ -85,6 +85,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           employeeId: user.employeeId,
           department: user.department,
           designation: user.designation,
+          company_id: user.company_id || 'company-a',
           mustChangePassword: user.mustChangePassword,
           accountStatus: user.accountStatus,
           credentialEmailStatus: user.credentialEmailStatus,

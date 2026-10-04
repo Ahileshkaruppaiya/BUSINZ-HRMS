@@ -12,6 +12,12 @@ import {
   totalExperienceSchema,
   yearOfPassingSchema,
   employeeEmailSchema,
+  phoneSchema,
+  optionalPhoneSchema,
+  firstNameSchema,
+  lastNameSchema,
+  basicSalarySchema,
+  employeeIdSchema,
   createEmployeeSchema,
   updateEmployeeSchema,
 } from '../src/validators/employeeValidators.js';
@@ -507,6 +513,206 @@ describe('Backend Datatype & Character-level Validation Test Suite', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.email).toBe('vijay@company.com');
+      }
+    });
+  });
+
+  // ============================================================================
+  // 13. INDIAN MOBILE PHONE NUMBER VALIDATION
+  // ============================================================================
+  describe('Indian Mobile Phone Number Validation', () => {
+    it('accepts valid 10-digit Indian mobile numbers starting with 6, 7, 8, 9', () => {
+      const validPhones = ['9876543210', '8525852525', '7012345678', '6987654321'];
+      for (const phone of validPhones) {
+        const result = phoneSchema.safeParse(phone);
+        expect(result.success, `Expected phone "${phone}" to be valid`).toBe(true);
+        if (result.success) {
+          expect(result.data).toBe(phone);
+        }
+      }
+    });
+
+    it('rejects numbers starting with digits other than 6, 7, 8, 9 (e.g. 1234567890)', () => {
+      const invalidStarting = ['1234567890', '2345678901', '3456789012', '4567890123', '5678901234', '0123456789'];
+      for (const phone of invalidStarting) {
+        const result = phoneSchema.safeParse(phone);
+        expect(result.success, `Expected phone "${phone}" to be rejected`).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0].message).toContain('Phone number must contain exactly 10 digits starting with 6, 7, 8, or 9.');
+        }
+      }
+    });
+
+    it('rejects numbers exceeding 10 digits (e.g. 12345677788899900000, 98765432101)', () => {
+      const tooLong = ['12345677788899900000', '98765432101', '9876543210123', '9876543456000000'];
+      for (const phone of tooLong) {
+        const result = phoneSchema.safeParse(phone);
+        expect(result.success, `Expected phone "${phone}" to be rejected`).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0].message).toContain('Phone number must contain exactly 10 digits starting with 6, 7, 8, or 9.');
+        }
+      }
+    });
+
+    it('rejects phone numbers with alphabets or special characters (e.g. 98765abc10)', () => {
+      const nonNumeric = ['98765abc10', '98765@3210', 'phone12345', '++9198765', '+91abc12345'];
+      for (const phone of nonNumeric) {
+        const result = phoneSchema.safeParse(phone);
+        expect(result.success, `Expected phone "${phone}" to be rejected`).toBe(false);
+      }
+    });
+
+    it('accepts valid international phone numbers with country codes', () => {
+      const validIntl = ['+1 2025550143', '+44 7911123456', '+971 501234567', '+919876543210'];
+      for (const phone of validIntl) {
+        const result = phoneSchema.safeParse(phone);
+        expect(result.success, `Expected international phone "${phone}" to be accepted`).toBe(true);
+      }
+    });
+
+    it('rejects unrealistic repeated numbers (e.g. 1111111111, 9999999999)', () => {
+      const repeated = ['1111111111', '9999999999', '8888888888', '7777777777', '6666666666'];
+      for (const phone of repeated) {
+        const result = phoneSchema.safeParse(phone);
+        expect(result.success, `Expected repeated phone "${phone}" to be rejected`).toBe(false);
+      }
+    });
+
+    it('optionalPhoneSchema returns undefined when empty or not supplied', () => {
+      expect(optionalPhoneSchema.safeParse('').data).toBeUndefined();
+      expect(optionalPhoneSchema.safeParse(undefined).data).toBeUndefined();
+      expect(optionalPhoneSchema.safeParse(null).data).toBeUndefined();
+    });
+  });
+
+  // ============================================================================
+  // 14. EMPLOYEE NAME VALIDATION (VARCHAR 100, no numbers/symbols, anti-gibberish)
+  // ============================================================================
+  describe('Employee Name Validation', () => {
+    it('accepts legitimate names with letters, spaces, and acceptable punctuation (., \', -)', () => {
+      const legitimateNames = [
+        'Pavithra',
+        'Mohamed',
+        'John O\'Connor',
+        'Mary-Jane',
+        'Dr. APJ Abdul Kalam',
+        'Al', // valid 2-char minimum
+      ];
+      for (const name of legitimateNames) {
+        const result = firstNameSchema.safeParse(name);
+        expect(result.success, `Expected name "${name}" to be accepted`).toBe(true);
+      }
+    });
+
+    it('rejects names shorter than 2 characters', () => {
+      const tooShort = ['', ' ', 'A', 'Z'];
+      for (const name of tooShort) {
+        const result = firstNameSchema.safeParse(name);
+        expect(result.success, `Expected short name "${name}" to be rejected`).toBe(false);
+      }
+    });
+
+    it('rejects names exceeding 100 characters', () => {
+      const longName = 'A'.repeat(101);
+      const result = firstNameSchema.safeParse(longName);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects names with numbers or random special characters', () => {
+      const invalidChars = ['John123', 'John@Doe', 'Mark#', 'Robert$', 'Jane!'];
+      for (const name of invalidChars) {
+        const result = firstNameSchema.safeParse(name);
+        expect(result.success, `Expected name "${name}" to be rejected`).toBe(false);
+      }
+    });
+
+    it('rejects 4+ consecutive identical characters (e.g. kkkkkumar)', () => {
+      const repetitive = ['Aaaaron', 'kkkkkumar', 'Leeeee', 'Jjjjosh'];
+      for (const name of repetitive) {
+        const result = firstNameSchema.safeParse(name);
+        expect(result.success, `Expected repetitive name "${name}" to be rejected`).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0].message).toContain('repetitive');
+        }
+      }
+    });
+
+    it('rejects unrealistic keyboard mash names (e.g. Asdfghhjkklllpoiuuytrewqqaasdfhjkllmnbvccx)', () => {
+      const gibberish = ['Asdfghhjkklllpoiuuytrewqqaasdfhjkllmnbvccx', 'dfxcvbn', 'bcdfghjklmn'];
+      for (const name of gibberish) {
+        const result = firstNameSchema.safeParse(name);
+        expect(result.success, `Expected gibberish name "${name}" to be rejected`).toBe(false);
+      }
+    });
+  });
+
+  // ============================================================================
+  // 15. COMPOSITE END-TO-END REJECTION OF PROBLEM VALUES
+  // ============================================================================
+  describe('Composite API Rejection of Invalid Data', () => {
+    it('strictly rejects phone number 12345677788899900000 in createEmployeeSchema', () => {
+      const payload = {
+        firstName: 'Anand',
+        lastName: 'Kumar',
+        email: 'anand.kumar@businz.com',
+        phone: '12345677788899900000',
+        basicSalary: 25000,
+      };
+      const result = createEmployeeSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const phoneError = result.error.issues.find(i => i.path.includes('phone'));
+        expect(phoneError).toBeDefined();
+        expect(phoneError?.message).toContain('Phone number must contain exactly 10 digits starting with 6, 7, 8, or 9.');
+      }
+    });
+
+    it('strictly rejects keyboard mash name Asdfghhjkklllpoiuuytrewqqaasdfhjkllmnbvccx in createEmployeeSchema', () => {
+      const payload = {
+        firstName: 'Asdfghhjkklllpoiuuytrewqqaasdfhjkllmnbvccx',
+        lastName: 'Kumar',
+        email: 'anand.kumar@businz.com',
+        phone: '9876543210',
+        basicSalary: 25000,
+      };
+      const result = createEmployeeSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const nameError = result.error.issues.find(i => i.path.includes('firstName'));
+        expect(nameError).toBeDefined();
+      }
+    });
+
+    it('strictly rejects negative basic salary in createEmployeeSchema', () => {
+      const payload = {
+        firstName: 'Anand',
+        lastName: 'Kumar',
+        email: 'anand.kumar@businz.com',
+        phone: '9876543210',
+        basicSalary: -15000,
+      };
+      const result = createEmployeeSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const salError = result.error.issues.find(i => i.path.includes('basicSalary'));
+        expect(salError).toBeDefined();
+        expect(salError?.message).toContain('cannot be negative');
+      }
+    });
+
+    it('accepts completely valid employee payload with clean 10-digit phone', () => {
+      const payload = {
+        firstName: 'Anand',
+        lastName: 'Kumar',
+        email: 'anand.kumar@businz.com',
+        phone: '9876543210',
+        basicSalary: 25000,
+      };
+      const result = createEmployeeSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.phone).toBe('9876543210');
+        expect(result.data.firstName).toBe('Anand');
       }
     });
   });

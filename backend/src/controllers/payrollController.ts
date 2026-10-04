@@ -172,8 +172,9 @@ export class PayrollController {
       const empId = (req.params.employeeId || req.params.id) as string;
       const month = req.query.month ? Number(req.query.month) : 8;
       const year = req.query.year ? Number(req.query.year) : 2026;
+      const companyId = req.user?.company_id || (req.query.company_id as string) || (req.headers['x-company-id'] as string);
 
-      const payslip = await payrollService.getPayslip(empId, month, year);
+      const payslip = await payrollService.getPayslip(empId, month, year, companyId);
       res.json({ success: true, data: payslip });
     } catch (err) {
       next(err);

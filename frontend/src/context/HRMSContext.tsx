@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, ReactNode } from 'react';
 import {
   Role,
   ModuleName,
@@ -109,6 +109,8 @@ import {
 } from '../types/settings';
 import {
   INITIAL_COMPANY_INFO,
+  COMPANY_A_PROFILE,
+  COMPANY_B_PROFILE,
   INITIAL_COMPANY_BRANCHES,
   INITIAL_ORG_STRUCTURE,
   DEFAULT_MASTER_ATTENDANCE_POLICIES,
@@ -120,7 +122,13 @@ import {
   INITIAL_POLICY_AUDIT_LOGS
 } from '../data/settingsInitialData';
 import { DEFAULT_LOAN_POLICIES, INITIAL_LOAN_RECORDS } from '../data/loanInitialData';
-import { calculateEmployeePayroll } from '../services/policyEngine';
+import { calculateEmployeePayroll, resolveEmployeeWithPf } from '../services/policyEngine';
+import {
+  calibrateTrustedTime,
+  commitTrustedAttendanceTime,
+  getTrustedNow,
+  validateAttendancePunchTime
+} from '../services/trustedTimeService';
 import { payrollApi } from '../services/payrollApi';
 import { API_BASE_URL } from '../config/api';
 import { supabaseDirect } from '../services/supabaseDirectService';
@@ -207,6 +215,11 @@ const INITIAL_GEOFENCE_CONFIG: GeofenceConfig = {
   radiusMeters: 50000,
   enforceStrictly: false
 };
+
+const DEPRECATED_DEFAULT_LOAN_POLICY_NAMES = new Set([
+  'standard advance salary',
+  'long term employee welfare loan'
+]);
 
 // Default RBAC Permission Matrix for remaining 5 roles
 const DEFAULT_PERMISSIONS: PermissionMatrix = {
@@ -700,7 +713,7 @@ interface HRMSContextType {
   updatePermission: (role: Role, module: ModuleName, action: PermissionAction, enabled: boolean) => void;
 
   employees: Employee[];
-  addEmployee: (emp: Omit<Employee, 'id'>) => void;
+  addEmployee: (emp: Omit<Employee, 'id'>, options?: { persistToCloud?: boolean }) => void;
   updateEmployee: (id: string, empData: Partial<Employee>) => void;
   deleteEmployee: (id: string) => Promise<{ success: boolean; message?: string }> | any;
   deleteMultipleEmployees: (ids: string[]) => Promise<{ success: boolean; deletedCount: number; message?: string }>;
@@ -712,7 +725,7 @@ interface HRMSContextType {
   changeEmployeePassword: (identifier: string, newPassword: string) => { success: boolean; message: string };
 
   attendanceRecords: AttendanceRecord[];
-  markAttendance: (empId: string, status: AttendanceRecord['status'], method: AttendanceRecord['method'], location?: AttendanceRecord['location']) => void;
+  markAttendance: (empId: string, status: AttendanceRecord['status'], method: AttendanceRecord['method'], location?: AttendanceRecord['location']) => { success: boolean; message: string };
   attendanceAuditLogs: AttendanceAuditLog[];
   correctAttendanceRecord: (params: {
     attendanceId: string;
@@ -971,6 +984,10 @@ interface HRMSContextType {
   updateIntegrationsConfig: (config: Partial<IntegrationsConfig>) => void;
 
   // 5 New Core Enterprise Settings & Dynamic Policy Engine
+  activeCompanyId: string;
+  switchCompany: (companyId: string) => void;
+  allEmployees?: Employee[];
+  allPayrollRecords?: PayrollRecord[];
   companyInfo: CompanyInfo;
   updateCompanyInfo: (info: Partial<CompanyInfo>) => void;
 
@@ -1145,6 +1162,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (parsed.designation === 'CEO' || (parsed.designation && parsed.designation.toLowerCase().includes('ceo')) || parsed.role === 'CEO') {
             parsed.role = 'CEO';
           }
+          if (!parsed.company_id) {
+            parsed.company_id = (parsed.email?.toLowerCase().includes('nexus') || parsed.employeeId?.startsWith('EMP-B')) ? 'company-b' : 'company-a';
+          }
+          parsed.companyId = parsed.company_id;
           return parsed;
         }
       } catch (e) {
@@ -1159,13 +1180,17 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       avatar: '',
       department: 'Management',
       designation: 'Super Administrator',
-      employeeId: 'EMP-000'
+      employeeId: 'EMP-000',
+      company_id: 'company-a',
+      companyId: 'company-a'
     };
   });
 
   const updateCurrentUser = (updates: Partial<User>) => {
     setCurrentUser(prev => {
       const updated = { ...prev, ...updates };
+      if (updates.company_id && !updates.companyId) updated.companyId = updates.company_id;
+      if (updates.companyId && !updates.company_id) updated.company_id = updates.companyId;
       try {
         localStorage.setItem('vrm_hrms_current_user', JSON.stringify(updated));
       } catch (e) {
@@ -1174,6 +1199,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return updated;
     });
   };
+
 
   const [permissionMatrix, setPermissionMatrix] = useState<PermissionMatrix>(DEFAULT_PERMISSIONS);
   const [activeModule, setActiveModule] = useState<ModuleName>('dashboard');
@@ -1218,6 +1244,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const mapEmployeeFromDb = (d: any): Employee => ({
     id: d.id,
+    company_id: d.company_id || d.companyId || (d.email?.includes('nexus') || d.employee_id?.startsWith('EMP-B') ? 'company-b' : 'company-a'),
+    companyId: d.company_id || d.companyId || (d.email?.includes('nexus') || d.employee_id?.startsWith('EMP-B') ? 'company-b' : 'company-a'),
     employeeId: d.employeeId || d.employee_id,
     firstName: d.firstName || d.first_name || '',
     lastName: d.lastName || d.last_name || '',
@@ -1243,7 +1271,19 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       da: Number(d.da) || 0,
       conveyance: Number(d.conveyance) || 0,
     },
-    withPf: d.withPf ?? true,
+    salaryDetails: {
+      ...(d.salaryDetails || d.salary_details || {}),
+      withPf: d.salaryDetails?.withPf ?? d.salary_details?.withPf ?? d.withPf,
+      salaryScheme: d.salaryDetails?.salaryScheme ?? d.salary_details?.salaryScheme ?? d.salary_scheme
+    },
+    withPf: resolveEmployeeWithPf({
+      withPf: d.withPf,
+      salaryDetails: {
+        ...(d.salaryDetails || d.salary_details || {}),
+        withPf: d.salaryDetails?.withPf ?? d.salary_details?.withPf ?? d.withPf,
+        salaryScheme: d.salaryDetails?.salaryScheme ?? d.salary_details?.salaryScheme ?? d.salary_scheme
+      }
+    } as Employee),
     bankDetails: {
       bankName: d.bankName || d.bank_name || '',
       accountNumber: d.accountNumber || d.account_number || '',
@@ -1289,6 +1329,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
   const [attendanceAuditLogs, setAttendanceAuditLogs] = useState<AttendanceAuditLog[]>(INITIAL_ATTENDANCE_AUDIT_LOGS);
+
+  useEffect(() => {
+    calibrateTrustedTime();
+  }, []);
 
   const correctAttendanceRecord = (params: {
     attendanceId: string;
@@ -1478,7 +1522,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       employee: emp,
       shifts,
       attendanceRecords,
-      now: new Date(),
+      now: getTrustedNow(),
       holidays: holidayPolicies,
       weeklySchedules,
       leaves: leaveRequests,
@@ -1490,6 +1534,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     method: AttendanceRecord['method'] = 'Manual Punch'
   ): { success: boolean; message: string } => {
     const empId = currentUser.employeeId || currentUser.id || 'EMP-001';
+    const clockValidation = validateAttendancePunchTime(attendanceRecords);
+    if (!clockValidation.success) {
+      return { success: false, message: clockValidation.message };
+    }
     const evalResult = getEmployeeShiftAttendanceState(empId);
 
     if (type === 'Check-In') {
@@ -1508,7 +1556,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    const now = new Date();
+    const now = clockValidation.trustedNow;
     const nowHours = now.getHours();
     const nowMinutes = now.getMinutes();
     const ampm = nowHours >= 12 ? 'PM' : 'AM';
@@ -1540,6 +1588,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       employeeOtPolicies
     );
 
+    let rejectedMessage = '';
     setAttendanceRecords(prev => {
       const existingIdx = prev.findIndex(a => 
         (a.employeeId === empId || a.employeeId === currentUser.id) &&
@@ -1548,6 +1597,18 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (existingIdx !== -1) {
         const existing = prev[existingIdx];
+        if (type === 'Check-In' && existing.checkIn) {
+          rejectedMessage = 'Already checked in for this shift. Duplicate check-in is not allowed.';
+          return prev;
+        }
+        if (type === 'Check-Out' && existing.checkOut && existing.checkOut.trim() !== '' && existing.checkOut !== '--:--') {
+          rejectedMessage = 'Already checked out for this shift. Duplicate check-out is not allowed.';
+          return prev;
+        }
+        if (type === 'Check-Out' && !existing.checkIn) {
+          rejectedMessage = 'Check-out is not allowed before check-in.';
+          return prev;
+        }
         const newCheckIn = type === 'Check-In' ? nowTimeStr : (existing.checkIn || nowTimeStr);
         const newCheckOut = type === 'Check-Out' ? nowTimeStr : existing.checkOut;
 
@@ -1580,8 +1641,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         copy[existingIdx] = updated;
         return copy;
       } else {
+        if (type === 'Check-Out') {
+          rejectedMessage = 'Check-out is not allowed before check-in.';
+          return prev;
+        }
         const newCheckIn = type === 'Check-In' ? nowTimeStr : null;
-        const newCheckOut = type === 'Check-Out' ? nowTimeStr : null;
+        const newCheckOut = null;
 
         const calc = calculateAttendanceHoursAndStatus({
           checkIn: newCheckIn,
@@ -1616,6 +1681,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
+    if (rejectedMessage) {
+      return { success: false, message: rejectedMessage };
+    }
+
     const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
     setAttendanceAuditLogs(prev => [
       {
@@ -1640,6 +1709,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       priority: 'Normal',
       category: 'Attendance'
     });
+
+    commitTrustedAttendanceTime(now);
 
     return {
       success: true,
@@ -2223,7 +2294,6 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!emp) {
       return { success: false, message: 'Employee not found.' };
     }
-
     const fullName = `${emp.firstName} ${emp.lastName}`.trim();
     const breakMins = entry.breakDurationMinutes ?? 45;
 
@@ -2521,7 +2591,31 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // ========================================================
   // 5 CORE SETTINGS MODULES & POLICY ENGINE STATE
   // ========================================================
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(INITIAL_COMPANY_INFO);
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(() => {
+    const savedUser = localStorage.getItem('vrm_hrms_current_user');
+    let isCompB = false;
+    if (savedUser) {
+      try {
+        const p = JSON.parse(savedUser);
+        if (p.company_id === 'company-b' || p.companyId === 'company-b' || p.email?.includes('nexus') || p.employeeId?.startsWith('EMP-B')) {
+          isCompB = true;
+        }
+      } catch {}
+    }
+    return isCompB ? { ...COMPANY_B_PROFILE } : { ...COMPANY_A_PROFILE };
+  });
+
+  // Keep company branding in sync when user logs in or switches company context
+  useEffect(() => {
+    const cId = currentUser.company_id || currentUser.companyId || 'company-a';
+    if (cId === 'company-b' && companyInfo.company_id !== 'company-b') {
+      setCompanyInfo({ ...COMPANY_B_PROFILE });
+    } else if (cId === 'company-a' && companyInfo.company_id !== 'company-a') {
+      setCompanyInfo({ ...COMPANY_A_PROFILE });
+    }
+  }, [currentUser.company_id, currentUser.companyId]);
+
+
 
   const [companyBranches, setCompanyBranches] = useState<CompanyBranch[]>([]);
 
@@ -2609,10 +2703,14 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-        supabaseDirect.saveCompanySetting('company_info', companyInfo);
+        const cKey = (currentUser.company_id === 'company-b' || companyInfo.company_id === 'company-b')
+          ? 'company_info_company-b'
+          : 'company_info';
+        supabaseDirect.saveCompanySetting(cKey, companyInfo);
       }
     } catch {}
   }, [companyInfo]);
+
 
   useEffect(() => {
     try {
@@ -2792,9 +2890,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       emp = employees.find(e => e.employeeId === currentUser.employeeId || e.email === currentUser.email);
     }
 
-    const policy = (policyId ? loanPolicies.find(p => p.id === policyId) : activeLoanPolicy) || DEFAULT_LOAN_POLICIES?.[0];
+    const rawPolicy = (policyId ? loanPolicies.find(p => p.id === policyId) : activeLoanPolicy) || DEFAULT_LOAN_POLICIES?.[0];
     
-    if (!policy) {
+    if (!rawPolicy) {
       return {
         isEligible: false,
         ineligibleReason: 'No master advance or loan policies are currently configured.',
@@ -2806,6 +2904,19 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         policy: null as any
       };
     }
+
+    const policy: LoanPolicy = {
+      ...rawPolicy,
+      policyName: rawPolicy.policyName || (rawPolicy as any).name || 'Standard Advance Salary',
+      policyType: rawPolicy.policyType || 'Advance Salary',
+      minRepaymentMonths: rawPolicy.minRepaymentMonths ?? 1,
+      maxRepaymentMonths: rawPolicy.maxRepaymentMonths ?? 3,
+      minLoanAmount: rawPolicy.minLoanAmount ?? 1000,
+      maxLoanAmount: rawPolicy.maxLoanAmount ?? (rawPolicy as any).maxEligibleFixedAmount ?? 50000,
+      minimumEmploymentMonths: rawPolicy.minimumEmploymentMonths ?? (rawPolicy as any).minTenureMonthsRequired ?? 1,
+      maxActiveLoans: rawPolicy.maxActiveLoans ?? 1,
+      allowPreviousPending: rawPolicy.allowPreviousPending ?? false
+    };
 
     if (!emp) {
       return {
@@ -2824,12 +2935,20 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let tenureMonths = 24;
     try {
       const rawJoin = emp.joiningDate || (emp as any).dateOfJoining;
-      const joinDate = rawJoin && !isNaN(new Date(rawJoin).getTime()) ? new Date(rawJoin) : new Date('2023-01-10');
-      const now = new Date();
-      const diffMonths = ((now.getFullYear() - joinDate.getFullYear()) * 12) + (now.getMonth() - joinDate.getMonth()) + ((now.getDate() - joinDate.getDate()) / 30);
-      tenureMonths = Math.max(0, Math.round(diffMonths * 10) / 10);
+      if (rawJoin && !isNaN(new Date(rawJoin).getTime())) {
+        const joinDate = new Date(rawJoin);
+        const now = new Date();
+        const diffMonths = ((now.getFullYear() - joinDate.getFullYear()) * 12) + (now.getMonth() - joinDate.getMonth()) + ((now.getDate() - joinDate.getDate()) / 30);
+        tenureMonths = diffMonths > 0.5 ? Math.round(diffMonths * 10) / 10 : 12;
+      } else {
+        tenureMonths = 24;
+      }
     } catch {
       tenureMonths = 24;
+    }
+
+    if (emp.role === 'CEO' || emp.role === 'Super Admin' || emp.employeeId === 'EMP-000') {
+      tenureMonths = Math.max(tenureMonths, 24);
     }
 
     // 2. Calculate Monthly Salary with safe fallback
@@ -3196,7 +3315,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       addPolicyAuditLog({
         policyCategory: 'Company Details',
         policyId: 'COMP-ROOT',
-        policyName: updated.companyName,
+        policyName: updated.companyName || 'Company Details',
         action: 'EDIT',
         performedBy: currentUser.name,
         performedByRole: currentUser.role === 'Super Admin' ? 'CEO' : currentUser.role,
@@ -3204,10 +3323,40 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         oldValues: prev,
         newValues: updated
       });
-      supabaseDirect.saveCompanySetting('company_info', updated);
+      const settingKey = (currentUser.company_id === 'company-b' || updated.company_id === 'company-b')
+        ? 'company_info_company-b'
+        : 'company_info';
+      supabaseDirect.saveCompanySetting(settingKey, updated);
+      if (updated.companyCode) {
+        setBusinessSettings(bPrev => ({
+          ...bPrev,
+          employeeCodePrefix: updated.companyCode!,
+          employeeCodeSample: `${updated.companyCode}-001`
+        }));
+      }
       return updated;
     });
   };
+
+  const switchCompany = (companyId: string) => {
+    const isCompanyB = companyId === 'company-b';
+    const cId = isCompanyB ? 'company-b' : 'company-a';
+    updateCurrentUser({
+      company_id: cId,
+      companyId: cId,
+      ...(isCompanyB ? {
+        email: currentUser.email.includes('nexus') ? currentUser.email : 'admin@nexus-solutions.com',
+        name: currentUser.name.includes('Nexus') ? currentUser.name : 'Nexus Administrator',
+        employeeId: currentUser.employeeId.startsWith('EMP-B') ? currentUser.employeeId : 'EMP-B001'
+      } : {
+        email: currentUser.email.includes('businz') ? currentUser.email : 'admin@businz.com',
+        name: currentUser.name.includes('Businz') ? currentUser.name : 'Businz Super Admin',
+        employeeId: !currentUser.employeeId.startsWith('EMP-B') ? currentUser.employeeId : 'EMP-000'
+      })
+    });
+    setCompanyInfo(isCompanyB ? { ...COMPANY_B_PROFILE } : { ...COMPANY_A_PROFILE });
+  };
+
 
   const addCompanyBranch = (branch: Omit<CompanyBranch, 'id' | 'createdAt' | 'updatedAt'>) => {
     const now = new Date().toISOString();
@@ -3509,6 +3658,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         website: '',
         officialEmail: '',
         officialPhone: '',
+        ownerName: '',
+        authorizedSignatoryName: '',
+        authorizedSignatoryDesignation: '',
+        signatureImageUrl: '',
+        stampImageUrl: '',
         createdAt: new Date().toISOString(),
         createdBy: currentUser.name,
         updatedAt: new Date().toISOString(),
@@ -4547,8 +4701,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // Actions
-  const addEmployee = (empData: Omit<Employee, 'id'>) => {
-    const rawPrefix = businessSettings?.employeeCodePrefix || employeeConfig?.idFormatPrefix || 'EMP';
+  const addEmployee = (empData: Omit<Employee, 'id'>, options: { persistToCloud?: boolean } = {}) => {
+    const rawPrefix = companyInfo?.companyCode || businessSettings?.employeeCodePrefix || employeeConfig?.idFormatPrefix || 'EMP';
     const digits = employeeConfig?.idFormatDigits || 3;
     const startNum = employeeConfig?.idStartingNumber || 1;
     const newId = empData.employeeId && empData.employeeId.trim().length > 0
@@ -4556,8 +4710,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       : generateNextEmployeeId(employees, rawPrefix, digits, startNum);
 
     const cleanEmail = (empData.email || empData.personalEmail || '').trim().toLowerCase();
+    const currentCompId = currentUser.company_id || currentUser.companyId || 'company-a';
     const newEmp: Employee = {
       ...empData,
+      company_id: empData.company_id || empData.companyId || currentCompId,
+      companyId: empData.company_id || empData.companyId || currentCompId,
       email: cleanEmail,
       personalEmail: cleanEmail,
       id: newId,
@@ -4570,13 +4727,26 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     setEmployees(prev => [newEmp, ...prev]);
 
+    if (options.persistToCloud === false) {
+      addNotification({
+        title: 'New Employee Onboarded',
+        message: `${newEmp.firstName} ${newEmp.lastName} (${newEmp.employeeId}) onboarded. Login account created and credentials dispatched to ${newEmp.email}.`,
+        priority: 'Normal',
+        category: 'Announcement'
+      });
+      return;
+    }
+
     supabaseDirect.insertEmployee({
       employee_id: newEmp.employeeId,
       first_name: newEmp.firstName,
       last_name: newEmp.lastName,
       email: cleanEmail,
       password: newEmp.password,
+      department: newEmp.department,
+      department_id: newEmp.departmentId,
       designation: newEmp.designation,
+      reporting_manager_name: newEmp.reportingManagerName,
       basic_salary: newEmp.basicSalary,
       phone: newEmp.phone,
       status: newEmp.status,
@@ -4846,22 +5016,36 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     status: AttendanceRecord['status'],
     method: AttendanceRecord['method'],
     location?: AttendanceRecord['location']
-  ) => {
-    const evalResult = getEmployeeShiftAttendanceState(empId);
+  ): { success: boolean; message: string } => {
+    const clockValidation = validateAttendancePunchTime(attendanceRecords);
+    if (!clockValidation.success) {
+      addNotification({
+        title: 'Attendance Time Blocked',
+        message: clockValidation.message,
+        priority: 'Urgent',
+        category: 'Attendance'
+      });
+      return { success: false, message: clockValidation.message };
+    }
 
-    // If check-in is not available and check-out is not available, block punch
-    if (!evalResult.canCheckIn && !evalResult.canCheckOut) {
+    const evalResult = getEmployeeShiftAttendanceState(empId);
+    const methodText = String(method || '').toLowerCase();
+    const wantsCheckOut = methodText.includes('check-out') || methodText.includes('checkout') || methodText.includes('out');
+    const wantsCheckIn = methodText.includes('check-in') || methodText.includes('checkin') || methodText.includes('in') || !wantsCheckOut;
+    const punchType = wantsCheckOut ? 'Check-Out' : 'Check-In';
+
+    if ((wantsCheckIn && !evalResult.canCheckIn) || (wantsCheckOut && !evalResult.canCheckOut)) {
       console.warn(`[HRMS Attendance] Punch rejected for ${empId}: ${evalResult.message}`);
       addNotification({
-        title: 'Check-In Unavailable',
+        title: `${punchType} Unavailable`,
         message: evalResult.message,
         priority: 'Urgent',
         category: 'Attendance'
       });
-      return;
+      return { success: false, message: evalResult.message };
     }
 
-    const now = new Date();
+    const now = clockValidation.trustedNow;
     const today = evalResult.shiftDate;
     const nowTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     const emp = employees.find(e => e.id === empId || e.employeeId === empId);
@@ -4890,6 +5074,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const tempAttId = `ATT-${Date.now()}`;
     const targetEmpDbId = emp?.id && emp.id.length === 36 ? emp.id : (empId.length === 36 ? empId : undefined);
+    let rejectedMessage = '';
 
     setAttendanceRecords(prev => {
       const existingIdx = prev.findIndex(a => 
@@ -4899,6 +5084,19 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (existingIdx >= 0) {
         const copy = [...prev];
+        const existingRecord = copy[existingIdx];
+        if (wantsCheckIn && existingRecord.checkIn) {
+          rejectedMessage = 'Already checked in for this shift. Duplicate check-in is not allowed.';
+          return prev;
+        }
+        if (wantsCheckOut && existingRecord.checkOut && existingRecord.checkOut.trim() !== '' && existingRecord.checkOut !== '--:--') {
+          rejectedMessage = 'Already checked out for this shift. Duplicate check-out is not allowed.';
+          return prev;
+        }
+        if (wantsCheckOut && !existingRecord.checkIn) {
+          rejectedMessage = 'Check-out is not allowed before check-in.';
+          return prev;
+        }
         const existingCheckIn = copy[existingIdx].checkIn || nowTime;
         const inMins = parseTimeToMinutes(existingCheckIn);
         const outMins = parseTimeToMinutes(nowTime);
@@ -4912,7 +5110,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           shiftDate: today,
           shiftName: empShift.shiftName,
           checkIn: existingCheckIn,
-          checkOut: copy[existingIdx].checkIn ? nowTime : null,
+          checkOut: wantsCheckOut ? nowTime : copy[existingIdx].checkOut,
           status: calculatedStatus,
           lateStatus: copy[existingIdx].lateStatus || calculatedLateStatus,
           method,
@@ -4933,6 +5131,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         return copy;
       } else {
+        if (wantsCheckOut) {
+          rejectedMessage = 'Check-out is not allowed before check-in.';
+          return prev;
+        }
         const newRecord: AttendanceRecord = {
           id: tempAttId,
           employeeId: empId,
@@ -4978,6 +5180,19 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return [newRecord, ...prev];
       }
     });
+
+    if (rejectedMessage) {
+      addNotification({
+        title: `${punchType} Rejected`,
+        message: rejectedMessage,
+        priority: 'Urgent',
+        category: 'Attendance'
+      });
+      return { success: false, message: rejectedMessage };
+    }
+
+    commitTrustedAttendanceTime(now);
+    return { success: true, message: `${punchType} recorded at ${nowTime}` };
   };
 
   const addFaceLog = (log: Omit<FaceLog, 'id'>) => {
@@ -6532,6 +6747,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       }) || masterLeavePolicies.find(p => p.status === 'Active');
 
+      const employeeWithPf = resolveEmployeeWithPf(emp);
       const calc = calculateEmployeePayroll(
         emp,
         attendanceRecords,
@@ -6547,6 +6763,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const backendRec = backendRecords?.find((b: any) => b.employeeId === emp.employeeId);
       if (backendRec) {
+        const resolvedPfAmount = calc.epfDeduction;
+        const resolvedEsiAmount = calc.esiDeduction;
+        const resolvedProfessionalTax = calc.professionalTax;
+        const resolvedTotalDeductions = calc.totalDeductions;
         return {
           id: backendRec.id || `PAY-2026-08-${emp.employeeId}`,
           employeeId: emp.employeeId,
@@ -6555,27 +6775,42 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           designation: emp.designation,
           month: 'August',
           year: 2026,
-          basicSalary: backendRec.basicSalary,
-          allowances: (backendRec.hra || 0) + (backendRec.conveyance || 0) + (backendRec.da || 0),
-          da: backendRec.da,
-          conveyance: backendRec.conveyance,
-          hra: backendRec.hra,
-          withPf: backendRec.withPf,
-          bonus: backendRec.bonus || 0,
-          attendanceBonus: backendRec.attendanceBonus || 0,
-          rewardEarnings: backendRec.otherEarnings || 0,
-          taxDeduction: (backendRec.pfAmount || 0) + (backendRec.esicAmount || 0) + (backendRec.professionalTax || 0),
-          leaveDeduction: backendRec.lopAmount || 0,
-          advanceDeduction: (backendRec.advanceRecovery || 0) + (backendRec.loanRecovery || 0),
-          lateAttendanceDeduction: 0,
-          epfDeduction: backendRec.pfAmount || 0,
-          esiDeduction: backendRec.esicAmount || 0,
-          professionalTax: backendRec.professionalTax || 0,
+          basicSalary: calc.basicSalary,
+          allowances: calc.allowances,
+          da: calc.da,
+          conveyance: calc.conveyance,
+          hra: calc.hra,
+          withPf: backendRec.withPf ?? employeeWithPf,
+          bonus: calc.bonus,
+          attendanceBonus: calc.attendanceBonus || 0,
+          rewardEarnings: calc.rewardEarnings,
+          grossSalary: calc.grossSalary,
+          taxDeduction: resolvedPfAmount + resolvedEsiAmount + resolvedProfessionalTax,
+          leaveDeduction: calc.unpaidLeaveDeduction,
+          advanceDeduction: calc.advanceDeduction,
+          lateAttendanceDeduction: calc.lateAttendanceDeduction,
+          epfDeduction: resolvedPfAmount,
+          esiDeduction: resolvedEsiAmount,
+          professionalTax: resolvedProfessionalTax,
           workingDays: backendRec.workingDays || 26,
           presentDays: backendRec.presentDays || 26,
-          paidLeaves: 0,
+          paidDays: calc.paidDays,
+          paidLeaves: calc.paidLeaves,
           unpaidLeaves: backendRec.lopDays || 0,
-          netSalary: backendRec.netSalary,
+          totalDeductions: resolvedTotalDeductions,
+          earningsBreakdown: (calc.earningsBreakdown || []).map((e: any) => ({
+            name: e.name,
+            category: e.category || 'EARNING',
+            amount: Number(e.amount) || 0,
+            description: e.description || ''
+          })),
+          deductionsBreakdown: (calc.deductionsBreakdown || []).map((d: any) => ({
+            name: d.name,
+            category: d.category || 'DEDUCTION',
+            amount: Number(d.amount) || 0,
+            description: d.description || ''
+          })),
+          netSalary: calc.netSalary,
           internalDetails: {
             lateDetails: calc.lateDetails,
             leaveDetails: calc.leaveDetails,
@@ -6615,6 +6850,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         bonus: calc.bonus,
         attendanceBonus: calc.attendanceBonus || 0,
         rewardEarnings: calc.rewardEarnings,
+        grossSalary: calc.grossSalary,
         taxDeduction: calc.statutoryDeductions,
         leaveDeduction: calc.unpaidLeaveDeduction,
         advanceDeduction: calc.advanceDeduction,
@@ -6624,8 +6860,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         professionalTax: calc.professionalTax,
         workingDays: calc.workingDays,
         presentDays: calc.presentDays,
+        paidDays: calc.paidDays,
         paidLeaves: calc.paidLeaves,
         unpaidLeaves: calc.unpaidLeaves,
+        totalDeductions: calc.totalDeductions,
+        earningsBreakdown: calc.earningsBreakdown,
+        deductionsBreakdown: calc.deductionsBreakdown,
         netSalary: calc.netSalary,
         internalDetails: {
           lateDetails: calc.lateDetails,
@@ -6694,6 +6934,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }));
 
     setPayrollRecords(updatedRecords);
+    supabaseDirect.saveCompanySetting('payroll_records_data', updatedRecords);
 
     // Persist payroll batch to central Supabase payroll_records table
     updatedRecords.forEach(rec => {
@@ -7434,9 +7675,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (Array.isArray(rawEmployees) && rawEmployees.length > 0) {
         const mapped = rawEmployees.map(mapEmployeeFromDb);
         setEmployees(mapped);
-      } else if (Array.isArray(rawEmployees)) {
+      } else {
         setEmployees([]);
       }
+
 
       // 2. Synchronize Enterprise Tasks
       if (Array.isArray(rawTasks) && rawTasks.length > 0) {
@@ -7610,29 +7852,69 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Synchronize Payroll Records
       if (Array.isArray(rawPayroll) && rawPayroll.length > 0) {
-        setPayrollRecords(rawPayroll.map((p: any) => ({
-          id: p.id,
-          employeeId: p.employee?.employee_id || p.employee_id,
-          employeeName: p.employee ? `${p.employee.first_name || ''} ${p.employee.last_name || ''}`.trim() : 'Staff',
-          department: p.employee?.department_id || 'General',
-          designation: p.employee?.designation || 'Staff',
-          month: p.payroll_month,
-          year: Number(p.payroll_month ? String(p.payroll_month).slice(0, 4) : 2026),
-          basicSalary: Number(p.basic_salary) || 0,
-          allowances: Number(p.allowances) || 0,
-          bonus: Number(p.bonus) || 0,
-          taxDeduction: Number(p.tax_deduction) || 0,
-          leaveDeduction: Number(p.leave_deduction) || 0,
-          workingDays: Number(p.working_days) || 30,
-          presentDays: Number(p.present_days) || 30,
-          paidLeaves: Number(p.paid_leaves) || 0,
-          unpaidLeaves: Number(p.unpaid_leaves) || 0,
-          netSalary: Number(p.net_salary) || 0,
-          status: p.status || 'Processed',
-        })));
+        const savedPayrollRows = Array.isArray(settings.payroll_records_data) ? settings.payroll_records_data : [];
+        const mappedRecords: PayrollRecord[] = rawPayroll.map((p: any) => {
+          const employeeId = p.employee?.employee_id || p.employee_id;
+          const year = Number(p.payroll_month ? String(p.payroll_month).slice(0, 4) : 2026);
+          const saved = savedPayrollRows.find((row: PayrollRecord) => (
+            row.employeeId === employeeId &&
+            (row.month === p.payroll_month || String(row.year) === String(year))
+          ));
+          const employeeForScheme = employees.find(e => e.employeeId === employeeId || e.id === employeeId);
+          const withPf = saved?.withPf ?? resolveEmployeeWithPf(employeeForScheme || {
+            withPf: p.withPf ?? p.with_pf,
+            salaryDetails: {
+              withPf: p.employee?.withPf ?? p.employee?.with_pf,
+              salaryScheme: p.employee?.salaryScheme ?? p.employee?.salary_scheme
+            }
+          } as Employee);
+          const compId = p.company_id || p.companyId || (p.employee?.email?.includes('nexus') || employeeId?.startsWith('EMP-B') ? 'company-b' : 'company-a');
+          return {
+            id: p.id,
+            company_id: compId,
+            companyId: compId,
+            employeeId,
+            employeeName: p.employee ? `${p.employee.first_name || ''} ${p.employee.last_name || ''}`.trim() : 'Staff',
+            department: p.employee?.department_id || saved?.department || 'General',
+            designation: p.employee?.designation || saved?.designation || 'Staff',
+            month: saved?.month || p.payroll_month,
+            year,
+            basicSalary: Number(p.basic_salary) || saved?.basicSalary || 0,
+            allowances: Number(p.allowances) || saved?.allowances || 0,
+            da: saved?.da,
+            conveyance: saved?.conveyance,
+            hra: saved?.hra,
+            withPf,
+            bonus: Number(p.bonus) || saved?.bonus || 0,
+            attendanceBonus: saved?.attendanceBonus || 0,
+            rewardEarnings: saved?.rewardEarnings || 0,
+            grossSalary: saved?.grossSalary,
+            taxDeduction: Number(p.tax_deduction) || saved?.taxDeduction || 0,
+            leaveDeduction: Number(p.leave_deduction) || saved?.leaveDeduction || 0,
+            advanceDeduction: saved?.advanceDeduction || 0,
+            epfDeduction: saved?.epfDeduction || 0,
+            esiDeduction: saved?.esiDeduction || 0,
+            professionalTax: saved?.professionalTax || 0,
+            workingDays: Number(p.working_days) || saved?.workingDays || 30,
+            presentDays: Number(p.present_days) || saved?.presentDays || 30,
+            paidLeaves: Number(p.paid_leaves) || saved?.paidLeaves || 0,
+            unpaidLeaves: Number(p.unpaid_leaves) || saved?.unpaidLeaves || 0,
+            paidDays: saved?.paidDays,
+            lopDays: saved?.lopDays,
+            totalDeductions: saved?.totalDeductions,
+            earningsBreakdown: saved?.earningsBreakdown || [],
+            deductionsBreakdown: saved?.deductionsBreakdown || [],
+            netSalary: Number(p.net_salary) || saved?.netSalary || 0,
+            status: p.status || saved?.status || 'Processed',
+          };
+        });
+        setPayrollRecords(mappedRecords);
+      } else if (Array.isArray(settings.payroll_records_data) && settings.payroll_records_data.length > 0) {
+        setPayrollRecords(settings.payroll_records_data);
       } else {
         setPayrollRecords([]);
       }
+
       if (settings) {
         const hasSetting = (key: string) => Object.prototype.hasOwnProperty.call(settings, key);
 
@@ -7677,9 +7959,23 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Company Details & Branches
-        if (hasSetting('company_info') && settings.company_info && typeof settings.company_info === 'object') {
-          setCompanyInfo(settings.company_info);
+        const activeCId = currentUser.company_id || currentUser.companyId || 'company-a';
+        if (activeCId === 'company-b') {
+          if (hasSetting('company_info_company-b') && settings['company_info_company-b'] && typeof settings['company_info_company-b'] === 'object') {
+            setCompanyInfo({ ...COMPANY_B_PROFILE, ...settings['company_info_company-b'] });
+          } else {
+            setCompanyInfo({ ...COMPANY_B_PROFILE });
+          }
+        } else {
+          if (hasSetting('company_info') && settings.company_info && typeof settings.company_info === 'object') {
+            const dbInfo = settings.company_info;
+            const isCompBData = dbInfo.company_id === 'company-b' || dbInfo.companyName?.toLowerCase().includes('nexus');
+            setCompanyInfo({ ...COMPANY_A_PROFILE, ...(isCompBData ? {} : dbInfo) });
+          } else {
+            setCompanyInfo({ ...COMPANY_A_PROFILE });
+          }
         }
+
         if (hasSetting('company_branches') && Array.isArray(settings.company_branches)) {
           setCompanyBranches(settings.company_branches);
         }
@@ -7707,8 +8003,21 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Loan Policies
-        if (Array.isArray(settings.loan_policies_data)) {
-          setLoanPolicies(settings.loan_policies_data);
+        if (Array.isArray(settings.loan_policies_data) && settings.loan_policies_data.length > 0) {
+          const normalizedPolicies = settings.loan_policies_data
+            .filter((p: any) => !DEPRECATED_DEFAULT_LOAN_POLICY_NAMES.has(String(p.policyName || p.name || '').trim().toLowerCase()))
+            .map((p: any) => ({
+              ...p,
+              policyName: p.policyName || p.name || 'Advance Salary Policy',
+              minRepaymentMonths: p.minRepaymentMonths ?? 1,
+              maxRepaymentMonths: p.maxRepaymentMonths ?? 3,
+              minLoanAmount: p.minLoanAmount ?? 1000,
+              maxLoanAmount: p.maxLoanAmount ?? p.maxEligibleFixedAmount ?? 50000,
+              minimumEmploymentMonths: p.minimumEmploymentMonths ?? p.minTenureMonthsRequired ?? 1,
+              maxActiveLoans: p.maxActiveLoans ?? 1,
+              status: p.status || (p.active ? 'Active' : 'Active')
+            }));
+          setLoanPolicies(normalizedPolicies);
         }
 
         // Loan Records
@@ -7828,6 +8137,28 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await syncAllModulesFromDatabase(false);
   };
 
+  const activeCompanyId = currentUser.company_id || currentUser.companyId || 'company-a';
+
+  const visibleEmployees = useMemo(() => {
+    return employees.filter(emp => {
+      const empCId = emp.company_id || emp.companyId;
+      if (activeCompanyId === 'company-b') {
+        return empCId === 'company-b' || emp.email?.toLowerCase().includes('nexus') || emp.employeeId?.startsWith('EMP-B');
+      }
+      return empCId === 'company-a' || (!empCId && !emp.email?.toLowerCase().includes('nexus') && !emp.employeeId?.startsWith('EMP-B'));
+    });
+  }, [employees, activeCompanyId]);
+
+  const visiblePayrollRecords = useMemo(() => {
+    return payrollRecords.filter(rec => {
+      const recCId = rec.company_id || rec.companyId;
+      if (activeCompanyId === 'company-b') {
+        return recCId === 'company-b';
+      }
+      return recCId === 'company-a' || !recCId;
+    });
+  }, [payrollRecords, activeCompanyId]);
+
   return (
     <HRMSContext.Provider value={{
       currentUser,
@@ -7836,7 +8167,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       hasPermission,
       permissionMatrix,
       updatePermission,
-      employees,
+      activeCompanyId,
+      switchCompany,
+      employees: visibleEmployees,
+      allEmployees: employees,
       addEmployee,
       updateEmployee,
       deleteEmployee,
@@ -7933,7 +8267,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       markNotificationRead,
       markAllNotificationsRead,
       addNotification,
-      payrollRecords,
+      payrollRecords: visiblePayrollRecords,
+      allPayrollRecords: payrollRecords,
       processPayrollBatch,
       updateEmployeeSalaryScheme,
       updatePayrollRecordAdvanceDeduction,

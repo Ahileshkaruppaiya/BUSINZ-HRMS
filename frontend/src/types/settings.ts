@@ -14,6 +14,9 @@ export type NewSettingsSection =
 // 1. COMPANY DETAILS
 // ==========================================
 export interface CompanyInfo {
+  id?: string;
+  company_id?: string;
+  companyCode?: string; // Short code e.g. BUSINZ, HDFC, SBI, KVB
   logoUrl?: string;
   companyName: string;
   legalCompanyName: string;
@@ -26,6 +29,13 @@ export interface CompanyInfo {
   website: string;
   officialEmail: string;
   officialPhone: string;
+  registeredAddress?: string;
+  branchAddress?: string;
+  ownerName?: string;
+  authorizedSignatoryName?: string;
+  authorizedSignatoryDesignation?: string;
+  signatureImageUrl?: string;
+  stampImageUrl?: string;
   createdAt: string;
   createdBy: string;
   updatedAt: string;

@@ -172,7 +172,12 @@ CREATE TABLE IF NOT EXISTS public.employees (
     last_login_at       TIMESTAMPTZ,
     role_id             UUID NOT NULL REFERENCES public.roles(id) ON DELETE RESTRICT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_employees_phone CHECK (phone IS NULL OR (length(phone) = 10 AND phone ~ '^[6-9][0-9]{9}$')),
+    CONSTRAINT chk_employees_first_name_length CHECK (length(trim(first_name)) >= 2 AND length(first_name) <= 100),
+    CONSTRAINT chk_employees_first_name_chars CHECK (first_name ~ '^[A-Za-z][A-Za-z\s.''-]*$'),
+    CONSTRAINT chk_employees_last_name_length CHECK (last_name IS NULL OR length(last_name) <= 100),
+    CONSTRAINT chk_employees_basic_salary_non_negative CHECK (basic_salary >= 0)
 );
 
 -- --- auth_audit_logs (audit log for employee login lifecycle) ---

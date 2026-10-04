@@ -1,10 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Employee } from '../../types/hrms';
 import { OfferLetterTemplate } from '../../types/offerLetter';
 import { INITIAL_OFFER_LETTER_TEMPLATES } from '../../data/offerLetterTemplates';
 import { useHRMS } from '../../context/HRMSContext';
 import { downloadElementAsPDF } from '../../utils/exportUtils';
-import { formatCurrency } from '../../utils/numbers';
+import { formatCurrency, toNum } from '../../utils/numbers';
+import {
+  AuthorizedSignatory,
+  CompanyFooter,
+  CompanyHeader,
+  EmployeeDetailsGrid,
+  buildCompanyDocumentProfile
+} from '../documents/CompanyDocumentParts';
 import { 
   X, 
   Download, 
@@ -18,7 +25,8 @@ import {
   User, 
   Plus, 
   Save, 
-  Sparkles 
+  Sparkles,
+  Printer 
 } from 'lucide-react';
 
 interface OfferLetterModalProps {
@@ -27,12 +35,46 @@ interface OfferLetterModalProps {
   initialEmployee?: Employee | null;
 }
 
+const DEFAULT_OFFER_TEMPLATE: OfferLetterTemplate = {
+  id: 'TPL-DEFAULT-DYNAMIC',
+  name: 'Standard Offer Letter',
+  category: 'Full-Time',
+  badgeColor: '#0E7490',
+  description: 'Standard dynamic employment offer template.',
+  subject: 'Offer of Employment - {{designation}}',
+  content: `Dear {{candidate_name}},
+
+We are pleased to offer you the position of {{designation}} in the {{department}} department at {{company_name}}.
+
+Your expected date of joining is {{joining_date}}. Your employment type will be {{employment_type}}, and your work location will be {{work_location}}.
+
+Your compensation details are provided in Annexure A. This offer is subject to successful completion of company joining formalities and verification of documents submitted during onboarding.
+
+Please confirm your acceptance by signing this letter. We look forward to welcoming you to {{company_name}}.`
+};
+
+const formatComponentLabel = (key: string) =>
+  key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, char => char.toUpperCase());
+
 export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
   isOpen,
   onClose,
   initialEmployee
 }) => {
-  const { employees, updateEmployee, currentUser, businessSettings, companyInfo } = useHRMS();
+  const { employees, updateEmployee, currentUser, businessSettings, companyInfo, companyBranches } = useHRMS();
+  const documentProfile = useMemo(
+    () => buildCompanyDocumentProfile(companyInfo, businessSettings, companyBranches),
+    [companyInfo, businessSettings, companyBranches]
+  );
+  const initialTemplates = useMemo(
+    () => INITIAL_OFFER_LETTER_TEMPLATES.length > 0 ? INITIAL_OFFER_LETTER_TEMPLATES : [DEFAULT_OFFER_TEMPLATE],
+    []
+  );
 
   // Selected Employee
   const [selectedEmpId, setSelectedEmpId] = useState<string>(
@@ -40,9 +82,9 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
   );
 
   // Template List (in-memory only; authoritative templates belong to the backend)
-  const [templates, setTemplates] = useState<OfferLetterTemplate[]>(INITIAL_OFFER_LETTER_TEMPLATES);
+  const [templates, setTemplates] = useState<OfferLetterTemplate[]>(initialTemplates);
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(INITIAL_OFFER_LETTER_TEMPLATES[0].id);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(initialTemplates[0].id);
   const [activeMode, setActiveMode] = useState<'preview' | 'edit' | 'create_template'>('preview');
 
   // Editable Letter Content
@@ -70,14 +112,13 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
   const currentEmployee = employees.find(e => e.id === selectedEmpId) || initialEmployee || employees[0];
   const currentTemplate = templates.find(t => t.id === selectedTemplateId) || templates[0];
 
-  // Calculate salary figures safely
-  const basicPay = Number(currentEmployee?.basicSalary) || 50000;
-  const hra = Number(currentEmployee?.allowances?.hra) || Math.round(basicPay * 0.4);
-  const transport = Number(currentEmployee?.allowances?.transport) || 3000;
-  const medical = Number(currentEmployee?.allowances?.medical) || 2500;
-  const special = Number(currentEmployee?.allowances?.special) || 4500;
-  const monthlyGross = basicPay + hra + transport + medical + special;
-  const annualCtc = monthlyGross * 12;
+  const basicPay = toNum(currentEmployee?.basicSalary);
+  const allowanceRows = Object.entries(currentEmployee?.allowances || {})
+    .map(([key, value]) => ({ label: formatComponentLabel(key), amount: toNum(value) }))
+    .filter(row => row.amount > 0);
+  const monthlyGross = basicPay + allowanceRows.reduce((sum, row) => sum + row.amount, 0);
+  const monthlyCtc = toNum(currentEmployee?.salaryDetails?.monthlyCtc, monthlyGross);
+  const annualCtc = monthlyCtc * 12;
 
   // Replace placeholders helper
   const replacePlaceholders = (text: string) => {
@@ -101,8 +142,8 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
       '{{basic_salary}}': formatCurrency(basicPay),
       '{{monthly_gross}}': formatCurrency(monthlyGross),
       '{{annual_ctc}}': formatCurrency(annualCtc),
-      '{{work_location}}': currentEmployee.bankDetails?.branch ? `${currentEmployee.bankDetails.branch} Office` : 'Head Office',
-      '{{company_name}}': businessSettings?.businessName || companyInfo?.companyName || 'Businz',
+      '{{work_location}}': currentEmployee.workLocation || currentEmployee.bankDetails?.branch || 'Head Office',
+      '{{company_name}}': documentProfile.companyName,
       '{{issue_date}}': todayStr
     };
 
@@ -151,7 +192,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
     downloadElementAsPDF(
       'printable-offer-letter', 
       `Offer_Letter_${currentEmployee?.firstName || 'Employee'}_${currentEmployee?.employeeId || ''}`,
-      'VRM Structures Pvt. Ltd.'
+      documentProfile.companyName
     );
   };
 
@@ -383,71 +424,36 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
                 border: '1px solid #e2e8f0'
               }}
             >
-              {/* Corporate Letterhead Header */}
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                borderBottom: '2.5px solid #155DFC', 
-                paddingBottom: '18px', 
-                marginBottom: '22px', 
-                gap: '16px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1 1 auto' }}>
-                  <img 
-                    src="/logo.png" 
-                    alt={`${businessSettings?.businessName || companyInfo?.companyName || 'Businz'} Logo`} 
-                    style={{ height: '48px', maxWidth: '200px', objectFit: 'contain', flexShrink: 0 }} 
-                  />
-                </div>
-                <div style={{ textAlign: 'right', fontSize: '0.72rem', color: '#64748b', lineHeight: 1.5, flexShrink: 0 }}>
-                  <div><strong style={{ color: '#334155' }}>CIN:</strong> {businessSettings?.cin || companyInfo?.cinNumber || 'U72900TN2022PTC150000'}</div>
-                  <div>{businessSettings?.address || 'Businz Corporate Park, Tech Corridor, Chennai, TN — 600096'}</div>
-                  <div>{businessSettings?.email || companyInfo?.officialEmail || 'careers@businz.com'} &bull; {companyInfo?.website || 'www.businz.com'}</div>
-                </div>
-              </div>
+              <CompanyHeader
+                profile={documentProfile}
+                title="Offer Letter"
+                subtitle="Official Appointment"
+                rightMeta={[
+                  { label: 'Ref No', value: `OL-${new Date().getFullYear()}-${currentEmployee?.employeeId || 'EMP'}` },
+                  { label: 'Date', value: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) }
+                ]}
+              />
 
-              {/* Letter Metadata */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', marginBottom: '20px', color: '#475569' }}>
-                <div>
-                  <div><strong style={{ color: '#0f172a' }}>Ref No:</strong> BSZ-HR-OL-2026-{currentEmployee?.employeeId || 'EMP-001'}</div>
-                  <div><strong style={{ color: '#0f172a' }}>Date:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ backgroundColor: '#eff6ff', color: '#155DFC', padding: '4px 12px', borderRadius: '6px', fontWeight: 700, fontSize: '0.74rem', border: '1px solid #bfdbfe', letterSpacing: '0.03em' }}>
-                    OFFICIAL APPOINTMENT
-                  </span>
-                </div>
-              </div>
+              <EmployeeDetailsGrid
+                rows={[
+                  { label: 'Candidate', value: `${currentEmployee?.firstName || ''} ${currentEmployee?.lastName || ''}`.trim() },
+                  { label: 'Employee ID', value: currentEmployee?.employeeId },
+                  { label: 'Department', value: currentEmployee?.department },
+                  { label: 'Designation', value: currentEmployee?.designation },
+                  { label: 'Joining Date', value: currentEmployee?.joiningDate || currentEmployee?.dateOfJoining },
+                  { label: 'Employment Type', value: currentEmployee?.employmentType },
+                  { label: 'Work Location', value: currentEmployee?.workLocation || currentEmployee?.bankDetails?.branch },
+                  { label: 'Email', value: currentEmployee?.email },
+                  { label: 'Contact', value: currentEmployee?.phone },
+                  { label: 'Residential Address', value: currentEmployee?.address }
+                ]}
+              />
 
-              {/* Candidate Addressing */}
-              <div style={{ 
-                marginBottom: '22px', 
-                padding: '14px 18px', 
-                backgroundColor: '#f8fafc', 
-                borderRadius: '8px', 
-                border: '1px solid #e2e8f0', 
-                borderLeft: '4px solid #155DFC' 
-              }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '3px' }}>
-                  Addressed To:
-                </div>
-                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a', marginBottom: '6px' }}>
-                  {currentEmployee?.firstName} {currentEmployee?.lastName}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 16px', fontSize: '0.82rem', color: '#475569' }}>
-                  <div><strong style={{ color: '#334155' }}>Employee ID:</strong> {currentEmployee?.employeeId}</div>
-                  <div><strong style={{ color: '#334155' }}>Designation:</strong> {currentEmployee?.designation}</div>
-                  <div><strong style={{ color: '#334155' }}>Email:</strong> {currentEmployee?.email}</div>
-                  <div><strong style={{ color: '#334155' }}>Contact:</strong> {currentEmployee?.phone || '+91 98765 43210'}</div>
-                  <div style={{ gridColumn: 'span 2' }}><strong style={{ color: '#334155' }}>Residential Address:</strong> {currentEmployee?.address || 'Salt Lake Sector V, Kolkata, West Bengal'}</div>
-                </div>
-              </div>
 
               {/* Subject */}
               <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', marginBottom: '18px' }}>
                 <span style={{ borderBottom: '2px solid #0f172a', paddingBottom: '2px' }}>
-                  Subject: {replacePlaceholders(currentTemplate.subject)}
+                  Subject: {replacePlaceholders(currentTemplate?.subject || DEFAULT_OFFER_TEMPLATE.subject)}
                 </span>
               </div>
 
@@ -470,34 +476,19 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '7px 12px' }}>Basic Salary</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(basicPay)}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(basicPay * 12)}</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '7px 12px' }}>House Rent Allowance (HRA)</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(hra)}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(hra * 12)}</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '7px 12px' }}>Transport Allowance</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(transport)}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(transport * 12)}</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '7px 12px' }}>Medical Reimbursement</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(medical)}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(medical * 12)}</td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
-                      <td style={{ padding: '7px 12px' }}>Special Corporate Allowance</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(special)}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(special * 12)}</td>
-                    </tr>
+                    {[
+                      { label: 'Basic Salary', amount: basicPay },
+                      ...allowanceRows
+                    ].filter(row => row.amount > 0).map(row => (
+                      <tr key={row.label} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '7px 12px' }}>{row.label}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(row.amount)}</td>
+                        <td style={{ padding: '7px 12px', textAlign: 'right' }}>{formatCurrency(row.amount * 12)}</td>
+                      </tr>
+                    ))}
                     <tr style={{ backgroundColor: '#f0fdf4', fontWeight: 800, color: '#15803d', borderTop: '2px solid #bbf7d0' }}>
                       <td style={{ padding: '9px 12px' }}>Total Cost to Company (CTC)</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right' }}>{formatCurrency(monthlyGross)}</td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right' }}>{formatCurrency(monthlyCtc)}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right' }}>{formatCurrency(annualCtc)}</td>
                     </tr>
                   </tbody>
@@ -506,18 +497,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
 
               {/* Signature Blocks */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e2e8f0', pageBreakInside: 'avoid' }}>
-                <div>
-                  <div style={{ height: '45px', display: 'flex', alignItems: 'flex-end' }}>
-                    <div style={{ fontFamily: 'cursive', fontSize: '1.2rem', color: '#0f172a', transform: 'rotate(-3deg)' }}>
-                      {currentUser?.name || 'HR Manager'}
-                    </div>
-                  </div>
-                  <div style={{ borderTop: '1px solid #475569', paddingTop: '6px', fontSize: '0.8rem' }}>
-                    <div style={{ fontWeight: 800, color: '#0f172a' }}>{currentUser?.name || 'Authorized Signatory'}</div>
-                    <div style={{ color: '#64748b' }}>HR Manager</div>
-                    <div style={{ color: '#64748b', fontSize: '0.72rem' }}>{businessSettings?.businessName || companyInfo?.companyName || 'Businz Technologies Pvt. Ltd.'}</div>
-                  </div>
-                </div>
+                <AuthorizedSignatory profile={documentProfile} />
 
                 <div>
                   <div style={{ height: '45px' }}></div>
@@ -528,6 +508,8 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              <CompanyFooter profile={documentProfile} />
 
             </div>
           )}
@@ -561,7 +543,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
               <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
                   className="btn btn-secondary btn-sm"
-                  onClick={() => setCustomizedContent(replacePlaceholders(currentTemplate.content))}
+                  onClick={() => setCustomizedContent(replacePlaceholders(currentTemplate?.content || DEFAULT_OFFER_TEMPLATE.content))}
                 >
                   Reset to Original Template
                 </button>
@@ -708,6 +690,16 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
 
             <button 
               type="button" 
+              className="btn btn-secondary btn-sm" 
+              onClick={() => downloadElementAsPDF('printable-offer-letter', `Offer_Letter_${currentEmployee?.firstName || 'Candidate'}_${currentEmployee?.lastName || ''}`, documentProfile.companyName)}
+              title="Print Offer Letter"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+            >
+              <Printer size={15} /> Print
+            </button>
+
+            <button 
+              type="button" 
               className="btn btn-primary btn-sm" 
               onClick={handleDownloadPDF}
               style={{ background: 'linear-gradient(135deg, #0E7490, #0891B2)', color: '#ffffff', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(14, 116, 144, 0.35)', border: 'none' }}
@@ -715,6 +707,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
               <Download size={15} /> Download PDF
             </button>
           </div>
+
         </div>
 
       </div>

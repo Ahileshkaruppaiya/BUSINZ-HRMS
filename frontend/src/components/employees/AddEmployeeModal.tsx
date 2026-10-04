@@ -41,6 +41,7 @@ import { dispatchCredentialEmail } from '../../services/emailDispatchService';
 import { evaluateFormula, evaluateStatutoryContributions, calculateSalaryBreakdown } from '../../services/policyEngine';
 import { generateNextEmployeeId } from '../../utils/employeeIdUtils';
 import { formatCurrency } from '../../utils/numbers';
+import { CountryCodeDropdown } from '../common/CountryCodeDropdown';
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
@@ -103,6 +104,8 @@ export const DEGREE_OPTIONS_BY_QUALIFICATION: Record<string, string[]> = {
 export const ALL_DEGREE_OPTIONS: string[] = Array.from(
   new Set(Object.values(DEGREE_OPTIONS_BY_QUALIFICATION).flat())
 );
+
+const BLOOD_GROUP_OPTIONS: NonNullable<Employee['bloodGroup']>[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export const normalizeQualification = (qual?: string): string => {
   if (!qual) return 'UG';
@@ -194,7 +197,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     employmentTypes,
     orgStructure,
     currentUser,
-    companyBranches
+    companyBranches,
+    companyInfo
   } = useHRMS();
 
   // Dynamic salary components configured in Settings → Payroll Settings
@@ -333,7 +337,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const currentPrefix = employeeConfig?.idFormatPrefix || businessSettings?.employeeCodePrefix || 'EMP';
+  const currentPrefix = companyInfo?.companyCode || employeeConfig?.idFormatPrefix || businessSettings?.employeeCodePrefix || 'EMP';
   const currentDigits = employeeConfig?.idFormatDigits || 3;
   const currentStartNum = employeeConfig?.idStartingNumber || 1;
 
@@ -349,6 +353,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     personalEmail: '',
     password: '',
     maritalStatus: '' as 'Single' | 'Married' | 'Divorced' | 'Widowed' | '',
+    bloodGroup: '' as Employee['bloodGroup'],
 
     // 2. Employment Information
     joiningDate: new Date().toISOString().split('T')[0],
@@ -437,6 +442,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   };
 
   const [formData, setFormData] = useState(defaultFormData);
+  const [phoneCountryCode, setPhoneCountryCode] = useState('+91');
+  const [emergencyCountryCode, setEmergencyCountryCode] = useState('+91');
+  const [altEmergencyCountryCode, setAltEmergencyCountryCode] = useState('+91');
   const [salaryInputDrafts, setSalaryInputDrafts] = useState<Record<string, string>>({});
   const [documents, setDocuments] = useState<UploadedDoc[]>([]);
   const [isCustomDesignation, setIsCustomDesignation] = useState<boolean>(false);
@@ -694,7 +702,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       setSalaryInputDrafts({});
       const nextAutoId = generateNextEmployeeId(
         employees,
-        employeeConfig?.idFormatPrefix || businessSettings?.employeeCodePrefix || 'EMP',
+        companyInfo?.companyCode || employeeConfig?.idFormatPrefix || businessSettings?.employeeCodePrefix || 'EMP',
         employeeConfig?.idFormatDigits || 3,
         employeeConfig?.idStartingNumber || 1
       );
@@ -745,9 +753,18 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const handleChange = (field: string, value: any) => {
     let sanitizedValue = value;
 
-    // Names & Alphabet-only fields
-    if (['firstName', 'lastName', 'emergencyName', 'currentCity', 'permanentCity', 'currentState', 'permanentState', 'currentCountry', 'permanentCountry'].includes(field)) {
-      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s]/g, '') : value;
+    // Names (Letters, spaces, '.', "'", '-' allowed, max 100)
+    if (['firstName', 'lastName', 'emergencyName'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s.'-]/g, '').slice(0, 100) : value;
+    }
+
+    if (['currentCity', 'permanentCity', 'currentState', 'permanentState', 'currentCountry', 'permanentCountry'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s]/g, '').slice(0, 100) : value;
+    }
+
+    // Phone & Emergency Mobile numbers (Digits only, max 10)
+    if (['phone', 'emergencyMobile', 'emergencyAltMobile'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/\D/g, '').slice(0, 10) : value;
     }
 
     // Address Lines (Letters, numbers, spaces, and , . - / #)
@@ -864,12 +881,30 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       if (isDuplicateId) return `Employee ID "${formData.employeeId}" is already registered. Please provide a unique ID.`;
 
       if (!formData.firstName.trim()) return 'First Name is mandatory.';
-      if (!/^[a-zA-Z\s]+$/.test(formData.firstName.trim())) {
-        return 'First Name must contain letters and spaces only. Numbers and symbols are not allowed.';
+      const cleanFname = formData.firstName.trim();
+      if (cleanFname.length < 2) return 'First Name must be at least 2 characters.';
+      if (cleanFname.length > 100) return 'First Name cannot exceed 100 characters.';
+      if (!/^[a-zA-Z][a-zA-Z\s.'-]*$/.test(cleanFname)) {
+        return 'First Name must contain letters and spaces only. Numbers and invalid symbols are not allowed.';
       }
-      if (!formData.lastName.trim()) return 'Last Name is mandatory.';
-      if (!/^[a-zA-Z\s]+$/.test(formData.lastName.trim())) {
-        return 'Last Name must contain letters and spaces only. Numbers and symbols are not allowed.';
+      if (/(.)\1{3,}/i.test(cleanFname)) {
+        return 'First Name contains invalid repetitive characters.';
+      }
+      if (/[bcdfghjklmnpqrstvwxyz]{6,}/i.test(cleanFname.replace(/[\s.'-]/g, ''))) {
+        return 'Please enter a realistic First Name.';
+      }
+
+      const cleanLname = formData.lastName.trim();
+      if (!cleanLname) return 'Last Name is mandatory.';
+      if (cleanLname.length > 100) return 'Last Name cannot exceed 100 characters.';
+      if (!/^[a-zA-Z][a-zA-Z\s.'-]*$/.test(cleanLname)) {
+        return 'Last Name must contain letters and spaces only. Numbers and invalid symbols are not allowed.';
+      }
+      if (/(.)\1{3,}/i.test(cleanLname)) {
+        return 'Last Name contains invalid repetitive characters.';
+      }
+      if (/[bcdfghjklmnpqrstvwxyz]{6,}/i.test(cleanLname.replace(/[\s.'-]/g, ''))) {
+        return 'Please enter a realistic Last Name.';
       }
       if (!formData.gender) return 'Gender is mandatory. Please select an option.';
 
@@ -885,7 +920,13 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
       if (!formData.phone.trim()) return 'Mobile Phone number is mandatory.';
       const digits = formData.phone.replace(/\D/g, '');
-      if (digits.length !== 10) return 'Please enter a valid 10-digit mobile phone number.';
+      if (phoneCountryCode === '+91') {
+        if (digits.length !== 10) return 'Phone number must contain exactly 10 digits.';
+        if (!/^[6-9]\d{9}$/.test(digits)) return 'Phone number must contain exactly 10 digits starting with 6, 7, 8, or 9.';
+        if (/^(\d)\1{9}$/.test(digits)) return 'Please enter a realistic mobile phone number.';
+      } else {
+        if (digits.length < 6 || digits.length > 15) return 'International phone number must contain between 6 and 15 digits.';
+      }
 
       const cleanEmail = formData.personalEmail.trim().toLowerCase();
       if (!cleanEmail) {
@@ -964,10 +1005,21 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       if (!formData.emergencyRelationship.trim()) return 'Emergency Contact Relationship is mandatory.';
       if (!formData.emergencyMobile.trim()) return 'Emergency Contact Number is mandatory.';
       const emergencyDigits = formData.emergencyMobile.replace(/\D/g, '');
-      if (emergencyDigits.length !== 10) return 'Please enter a valid 10-digit Emergency Contact Number.';
+      if (emergencyCountryCode === '+91') {
+        if (emergencyDigits.length !== 10) return 'Emergency Contact Number must contain exactly 10 digits.';
+        if (!/^[6-9]\d{9}$/.test(emergencyDigits)) return 'Emergency Contact Number must contain exactly 10 digits starting with 6, 7, 8, or 9.';
+      } else {
+        if (emergencyDigits.length < 6 || emergencyDigits.length > 15) return 'Emergency Contact Number must contain between 6 and 15 digits.';
+      }
+
       if (formData.emergencyAltMobile.trim()) {
         const altDigits = formData.emergencyAltMobile.replace(/\D/g, '');
-        if (altDigits.length !== 10) return 'Please enter a valid 10-digit Alternate Emergency Number.';
+        if (altEmergencyCountryCode === '+91') {
+          if (altDigits.length !== 10) return 'Alternate Emergency Number must contain exactly 10 digits.';
+          if (!/^[6-9]\d{9}$/.test(altDigits)) return 'Alternate Emergency Number must contain exactly 10 digits starting with 6, 7, 8, or 9.';
+        } else {
+          if (altDigits.length < 6 || altDigits.length > 15) return 'Alternate Emergency Number must contain between 6 and 15 digits.';
+        }
       }
     }
 
@@ -1268,7 +1320,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     const primaryEmail = formData.personalEmail.trim().toLowerCase();
     const cleanEmpCode = (formData.employeeId.trim() || generateNextEmployeeId(
       employees,
-      employeeConfig?.idFormatPrefix || businessSettings?.employeeCodePrefix || 'EMP',
+      companyInfo?.companyCode || employeeConfig?.idFormatPrefix || businessSettings?.employeeCodePrefix || 'EMP',
       employeeConfig?.idFormatDigits || 3,
       employeeConfig?.idStartingNumber || 1
     ));
@@ -1310,7 +1362,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       firstName: formData.firstName.trim() || 'New',
       lastName: formData.lastName.trim(),
       email: primaryEmail,
-      phone: formData.phone.trim(),
+      phone: phoneCountryCode === '+91' ? formData.phone.trim() : `${phoneCountryCode} ${formData.phone.trim()}`,
       dob: formData.dob,
       gender: formData.gender,
       address: `${formData.currentLine1}, ${formData.currentCity}, ${formData.currentState} - ${formData.currentPincode}`,
@@ -1361,6 +1413,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       // Extended Structured Data
       personalEmail: primaryEmail,
       maritalStatus: (formData.maritalStatus || undefined) as Employee['maritalStatus'],
+      bloodGroup: formData.bloodGroup,
       workLocation: formData.workLocation,
       currentAddress: {
         line1: formData.currentLine1,
@@ -1382,8 +1435,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       emergencyContact: {
         name: formData.emergencyName,
         relationship: formData.emergencyRelationship,
-        mobile: formData.emergencyMobile,
-        alternateMobile: formData.emergencyAltMobile
+        mobile: emergencyCountryCode === '+91' ? formData.emergencyMobile : `${emergencyCountryCode} ${formData.emergencyMobile}`,
+        alternateMobile: formData.emergencyAltMobile ? (altEmergencyCountryCode === '+91' ? formData.emergencyAltMobile : `${altEmergencyCountryCode} ${formData.emergencyAltMobile}`) : ''
       },
       educationalDetails: {
         highestQualification: formData.qualification,
@@ -1516,7 +1569,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           last_name: newEmp.lastName || '',
           email: primaryEmail,
           password: targetPassword,
+          department: newEmp.department,
+          department_id: newEmp.departmentId,
           designation: newEmp.designation,
+          reporting_manager_name: newEmp.reportingManagerName,
           role_id: assignedRoleId,
           basic_salary: newEmp.basicSalary,
           phone: newEmp.phone,
@@ -1552,7 +1608,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     newEmp.password = targetPassword;
 
 
-    addEmployee(newEmp);
+    addEmployee(newEmp, { persistToCloud: false });
     setCreatedEmployee(newEmp);
     setIsSubmitting(false);
     setIsSuccess(true);
@@ -2016,11 +2072,12 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   type="text"
                   name="hrms_add_emp_fname"
                   autoComplete="off"
+                  maxLength={100}
                   className="form-control" 
-                  value={formData.firstName.replace(/[^a-zA-Z\s]/g, '')} 
-                  onChange={e => handleChange('firstName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                  value={formData.firstName} 
+                  onChange={e => handleChange('firstName', e.target.value)}
                   onKeyDown={e => {
-                    if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                    if (e.key.length === 1 && !/^[a-zA-Z\s.'-]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
                       e.preventDefault();
                     }
                   }}
@@ -2034,11 +2091,12 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   type="text"
                   name="hrms_add_emp_lname"
                   autoComplete="off"
+                  maxLength={100}
                   className="form-control" 
-                  value={formData.lastName.replace(/[^a-zA-Z\s]/g, '')} 
-                  onChange={e => handleChange('lastName', e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                  value={formData.lastName} 
+                  onChange={e => handleChange('lastName', e.target.value)}
                   onKeyDown={e => {
-                    if (e.key.length === 1 && !/^[a-zA-Z\s]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                    if (e.key.length === 1 && !/^[a-zA-Z\s.'-]$/.test(e.key) && !e.ctrlKey && !e.metaKey) {
                       e.preventDefault();
                     }
                   }}
@@ -2073,30 +2131,29 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   required 
                 />
               </div>
+              <div className="form-group">
+                <label className="form-label">Blood Group</label>
+                <select
+                  className="form-control"
+                  value={formData.bloodGroup}
+                  onChange={e => handleChange('bloodGroup', e.target.value)}
+                >
+                  <option value="">Select Blood Group</option>
+                  {BLOOD_GROUP_OPTIONS.map(group => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Mobile Number <span style={{ color: '#EF4444' }}>*</span></label>
-                <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '0 12px',
-                    backgroundColor: '#F8FAFC',
-                    border: '1px solid #CBD5E1',
-                    borderRight: 'none',
-                    borderTopLeftRadius: '10px',
-                    borderBottomLeftRadius: '10px',
-                    color: '#0F172A',
-                    fontWeight: 700,
-                    fontSize: '0.88rem',
-                    letterSpacing: '0.02em',
-                    userSelect: 'none'
-                  }}>
-                    +91
-                  </span>
+                <div style={{ display: 'flex', width: '100%', alignItems: 'stretch', position: 'relative' }}>
+                  <CountryCodeDropdown
+                    value={phoneCountryCode}
+                    onChange={(dialCode) => setPhoneCountryCode(dialCode)}
+                  />
                   <input 
                     type="tel"
                     inputMode="numeric"
@@ -2108,7 +2165,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     }}
                     value={formData.phone} 
                     onChange={e => {
-                      const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      const limit = phoneCountryCode === '+91' ? 10 : 15;
+                      const numericOnly = e.target.value.replace(/\D/g, '').slice(0, limit);
                       handleChange('phone', numericOnly);
                     }}
                     onKeyDown={e => {
@@ -2121,8 +2179,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                         e.preventDefault();
                       }
                     }}
-                    maxLength={10}
-                    placeholder="Enter 10-digit mobile number" 
+                    maxLength={phoneCountryCode === '+91' ? 10 : 15}
+                    placeholder={phoneCountryCode === '+91' ? "Enter 10-digit mobile number" : "Enter mobile number"} 
                     required 
                   />
                 </div>
@@ -2591,25 +2649,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Emergency Contact Number *</label>
-                  <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '0 12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #CBD5E1',
-                      borderRight: 'none',
-                      borderTopLeftRadius: '10px',
-                      borderBottomLeftRadius: '10px',
-                      color: '#0F172A',
-                      fontWeight: 700,
-                      fontSize: '0.88rem',
-                      letterSpacing: '0.02em',
-                      userSelect: 'none'
-                    }}>
-                      +91
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'stretch', position: 'relative' }}>
+                    <CountryCodeDropdown
+                      value={emergencyCountryCode}
+                      onChange={(dialCode) => setEmergencyCountryCode(dialCode)}
+                    />
                     <input 
                       type="tel"
                       inputMode="numeric"
@@ -2621,7 +2665,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       }}
                       value={formData.emergencyMobile} 
                       onChange={e => {
-                        const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        const limit = emergencyCountryCode === '+91' ? 10 : 15;
+                        const numericOnly = e.target.value.replace(/\D/g, '').slice(0, limit);
                         handleChange('emergencyMobile', numericOnly);
                       }}
                       onKeyDown={e => {
@@ -2634,33 +2679,19 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                           e.preventDefault();
                         }
                       }}
-                      maxLength={10}
-                      placeholder="Enter 10-digit emergency number" 
+                      maxLength={emergencyCountryCode === '+91' ? 10 : 15}
+                      placeholder={emergencyCountryCode === '+91' ? "Enter 10-digit emergency number" : "Enter emergency number"} 
                       required 
                     />
                   </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Alternate Emergency Number (Optional)</label>
-                  <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '0 12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #CBD5E1',
-                      borderRight: 'none',
-                      borderTopLeftRadius: '10px',
-                      borderBottomLeftRadius: '10px',
-                      color: '#0F172A',
-                      fontWeight: 700,
-                      fontSize: '0.88rem',
-                      letterSpacing: '0.02em',
-                      userSelect: 'none'
-                    }}>
-                      +91
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'stretch', position: 'relative' }}>
+                    <CountryCodeDropdown
+                      value={altEmergencyCountryCode}
+                      onChange={(dialCode) => setAltEmergencyCountryCode(dialCode)}
+                    />
                     <input 
                       type="tel"
                       inputMode="numeric"
@@ -2672,7 +2703,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       }}
                       value={formData.emergencyAltMobile} 
                       onChange={e => {
-                        const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        const limit = altEmergencyCountryCode === '+91' ? 10 : 15;
+                        const numericOnly = e.target.value.replace(/\D/g, '').slice(0, limit);
                         handleChange('emergencyAltMobile', numericOnly);
                       }}
                       onKeyDown={e => {
@@ -2685,8 +2717,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                           e.preventDefault();
                         }
                       }}
-                      maxLength={10}
-                      placeholder="Enter 10-digit alternate number" 
+                      maxLength={altEmergencyCountryCode === '+91' ? 10 : 15}
+                      placeholder={altEmergencyCountryCode === '+91' ? "Enter 10-digit alternate number" : "Enter alternate number"} 
                     />
                   </div>
                 </div>
@@ -3686,6 +3718,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <div className="review-field-box">
                   <div className="review-field-label">Gender & DOB</div>
                   <div className="review-field-val">{formData.gender} • {formatDateDDMMYYYY(formData.dob)}</div>
+                </div>
+                <div className="review-field-box">
+                  <div className="review-field-label">Blood Group</div>
+                  <div className="review-field-val">{formData.bloodGroup || 'N/A'}</div>
                 </div>
                 <div className="review-field-box">
                   <div className="review-field-label">Mobile Phone Number</div>

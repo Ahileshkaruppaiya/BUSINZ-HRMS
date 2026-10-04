@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { CompanyBranch, CompanyInfo } from '../../types/settings';
+import { INITIAL_COMPANY_INFO } from '../../data/settingsInitialData';
+import { CountryCodeDropdown } from '../common/CountryCodeDropdown';
 import { 
   Building2, 
   MapPin, 
@@ -20,7 +22,10 @@ import {
   Users, 
   Briefcase, 
   X,
-  RefreshCw 
+  RefreshCw,
+  Upload,
+  AlertCircle,
+  Image as ImageIcon 
 } from 'lucide-react';
 
 type CompanyInfoFormErrors = Partial<Record<keyof CompanyInfo, string>>;
@@ -29,19 +34,348 @@ const cleanText = (value: string) => value.replace(/\s+/g, ' ').trim();
 const cleanCompanyText = (value: string) => value.replace(/[^A-Za-z0-9\s&.,'()/-]/g, '').replace(/\s+/g, ' ');
 const cleanAlphaNumeric = (value: string, maxLength?: number) => value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, maxLength);
 const cleanRocNumber = (value: string) => value.replace(/[^A-Za-z0-9/-]/g, '').toUpperCase().slice(0, 30);
-const cleanPhoneNumber = (value: string) => value.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '').slice(0, 10);
+const cleanPhoneNumber = (value: string) => value.replace(/\D/g, '').slice(0, 15);
+const parsePhoneWithCountryCode = (value?: string) => {
+  const raw = (value || '').trim();
+  const match = raw.match(/^(\+\d{1,4})\s*(.*)$/);
+  const countryCode = match?.[1] || '+91';
+  const localNumber = cleanPhoneNumber(match ? match[2] : raw).replace(/^91(?=\d{10}$)/, '').slice(0, countryCode === '+91' ? 10 : 15);
+  return { countryCode, localNumber };
+};
+const formatPhoneWithCountryCode = (countryCode: string, localNumber: string) => {
+  const digits = cleanPhoneNumber(localNumber);
+  return digits ? `${countryCode} ${digits}` : '';
+};
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
 const isValidPan = (value: string) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(value);
 const isValidGstin = (value: string) => /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(value);
 const isValidCin = (value: string) => /^[LU][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/.test(value);
+const normalizeWebsite = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+};
+
 const isValidWebsite = (value: string) => {
+  if (!value || !value.trim()) return true;
   try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
+    const url = new URL(normalizeWebsite(value));
+    return url.hostname.includes('.');
   } catch {
     return false;
   }
+};
+
+const createBlankCompanyInfo = (): CompanyInfo => ({
+  id: 'comp-root',
+  company_id: 'company-a',
+  companyCode: '',
+  companyName: '',
+  legalCompanyName: '',
+  companyType: 'Private Limited',
+  industry: '',
+  registrationNumber: '',
+  gstNumber: '',
+  panNumber: '',
+  cinNumber: '',
+  website: '',
+  officialEmail: '',
+  officialPhone: '',
+  registeredAddress: '',
+  branchAddress: '',
+  ownerName: '',
+  authorizedSignatoryName: '',
+  authorizedSignatoryDesignation: '',
+  logoUrl: '',
+  signatureImageUrl: '',
+  stampImageUrl: '',
+  createdAt: new Date().toISOString(),
+  createdBy: 'Admin',
+  updatedAt: new Date().toISOString(),
+  updatedBy: 'Admin'
+});
+
+const optimizeImageFile = (file: File, maxSizeMb: number = 2): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      reject(new Error(`File size exceeds ${maxSizeMb}MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a file under ${maxSizeMb}MB.`));
+      return;
+    }
+
+    if (file.type === 'image/svg+xml') {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read SVG file.'));
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rawDataUrl = e.target?.result as string;
+      if (!rawDataUrl) {
+        reject(new Error('Failed to read image.'));
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        const maxDimension = 1200;
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(rawDataUrl);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        const quality = outputType === 'image/jpeg' ? 0.9 : undefined;
+        resolve(canvas.toDataURL(outputType, quality));
+      };
+      img.onerror = () => resolve(rawDataUrl);
+      img.src = rawDataUrl;
+    };
+    reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.readAsDataURL(file);
+  });
+};
+
+interface CompanyImageUploadFieldProps {
+  label: string;
+  value: string;
+  onChange: (dataUrl: string) => void;
+  helperText?: string;
+  accept?: string;
+  maxSizeMb?: number;
+}
+
+const CompanyImageUploadField: React.FC<CompanyImageUploadFieldProps> = ({
+  label,
+  value,
+  onChange,
+  helperText = 'PNG, JPG, WEBP, SVG (Max 2MB)',
+  accept = 'image/png,image/jpeg,image/jpg,image/webp,image/svg+xml',
+  maxSizeMb = 2
+}) => {
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleFile = async (file: File) => {
+    setError(null);
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file (PNG, JPG, JPEG, WEBP, SVG).');
+      return;
+    }
+
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setError(`File size exceeds ${maxSizeMb}MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Please select a file under ${maxSizeMb}MB.`);
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      const optimizedUrl = await optimizeImageFile(file, maxSizeMb);
+      onChange(optimizedUrl);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to process image.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const onFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFile(file);
+    }
+    e.target.value = '';
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFile(file);
+    }
+  };
+
+  return (
+    <div>
+      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block' }}>
+        {label}
+      </label>
+
+      {value ? (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          padding: '10px 14px',
+          borderRadius: '12px',
+          border: '1px solid #E2E8F0',
+          backgroundColor: '#F8FAFC'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            <div style={{
+              width: '64px',
+              height: '46px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              flexShrink: 0,
+              padding: '2px'
+            }}>
+              <img
+                src={value}
+                alt="Preview"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain'
+                }}
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckCircle2 size={14} color="#16A34A" /> Image Selected
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                {helperText}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isProcessing}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#0E7490',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <Upload size={13} /> Change
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              title="Remove image"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                border: '1px solid #FCA5A5',
+                backgroundColor: '#FEF2F2',
+                color: '#DC2626',
+                cursor: 'pointer'
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            border: dragOver ? '2px dashed #0E7490' : '1px dashed #CBD5E1',
+            borderRadius: '12px',
+            backgroundColor: dragOver ? '#ECFEFF' : '#F8FAFC',
+            padding: '16px 14px',
+            textAlign: 'center',
+            cursor: isProcessing ? 'wait' : 'pointer',
+            transition: 'all 0.15s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}
+        >
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            backgroundColor: '#ECFEFF',
+            color: '#0E7490',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Upload size={18} />
+          </div>
+          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1E293B' }}>
+            {isProcessing ? 'Processing image...' : 'Click to upload or drag & drop'}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#64748B' }}>
+            {helperText}
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        onChange={onFileInputChange}
+        style={{ display: 'none' }}
+      />
+
+      {error && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: '#DC2626',
+          fontSize: '0.74rem',
+          fontWeight: 600,
+          marginTop: '6px'
+        }}>
+          <AlertCircle size={14} /> {error}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export const CompanyDetailsSettings: React.FC = () => {
@@ -73,30 +407,36 @@ export const CompanyDetailsSettings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'info' | 'branches' | 'org'>('info');
 
   // Edit states for Company Info
-  const [infoForm, setInfoForm] = useState<CompanyInfo>(companyInfo || {
-    companyName: '',
-    legalCompanyName: '',
-    companyType: 'Private Limited',
-    industry: '',
-    registrationNumber: '',
-    gstNumber: '',
-    panNumber: '',
-    cinNumber: '',
-    website: '',
-    officialEmail: '',
-    officialPhone: '',
-    createdAt: new Date().toISOString(),
-    createdBy: '',
-    updatedAt: new Date().toISOString(),
-    updatedBy: ''
+  const [infoForm, setInfoForm] = useState<CompanyInfo>(() => {
+    const base = companyInfo || INITIAL_COMPANY_INFO;
+    const parsedPhone = parsePhoneWithCountryCode(base.officialPhone);
+    return {
+      ...base,
+      companyCode: base.companyCode || '',
+      officialPhone: parsedPhone.localNumber
+    };
   });
   const [isEditingInfo, setIsEditingInfo] = useState(true);
   const [infoSavedSuccess, setInfoSavedSuccess] = useState(false);
   const [infoErrors, setInfoErrors] = useState<CompanyInfoFormErrors>({});
+  const [isSavingInfo, setIsSavingInfo] = useState(false);
+  const [saveSuccessState, setSaveSuccessState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
+  const [validationSummary, setValidationSummary] = useState<string | null>(null);
+  const [officialPhoneCountryCode, setOfficialPhoneCountryCode] = useState(
+    () => parsePhoneWithCountryCode((companyInfo || INITIAL_COMPANY_INFO).officialPhone).countryCode
+  );
 
   useEffect(() => {
     if (companyInfo) {
-      setInfoForm(companyInfo);
+      const parsedPhone = parsePhoneWithCountryCode(companyInfo.officialPhone);
+      setOfficialPhoneCountryCode(parsedPhone.countryCode);
+      setInfoForm({
+        ...companyInfo,
+        companyCode: companyInfo.companyCode || '',
+        officialPhone: parsedPhone.localNumber
+      });
     }
   }, [companyInfo]);
 
@@ -157,25 +497,46 @@ export const CompanyDetailsSettings: React.FC = () => {
     setTimeout(() => setIsSyncing(false), 500);
   };
 
-  const handleSaveInfo = (e: React.FormEvent) => {
+  const handleSaveInfo = async (e: React.FormEvent) => {
     e.preventDefault();
+    setResetNotice(null);
+    setValidationSummary(null);
+
+    const normalizedWebsite = infoForm.website.trim() 
+      ? normalizeWebsite(infoForm.website)
+      : '';
+    const officialPhoneDigits = cleanPhoneNumber(infoForm.officialPhone).slice(0, officialPhoneCountryCode === '+91' ? 10 : 15);
+
     const normalized: CompanyInfo = {
       ...infoForm,
       companyName: cleanText(infoForm.companyName),
       legalCompanyName: cleanText(infoForm.legalCompanyName),
+      companyCode: cleanAlphaNumeric(infoForm.companyCode || '', 10),
       industry: cleanText(infoForm.industry),
       registrationNumber: cleanRocNumber(infoForm.registrationNumber),
       gstNumber: cleanAlphaNumeric(infoForm.gstNumber, 15),
       panNumber: cleanAlphaNumeric(infoForm.panNumber, 10),
       cinNumber: cleanAlphaNumeric(infoForm.cinNumber, 21),
-      website: infoForm.website.trim(),
+      logoUrl: (infoForm.logoUrl || '').trim(),
+      website: normalizedWebsite,
       officialEmail: infoForm.officialEmail.trim().toLowerCase(),
-      officialPhone: cleanPhoneNumber(infoForm.officialPhone)
+      officialPhone: formatPhoneWithCountryCode(officialPhoneCountryCode, officialPhoneDigits),
+      registeredAddress: (infoForm.registeredAddress || '').trim(),
+      branchAddress: (infoForm.branchAddress || '').trim(),
+      ownerName: cleanCompanyText(infoForm.ownerName || '').trim(),
+      authorizedSignatoryName: cleanCompanyText(infoForm.authorizedSignatoryName || '').trim(),
+      authorizedSignatoryDesignation: cleanCompanyText(infoForm.authorizedSignatoryDesignation || '').trim(),
+      signatureImageUrl: (infoForm.signatureImageUrl || '').trim(),
+      stampImageUrl: (infoForm.stampImageUrl || '').trim()
     };
 
     const errors: CompanyInfoFormErrors = {};
-    if (!normalized.companyName) errors.companyName = 'Company name is required.';
-    if (!normalized.legalCompanyName) errors.legalCompanyName = 'Legal entity name is required.';
+    if (!normalized.companyName.trim()) {
+      errors.companyName = 'Company Name (Brand) is required.';
+    }
+    if (!normalized.companyCode?.trim()) {
+      errors.companyCode = 'Company Code / Short Form is required (e.g. ACM, HDFC, SBI).';
+    }
     if (normalized.registrationNumber && !/^[A-Z0-9/-]{3,30}$/.test(normalized.registrationNumber)) {
       errors.registrationNumber = 'ROC number must contain only letters, numbers, / or -.';
     }
@@ -189,22 +550,84 @@ export const CompanyDetailsSettings: React.FC = () => {
       errors.cinNumber = 'Enter valid 21-character CIN.';
     }
     if (normalized.website && !isValidWebsite(normalized.website)) {
-      errors.website = 'Enter a full URL starting with http:// or https://.';
+      errors.website = 'Enter a valid website URL, e.g. https://company.com or company.com.';
     }
     if (normalized.officialEmail && !isValidEmail(normalized.officialEmail)) {
       errors.officialEmail = 'Enter a valid corporate email address.';
     }
-    if (normalized.officialPhone && normalized.officialPhone.length !== 10) {
-      errors.officialPhone = 'Phone number must be exactly 10 digits.';
+    if (officialPhoneDigits) {
+      if (officialPhoneCountryCode === '+91') {
+        if (officialPhoneDigits.length !== 10) {
+          errors.officialPhone = 'India phone number must be exactly 10 digits.';
+        } else if (!/^[6-9]\d{9}$/.test(officialPhoneDigits)) {
+          errors.officialPhone = 'India phone number must start with 6, 7, 8, or 9.';
+        }
+      } else if (officialPhoneDigits.length < 6 || officialPhoneDigits.length > 15) {
+        errors.officialPhone = 'Phone number must contain 6 to 15 digits.';
+      }
     }
 
-    setInfoForm(normalized);
+    setInfoForm({ ...normalized, officialPhone: officialPhoneDigits });
     setInfoErrors(errors);
-    if (Object.keys(errors).length > 0) return;
 
-    updateCompanyInfo(normalized);
-    setInfoSavedSuccess(true);
-    setTimeout(() => setInfoSavedSuccess(false), 3500);
+    if (Object.keys(errors).length > 0) {
+      const errorCount = Object.keys(errors).length;
+      const firstKey = Object.keys(errors)[0] as keyof CompanyInfo;
+      setValidationSummary(`Cannot save: ${errorCount} error${errorCount > 1 ? 's' : ''} found (${errors[firstKey]}). Please check highlighted fields above.`);
+      const el = document.querySelector(`[data-field="${firstKey}"]`) || document.querySelector(`[name="${firstKey}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (el as HTMLElement).focus?.();
+      }
+      return;
+    }
+
+    setIsSavingInfo(true);
+    setSaveSuccessState('saving');
+
+    try {
+      updateCompanyInfo(normalized);
+      setSaveSuccessState('saved');
+      setInfoSavedSuccess(true);
+      showCloudNotice('Company details saved and synchronized across HRMS!');
+      setTimeout(() => {
+        setSaveSuccessState('idle');
+        setInfoSavedSuccess(false);
+      }, 3000);
+    } catch (err: any) {
+      setValidationSummary(`Save failed: ${err?.message || 'Unexpected error'}`);
+      setSaveSuccessState('idle');
+    } finally {
+      setIsSavingInfo(false);
+    }
+  };
+
+  const handleResetChanges = () => {
+    setInfoErrors({});
+    setValidationSummary(null);
+    const restored = companyInfo || createBlankCompanyInfo();
+    const parsedPhone = parsePhoneWithCountryCode(restored.officialPhone);
+    setOfficialPhoneCountryCode(parsedPhone.countryCode);
+    setInfoForm({ ...restored, officialPhone: parsedPhone.localNumber });
+    setResetNotice('Changes reset to last saved company details.');
+    setTimeout(() => setResetNotice(null), 3500);
+  };
+
+  const handleClearInfoClick = () => {
+    setShowClearConfirmModal(true);
+  };
+
+  const handleConfirmClearInfo = () => {
+    const blank = createBlankCompanyInfo();
+    setInfoErrors({});
+    setValidationSummary(null);
+    setOfficialPhoneCountryCode('+91');
+    setInfoForm(blank);
+    updateCompanyInfo(blank);
+    setShowClearConfirmModal(false);
+    setResetNotice('All saved company details have been cleared.');
+    showCloudNotice('Company details cleared from database.');
+    setTimeout(() => setResetNotice(null), 3500);
   };
 
   const openAddBranchModal = () => {
@@ -507,220 +930,553 @@ export const CompanyDetailsSettings: React.FC = () => {
             </p>
           </div>
 
-          <form id="company-info-form" onSubmit={handleSaveInfo}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  Company Name (Brand)
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={infoForm.companyName}
-                  onChange={e => setInfoField('companyName', cleanCompanyText(e.target.value))}
-                  style={getInfoInputStyle('companyName')}
-                  required
-                />
-                {renderInfoError('companyName')}
+          <form id="company-info-form" noValidate onSubmit={handleSaveInfo} style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+            
+            {/* SUB-SECTION 1: Legal & Brand Identity */}
+            <div style={{
+              backgroundColor: '#FAFCFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: '14px',
+              padding: '20px 22px'
+            }}>
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Building2 size={17} color="#0E7490" />
+                <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>
+                  1. Legal & Brand Identity
+                </h4>
               </div>
-
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  Legal Registered Entity Name
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={infoForm.legalCompanyName}
-                  onChange={e => setInfoField('legalCompanyName', cleanCompanyText(e.target.value))}
-                  style={getInfoInputStyle('legalCompanyName')}
-                  required
-                />
-                {renderInfoError('legalCompanyName')}
-              </div>
-
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  Company Type
-                </label>
-                <select
-                  className="form-control"
-                  value={infoForm.companyType}
-                  onChange={e => setInfoForm({ ...infoForm, companyType: e.target.value })}
-                >
-                  <option value="Private Limited">Private Limited (Pvt. Ltd.)</option>
-                  <option value="Public Limited">Public Limited (Ltd.)</option>
-                  <option value="Limited Liability Partnership">LLP</option>
-                  <option value="Partnership">Partnership</option>
-                  <option value="Sole Proprietorship">Sole Proprietorship</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  Industry Sector
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={infoForm.industry}
-                  onChange={e => setInfoField('industry', cleanCompanyText(e.target.value))}
-                />
-              </div>
-
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  ROC Registration Number
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={infoForm.registrationNumber}
-                  onChange={e => setInfoField('registrationNumber', cleanRocNumber(e.target.value))}
-                  style={getInfoInputStyle('registrationNumber')}
-                  maxLength={30}
-                />
-                {renderInfoError('registrationNumber')}
-              </div>
-
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  GST Number (GSTIN)
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={infoForm.gstNumber}
-                  onChange={e => setInfoField('gstNumber', cleanAlphaNumeric(e.target.value, 15))}
-                  style={getInfoInputStyle('gstNumber')}
-                  maxLength={15}
-                  placeholder="33ABCDE1234F1Z5"
-                />
-                {renderInfoError('gstNumber')}
-              </div>
-
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  PAN Number
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={infoForm.panNumber}
-                  onChange={e => setInfoField('panNumber', cleanAlphaNumeric(e.target.value, 10))}
-                  style={getInfoInputStyle('panNumber')}
-                  maxLength={10}
-                  placeholder="ABCDE1234F"
-                />
-                {renderInfoError('panNumber')}
-              </div>
-
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  CIN Number (Corporate Identification)
-                </label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={infoForm.cinNumber}
-                  onChange={e => setInfoField('cinNumber', cleanAlphaNumeric(e.target.value, 21))}
-                  style={getInfoInputStyle('cinNumber')}
-                  maxLength={21}
-                  placeholder="U12345TN2020PTC123456"
-                />
-                {renderInfoError('cinNumber')}
-              </div>
-
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  Official Website
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-                  <Globe size={15} style={{ position: 'absolute', left: '12px', color: '#94A3B8' }} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Company Name (Brand) *
+                  </label>
                   <input
-                    type="url"
+                    type="text"
+                    data-field="companyName"
+                    id="company-name-input"
                     className="form-control"
-                    style={getInfoInputStyle('website', { paddingLeft: '34px' })}
-                    value={infoForm.website}
-                    onChange={e => setInfoField('website', e.target.value.trim())}
-                    placeholder="https://example.com"
+                    value={infoForm.companyName}
+                    onChange={e => setInfoField('companyName', cleanCompanyText(e.target.value))}
+                    style={getInfoInputStyle('companyName')}
+                    placeholder="e.g. Acme Corporation Private Limited"
                   />
+                  {renderInfoError('companyName')}
                 </div>
-                {renderInfoError('website')}
-              </div>
 
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  Official Corporate Email
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-                  <Mail size={15} style={{ position: 'absolute', left: '12px', color: '#94A3B8' }} />
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Legal Registered Entity Name
+                  </label>
                   <input
-                    type="email"
+                    type="text"
+                    data-field="legalCompanyName"
+                    id="legal-company-name-input"
                     className="form-control"
-                    style={getInfoInputStyle('officialEmail', { paddingLeft: '34px' })}
-                    value={infoForm.officialEmail}
-                    onChange={e => setInfoField('officialEmail', e.target.value.trim().toLowerCase())}
-                    placeholder="name@company.com"
+                    value={infoForm.legalCompanyName}
+                    onChange={e => setInfoField('legalCompanyName', cleanCompanyText(e.target.value))}
+                    style={getInfoInputStyle('legalCompanyName')}
+                    placeholder="e.g. Acme Corporation Pvt. Ltd."
                   />
+                  {renderInfoError('legalCompanyName')}
                 </div>
-                {renderInfoError('officialEmail')}
-              </div>
 
-              <div>
-                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                  Official Phone Number
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-                  <Phone size={15} style={{ position: 'absolute', left: '12px', color: '#94A3B8' }} />
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0E7490' }}>
+                    Company Code / Short Form (e.g. HDFC, SBI, KVB) *
+                  </label>
                   <input
-                  type="tel"
+                    type="text"
+                    data-field="companyCode"
+                    id="company-code-input"
                     className="form-control"
-                    style={getInfoInputStyle('officialPhone', { paddingLeft: '34px' })}
-                    value={infoForm.officialPhone}
-                    onChange={e => setInfoField('officialPhone', cleanPhoneNumber(e.target.value))}
-                    inputMode="numeric"
+                    value={infoForm.companyCode || ''}
+                    onChange={e => setInfoField('companyCode', cleanAlphaNumeric(e.target.value, 10))}
+                    placeholder="e.g. ACM, HDFC, SBI, KVB"
                     maxLength={10}
-                    placeholder="9876543210"
+                    style={{
+                      ...getInfoInputStyle('companyCode'),
+                      fontWeight: 700,
+                      letterSpacing: '0.05em',
+                      borderColor: infoErrors.companyCode ? '#EF4444' : '#0E7490',
+                      backgroundColor: '#F0FDFA'
+                    }}
+                  />
+                  {renderInfoError('companyCode')}
+                  <div style={{ fontSize: '0.72rem', color: '#0E7490', marginTop: '4px', fontWeight: 600 }}>
+                    Used as the prefix in Employee ID generation (e.g. {infoForm.companyCode || 'EMP'}-001)
+                  </div>
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Company Type
+                  </label>
+                  <select
+                    className="form-control"
+                    value={infoForm.companyType}
+                    onChange={e => setInfoForm({ ...infoForm, companyType: e.target.value })}
+                  >
+                    <option value="">Select company type</option>
+                    <option value="Private Limited">Private Limited (Pvt. Ltd.)</option>
+                    <option value="Public Limited">Public Limited (Ltd.)</option>
+                    <option value="Limited Liability Partnership">LLP</option>
+                    <option value="Partnership">Partnership</option>
+                    <option value="Sole Proprietorship">Sole Proprietorship</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Industry Sector
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={infoForm.industry}
+                    onChange={e => setInfoField('industry', cleanCompanyText(e.target.value))}
+                    placeholder="e.g. Information Technology, Manufacturing, Retail"
                   />
                 </div>
-                {renderInfoError('officialPhone')}
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    ROC Registration Number
+                  </label>
+                  <input
+                    type="text"
+                    data-field="registrationNumber"
+                    id="roc-number-input"
+                    className="form-control"
+                    value={infoForm.registrationNumber}
+                    onChange={e => setInfoField('registrationNumber', cleanRocNumber(e.target.value))}
+                    style={getInfoInputStyle('registrationNumber')}
+                    maxLength={30}
+                    placeholder="e.g. ROC-CHENNAI-150000"
+                  />
+                  {renderInfoError('registrationNumber')}
+                </div>
               </div>
             </div>
 
-            {/* Bottom Action Bar with Save Button */}
+            {/* SUB-SECTION 2: Statutory & Tax Identifiers */}
+            <div style={{
+              backgroundColor: '#FAFCFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: '14px',
+              padding: '20px 22px'
+            }}>
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={17} color="#0E7490" />
+                <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>
+                  2. Statutory & Tax Registration
+                </h4>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    GST Number (GSTIN)
+                  </label>
+                  <input
+                    type="text"
+                    data-field="gstNumber"
+                    id="gst-number-input"
+                    className="form-control"
+                    value={infoForm.gstNumber}
+                    onChange={e => setInfoField('gstNumber', cleanAlphaNumeric(e.target.value, 15))}
+                    style={getInfoInputStyle('gstNumber')}
+                    maxLength={15}
+                    placeholder="33ABCDE1234F1Z5"
+                  />
+                  {renderInfoError('gstNumber')}
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    PAN Number
+                  </label>
+                  <input
+                    type="text"
+                    data-field="panNumber"
+                    id="pan-number-input"
+                    className="form-control"
+                    value={infoForm.panNumber}
+                    onChange={e => setInfoField('panNumber', cleanAlphaNumeric(e.target.value, 10))}
+                    style={getInfoInputStyle('panNumber')}
+                    maxLength={10}
+                    placeholder="ABCDE1234F"
+                  />
+                  {renderInfoError('panNumber')}
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    CIN Number (Corporate Identification)
+                  </label>
+                  <input
+                    type="text"
+                    data-field="cinNumber"
+                    id="cin-number-input"
+                    className="form-control"
+                    value={infoForm.cinNumber}
+                    onChange={e => setInfoField('cinNumber', cleanAlphaNumeric(e.target.value, 21))}
+                    style={getInfoInputStyle('cinNumber')}
+                    maxLength={21}
+                    placeholder="U12345TN2020PTC123456"
+                  />
+                  {renderInfoError('cinNumber')}
+                </div>
+              </div>
+            </div>
+
+            {/* SUB-SECTION 3: Official Communications */}
+            <div style={{
+              backgroundColor: '#FAFCFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: '14px',
+              padding: '20px 22px'
+            }}>
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Mail size={17} color="#0E7490" />
+                <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>
+                  3. Official Corporate Communications
+                </h4>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Official Corporate Email
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                    <Mail size={15} style={{ position: 'absolute', left: '12px', color: '#94A3B8' }} />
+                    <input
+                      type="email"
+                      data-field="officialEmail"
+                      id="official-email-input"
+                      className="form-control"
+                      style={getInfoInputStyle('officialEmail', { paddingLeft: '34px' })}
+                      value={infoForm.officialEmail}
+                      onChange={e => setInfoField('officialEmail', e.target.value.trim().toLowerCase())}
+                      placeholder="contact@company.com"
+                    />
+                  </div>
+                  {renderInfoError('officialEmail')}
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Official Phone Number
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'stretch', position: 'relative' }}>
+                    <CountryCodeDropdown
+                      value={officialPhoneCountryCode}
+                      onChange={(dialCode) => {
+                        setOfficialPhoneCountryCode(dialCode);
+                        setInfoField('officialPhone', cleanPhoneNumber(infoForm.officialPhone).slice(0, dialCode === '+91' ? 10 : 15));
+                      }}
+                      disabled={isSavingInfo}
+                      id="official-phone-country-code"
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Phone size={15} style={{ position: 'absolute', left: '102px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', zIndex: 1 }} />
+                    <input
+                      type="tel"
+                      data-field="officialPhone"
+                      id="official-phone-input"
+                      className="form-control"
+                      style={getInfoInputStyle('officialPhone', {
+                        paddingLeft: '34px',
+                        borderTopLeftRadius: 0,
+                        borderBottomLeftRadius: 0
+                      })}
+                      value={cleanPhoneNumber(infoForm.officialPhone)}
+                      onChange={e => setInfoField('officialPhone', cleanPhoneNumber(e.target.value).slice(0, officialPhoneCountryCode === '+91' ? 10 : 15))}
+                      inputMode="numeric"
+                      maxLength={officialPhoneCountryCode === '+91' ? 10 : 15}
+                      placeholder="9876543210"
+                    />
+                  </div>
+                  {renderInfoError('officialPhone')}
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Official Website
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                    <Globe size={15} style={{ position: 'absolute', left: '12px', color: '#94A3B8' }} />
+                    <input
+                      type="text"
+                      data-field="website"
+                      id="official-website-input"
+                      className="form-control"
+                      style={getInfoInputStyle('website', { paddingLeft: '34px' })}
+                      value={infoForm.website}
+                      onChange={e => setInfoField('website', e.target.value.trim())}
+                      placeholder="https://company.com"
+                    />
+                  </div>
+                  {renderInfoError('website')}
+                </div>
+              </div>
+            </div>
+
+            {/* SUB-SECTION 4: Office Addresses */}
+            <div style={{
+              backgroundColor: '#FAFCFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: '14px',
+              padding: '20px 22px'
+            }}>
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MapPin size={17} color="#0E7490" />
+                <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>
+                  4. Office & Operating Addresses
+                </h4>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Registered Office Address
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={infoForm.registeredAddress || ''}
+                    onChange={e => setInfoField('registeredAddress', e.target.value)}
+                    placeholder="e.g. 123 Corporate Park, Tech Corridor, City, State — 600001"
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Branch / Operating Address
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={infoForm.branchAddress || ''}
+                    onChange={e => setInfoField('branchAddress', e.target.value)}
+                    placeholder="e.g. Phase 2 Industrial Area, City, State — 560100"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SUB-SECTION 5: Executive & Authorized Signatories */}
+            <div style={{
+              backgroundColor: '#FAFCFF',
+              border: '1px solid #E2E8F0',
+              borderRadius: '14px',
+              padding: '20px 22px'
+            }}>
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <User size={17} color="#0E7490" />
+                <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0F172A' }}>
+                  5. Executive Management & Signatories
+                </h4>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Owner / Director Name
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={infoForm.ownerName || ''}
+                    onChange={e => setInfoField('ownerName', cleanCompanyText(e.target.value))}
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Authorized Signatory Name
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={infoForm.authorizedSignatoryName || ''}
+                    onChange={e => setInfoField('authorizedSignatoryName', cleanCompanyText(e.target.value))}
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
+                    Authorized Signatory Designation
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={infoForm.authorizedSignatoryDesignation || ''}
+                    onChange={e => setInfoField('authorizedSignatoryDesignation', cleanCompanyText(e.target.value))}
+                    placeholder="e.g. Chief Executive Officer & Director"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SUB-SECTION 6: Official Media & Document Branding Assets (Upload Cards) */}
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid #0E7490',
+              borderRadius: '14px',
+              padding: '20px 22px',
+              boxShadow: '0 2px 8px rgba(14, 116, 144, 0.05)'
+            }}>
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ImageIcon size={18} color="#0E7490" />
+                  <h4 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 800, color: '#0F172A' }}>
+                    6. Official Branding & Media Assets (Offer Letter & Payslip)
+                  </h4>
+                </div>
+                <span style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  color: '#0E7490',
+                  backgroundColor: '#ECFEFF',
+                  padding: '4px 12px',
+                  borderRadius: '9999px',
+                  border: '1px solid #CFFAFE'
+                }}>
+                  Maximum 2 MB per file • PNG / JPG / WEBP / SVG
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
+                <CompanyImageUploadField
+                  label="Company Logo"
+                  value={infoForm.logoUrl || ''}
+                  onChange={dataUrl => setInfoField('logoUrl', dataUrl)}
+                  helperText="PNG, JPG, WEBP, SVG (Max 2MB)"
+                  maxSizeMb={2}
+                />
+
+                <CompanyImageUploadField
+                  label="Authorized Signature Image"
+                  value={infoForm.signatureImageUrl || ''}
+                  onChange={dataUrl => setInfoField('signatureImageUrl', dataUrl)}
+                  helperText="PNG, JPG, WEBP, SVG (Max 2MB)"
+                  maxSizeMb={2}
+                />
+
+                <CompanyImageUploadField
+                  label="Company Stamp Image"
+                  value={infoForm.stampImageUrl || ''}
+                  onChange={dataUrl => setInfoField('stampImageUrl', dataUrl)}
+                  helperText="PNG, JPG, WEBP, SVG (Max 2MB)"
+                  maxSizeMb={2}
+                />
+              </div>
+            </div>
+
+            {/* Status alerts right above the buttons */}
+            {validationSummary && (
+              <div
+                id="company-info-validation-alert"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '12px 16px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FCA5A5',
+                  borderRadius: '12px',
+                  color: '#991B1B',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  marginTop: '20px'
+                }}
+              >
+                <AlertCircle size={18} color="#DC2626" style={{ flexShrink: 0 }} />
+                <span>{validationSummary}</span>
+              </div>
+            )}
+
+            {infoSavedSuccess && (
+              <div
+                id="company-info-success-alert"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '12px 16px',
+                  backgroundColor: '#DCFCE7',
+                  border: '1px solid #86EFAC',
+                  borderRadius: '12px',
+                  color: '#166534',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  marginTop: '20px'
+                }}
+              >
+                <CheckCircle2 size={18} color="#16A34A" style={{ flexShrink: 0 }} />
+                <span>Company details saved and synchronized across all HRMS modules successfully!</span>
+              </div>
+            )}
+
+            {resetNotice && (
+              <div
+                id="company-info-reset-alert"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '12px 16px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '12px',
+                  color: '#1E40AF',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  marginTop: '20px'
+                }}
+              >
+                <CheckCircle2 size={18} color="#2563EB" style={{ flexShrink: 0 }} />
+                <span>{resetNotice}</span>
+              </div>
+            )}
+
+            {/* Bottom Action Bar with Save and Clear Buttons */}
             <div style={{
               display: 'flex',
               justifyContent: 'flex-end',
               alignItems: 'center',
               gap: '12px',
-              marginTop: '28px',
+              marginTop: '24px',
               paddingTop: '20px',
               borderTop: '1px solid #F1F5F9'
             }}>
               <button
+                id="clear-company-details-btn"
                 type="button"
-                onClick={() => setInfoForm(companyInfo)}
+                onClick={handleClearInfoClick}
+                disabled={isSavingInfo}
                 style={{
                   padding: '10px 18px',
                   borderRadius: '12px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#475569',
+                  border: '1px solid #FCA5A5',
+                  backgroundColor: '#FEF2F2',
+                  color: '#B91C1C',
                   fontSize: '0.88rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
+                  fontWeight: 700,
+                  cursor: isSavingInfo ? 'not-allowed' : 'pointer',
                   transition: 'all 0.15s ease'
                 }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
+                onMouseOver={e => !isSavingInfo && (e.currentTarget.style.backgroundColor = '#FEE2E2')}
+                onMouseOut={e => !isSavingInfo && (e.currentTarget.style.backgroundColor = '#FEF2F2')}
               >
-                Reset Changes
+                Clear Saved Details
               </button>
+
               <button
+                id="save-company-details-btn"
                 type="submit"
+                disabled={isSavingInfo}
                 style={{
-                  backgroundColor: '#0E7490',
+                  backgroundColor: saveSuccessState === 'saved' ? '#16A34A' : '#0E7490',
                   color: '#FFFFFF',
                   border: 'none',
                   borderRadius: '12px',
@@ -730,14 +1486,40 @@ export const CompanyDetailsSettings: React.FC = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(14, 116, 144, 0.3)',
-                  transition: 'all 0.15s ease'
+                  cursor: isSavingInfo ? 'not-allowed' : 'pointer',
+                  boxShadow: saveSuccessState === 'saved'
+                    ? '0 4px 14px rgba(22, 163, 74, 0.35)'
+                    : '0 4px 14px rgba(14, 116, 144, 0.3)',
+                  transition: 'all 0.2s ease',
+                  opacity: isSavingInfo ? 0.75 : 1
                 }}
-                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#0891B2')}
-                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#0E7490')}
+                onMouseOver={e => {
+                  if (!isSavingInfo && saveSuccessState !== 'saved') {
+                    e.currentTarget.style.backgroundColor = '#0891B2';
+                  }
+                }}
+                onMouseOut={e => {
+                  if (!isSavingInfo && saveSuccessState !== 'saved') {
+                    e.currentTarget.style.backgroundColor = '#0E7490';
+                  }
+                }}
               >
-                <Save size={17} /> Save Company Details
+                {saveSuccessState === 'saving' ? (
+                  <>
+                    <RefreshCw size={17} style={{ animation: 'spin 1s linear infinite' }} />
+                    Saving Details...
+                  </>
+                ) : saveSuccessState === 'saved' ? (
+                  <>
+                    <CheckCircle2 size={17} />
+                    Saved Successfully!
+                  </>
+                ) : (
+                  <>
+                    <Save size={17} />
+                    Save Company Details
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -1582,6 +2364,106 @@ export const CompanyDetailsSettings: React.FC = () => {
                 }}
               >
                 Yes, Delete Branch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Company Info Confirmation Modal */}
+      {showClearConfirmModal && (
+        <div 
+          className="modal-overlay" 
+          style={{ 
+            zIndex: 99999, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            position: 'fixed',
+            inset: 0
+          }}
+        >
+          <div 
+            className="modal-content" 
+            style={{ 
+              maxWidth: '460px', 
+              width: '90%', 
+              borderRadius: '20px', 
+              padding: '28px 24px',
+              textAlign: 'center',
+              backgroundColor: '#FFFFFF',
+              boxShadow: '0 20px 25px -5px rgba(15, 23, 42, 0.15)',
+              position: 'relative'
+            }}
+          >
+            <button 
+              type="button" 
+              onClick={() => setShowClearConfirmModal(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'transparent',
+                border: 'none',
+                color: '#94A3B8',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '8px'
+              }}
+              title="Close modal"
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              backgroundColor: '#FEE2E2',
+              color: '#DC2626',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <Trash2 size={26} />
+            </div>
+
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#1E293B' }}>
+              Clear Saved Company Details?
+            </h3>
+            
+            <p style={{ margin: '0 0 20px', fontSize: '0.88rem', color: '#64748B', lineHeight: '1.5' }}>
+              Are you sure you want to clear all company fields? All legal names, registration identifiers, contacts, and addresses will be emptied.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '10px 16px', borderRadius: '12px', fontWeight: 600 }}
+                onClick={() => setShowClearConfirmModal(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                id="confirm-clear-company-btn"
+                type="button" 
+                className="btn btn-danger" 
+                style={{ 
+                  flex: 1, 
+                  padding: '10px 16px', 
+                  borderRadius: '12px', 
+                  fontWeight: 700,
+                  backgroundColor: '#DC2626',
+                  borderColor: '#DC2626',
+                  color: '#FFFFFF'
+                }}
+                onClick={handleConfirmClearInfo}
+              >
+                Yes, Clear Details
               </button>
             </div>
           </div>

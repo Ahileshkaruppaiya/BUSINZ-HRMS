@@ -327,14 +327,15 @@ export class PayrollRepository {
     );
   }
 
-  async generatePayslip(employeeId: string, month?: number, year?: number): Promise<PayslipResponseData | null> {
+  async generatePayslip(employeeId: string, month?: number, year?: number, companyId?: string): Promise<PayslipResponseData | null> {
     const record = await this.getRecordForEmployee(employeeId, month, year);
     if (!record) return null;
 
     const emp = await employeeRepository.getEmployeeById(employeeId);
     if (!emp) return null;
 
-    const compSettings = await settingsRepository.getCompanySettings();
+    const targetCompanyId = companyId || emp.branch || 'company-a';
+    const compSettings = await settingsRepository.getCompanySettings(targetCompanyId);
 
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
@@ -343,11 +344,25 @@ export class PayrollRepository {
 
     return {
       company: {
+        company_id: compSettings.company_id || targetCompanyId,
         companyName: compSettings.companyName || 'Corporate Organization',
-        legalName: compSettings.legalEntity || compSettings.companyName || 'Corporate Organization',
+        legalName: compSettings.legalCompanyName || compSettings.legalEntity || compSettings.companyName || 'Corporate Organization',
+        logoUrl: compSettings.logoUrl || '',
         address: compSettings.address || '',
+        registeredAddress: compSettings.registeredAddress || compSettings.address || '',
+        branchAddress: compSettings.branchAddress || '',
+        email: compSettings.officialEmail || compSettings.contactEmail || '',
+        phone: compSettings.officialPhone || compSettings.contactPhone || '',
+        website: compSettings.website || '',
         pan: compSettings.panNumber || '',
-        gst: compSettings.taxIdGst || '',
+        gst: compSettings.gstNumber || compSettings.taxIdGst || '',
+        cin: compSettings.cinNumber || '',
+        registrationNumber: compSettings.registrationNumber || '',
+        ownerName: compSettings.ownerName || '',
+        authorizedSignatoryName: compSettings.authorizedSignatoryName || '',
+        authorizedSignatoryDesignation: compSettings.authorizedSignatoryDesignation || 'Authorized Signatory',
+        signatureImageUrl: compSettings.signatureImageUrl || '',
+        stampImageUrl: compSettings.stampImageUrl || '',
       },
       employee: {
         id: emp.id,

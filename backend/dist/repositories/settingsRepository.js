@@ -144,48 +144,93 @@ export class SettingsRepository {
         }
         return this.getSettings();
     }
-    async getCompanySettings() {
+    async getCompanySettings(companyId) {
+        const isCompanyB = companyId === 'company-b' || companyId?.toLowerCase()?.includes('nexus');
+        const settingKey = isCompanyB ? 'company_info_company-b' : 'company_info';
         if (isRealSupabaseConfigured()) {
             try {
                 const supabase = getSupabaseAdmin();
                 const { data } = await supabase
                     .from('company_settings')
                     .select('setting_val')
-                    .eq('setting_key', 'company_info')
+                    .eq('setting_key', settingKey)
                     .maybeSingle();
                 if (data?.setting_val && typeof data.setting_val === 'object') {
-                    return data.setting_val;
+                    return {
+                        company_id: isCompanyB ? 'company-b' : 'company-a',
+                        ...data.setting_val
+                    };
                 }
             }
             catch (err) {
                 console.warn('Database error in getCompanySettings:', err);
             }
         }
+        if (isCompanyB) {
+            return {
+                company_id: 'company-b',
+                companyCode: 'NEXUS',
+                companyName: 'Nexus Industrial Solutions Ltd',
+                legalCompanyName: 'Nexus Industrial Solutions Limited',
+                logoUrl: 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=200&q=80',
+                address: 'Nexus Towers, Industrial Area, Sector 62, Noida, Uttar Pradesh — 201309',
+                registeredAddress: 'Nexus Towers, Industrial Area, Sector 62, Noida, Uttar Pradesh — 201309',
+                branchAddress: 'MIDC Industrial Estate, Andheri East, Mumbai, Maharashtra — 400093',
+                contactEmail: 'info@nexus-solutions.com',
+                officialEmail: 'info@nexus-solutions.com',
+                contactPhone: '9123456789',
+                officialPhone: '9123456789',
+                website: 'https://nexus-solutions.com',
+                taxIdGst: '09AAACN1234F1Z2',
+                gstNumber: '09AAACN1234F1Z2',
+                cinNumber: 'L74140UP2019PLC112233',
+                registrationNumber: 'ROC-KANPUR-112233',
+                ownerName: 'Rajeshwar Singhania',
+                authorizedSignatoryName: 'Ananya Deshmukh',
+                authorizedSignatoryDesignation: 'Vice President — Human Resources',
+                signatureImageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+                stampImageUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=200&q=80',
+            };
+        }
         return {
-            companyName: '',
-            legalEntity: '',
-            taxIdGst: '',
-            pfRegistrationNumber: '',
-            esiRegistrationNumber: '',
-            address: '',
-            city: '',
-            state: '',
-            pincode: '',
-            contactEmail: '',
-            contactPhone: '',
-            website: '',
+            company_id: 'company-a',
+            companyCode: 'BUSINZ',
+            companyName: 'Businz Technologies Private Limited',
+            legalCompanyName: 'Businz Technologies Pvt. Ltd.',
+            legalEntity: 'Businz Technologies Pvt. Ltd.',
+            logoUrl: '/logo.png',
+            address: 'Businz Corporate Park, Tech Corridor, OMR, Chennai, Tamil Nadu — 600096',
+            registeredAddress: 'Businz Corporate Park, Tech Corridor, OMR, Chennai, Tamil Nadu — 600096',
+            branchAddress: 'Phase 2 Electronic City, Bengaluru, Karnataka — 560100',
+            contactEmail: 'contact@businz.com',
+            officialEmail: 'contact@businz.com',
+            contactPhone: '9876543210',
+            officialPhone: '9876543210',
+            website: 'https://businz.com',
+            taxIdGst: '33ABCDE1234F1Z5',
+            gstNumber: '33ABCDE1234F1Z5',
+            panNumber: 'AAACB1234F',
+            cinNumber: 'U72900TN2022PTC150000',
+            registrationNumber: 'ROC-CHENNAI-150000',
+            ownerName: 'Velmurukan P',
+            authorizedSignatoryName: 'Velmurukan P',
+            authorizedSignatoryDesignation: 'Chief Executive Officer & Director',
+            signatureImageUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=200&q=80',
+            stampImageUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=200&q=80',
         };
     }
-    async updateCompanySettings(updates) {
+    async updateCompanySettings(updates, companyId) {
+        const isCompanyB = (companyId || updates?.company_id) === 'company-b' || updates?.companyName?.toLowerCase()?.includes('nexus');
+        const settingKey = isCompanyB ? 'company_info_company-b' : 'company_info';
         if (isRealSupabaseConfigured()) {
             try {
                 const supabase = getSupabaseAdmin();
-                const current = await this.getCompanySettings();
-                const merged = { ...current, ...updates };
+                const current = await this.getCompanySettings(isCompanyB ? 'company-b' : 'company-a');
+                const merged = { ...current, ...updates, company_id: isCompanyB ? 'company-b' : 'company-a' };
                 const { data: existing } = await supabase
                     .from('company_settings')
                     .select('id')
-                    .eq('setting_key', 'company_info')
+                    .eq('setting_key', settingKey)
                     .maybeSingle();
                 if (existing?.id) {
                     await supabase
@@ -196,7 +241,7 @@ export class SettingsRepository {
                 else {
                     await supabase
                         .from('company_settings')
-                        .insert({ setting_key: 'company_info', setting_val: merged });
+                        .insert({ setting_key: settingKey, setting_val: merged });
                 }
                 return merged;
             }
@@ -204,7 +249,7 @@ export class SettingsRepository {
                 console.warn('Could not save company settings to Supabase:', err);
             }
         }
-        return updates;
+        return { ...updates, company_id: isCompanyB ? 'company-b' : 'company-a' };
     }
     async getGeofenceSettings() {
         if (isRealSupabaseConfigured()) {
