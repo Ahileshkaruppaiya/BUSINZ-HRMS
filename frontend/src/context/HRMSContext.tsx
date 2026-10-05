@@ -2571,8 +2571,26 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return task;
   };
 
-  // Enhanced Enterprise Tasks & Systems (Supabase Cloud Only)
-  const [enhancedTasks, setEnhancedTasks] = useState<TaskItemEnhanced[]>([]);
+  // Enhanced Enterprise Tasks & Systems (Supabase Cloud + LocalStorage Fallback)
+  const [enhancedTasks, setEnhancedTasks] = useState<TaskItemEnhanced[]>(() => {
+    try {
+      const cached = localStorage.getItem('vrm_hrms_enhanced_tasks');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  // Keep enhancedTasks backed up in localStorage
+  useEffect(() => {
+    if (enhancedTasks && enhancedTasks.length > 0) {
+      try {
+        localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(enhancedTasks));
+      } catch (e) {}
+    }
+  }, [enhancedTasks]);
   const [taskMasters, setTaskMasters] = useState<TaskMasterItem[]>(INITIAL_TASK_MASTERS);
   const [momMeetings, setMOMMeetings] = useState<MOMMeeting[]>([]);
   const [escalationRules, setEscalationRules] = useState<TaskEscalationRule[]>(INITIAL_ESCALATION_RULES);
@@ -5794,6 +5812,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       uploadedAt: att.uploadedAt || new Date().toISOString()
     }));
 
+    const currentEmpId = currentUser.employeeId || currentUser.id || 'EMP-001';
     const newTask: TaskItemEnhanced = {
       ...taskData,
       id: taskId,
@@ -5801,6 +5820,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       responsiblePersonId: finalResponsiblePersonId,
       responsiblePersonName: finalResponsiblePersonName,
       assignedBy: finalAssignedBy,
+      assignedById: (taskData as any).assignedById || currentEmpId,
+      createdBy: taskData.createdBy || currentUser.name,
+      createdById: (taskData as any).createdById || currentEmpId,
       taskDate: taskData.taskDate || today,
       overallProgress,
       overallStatus,
@@ -7743,8 +7765,26 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (Array.isArray(rawTasks) && rawTasks.length > 0) {
         const sanitized = rawTasks.map(sanitizeSelfAssignedTask);
         setEnhancedTasks(sanitized);
+        try {
+          localStorage.setItem('vrm_hrms_enhanced_tasks', JSON.stringify(sanitized));
+        } catch (e) {}
       } else {
-        setEnhancedTasks([]);
+        // Fallback: don't wipe out localStorage if Supabase returned [] or failed
+        try {
+          const cached = localStorage.getItem('vrm_hrms_enhanced_tasks');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setEnhancedTasks(parsed);
+            } else {
+              setEnhancedTasks([]);
+            }
+          } else {
+            setEnhancedTasks([]);
+          }
+        } catch (e) {
+          setEnhancedTasks([]);
+        }
       }
 
       // 3. Synchronize All Company Settings & Core Modules

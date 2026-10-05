@@ -13,7 +13,7 @@ import {
   RotateCcw,
   Sparkles
 } from 'lucide-react';
-import { TaskAssigneeStatus } from '../../types/tasks';
+import { TaskAssigneeStatus, isTaskAssignedByMe } from '../../types/tasks';
 import { StandardTablePagination } from '../common/StandardTablePagination';
 import { StandardFloatingActionBar } from '../common/StandardFloatingActionBar';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
@@ -74,7 +74,7 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
       if (task.dailyReports && task.dailyReports.length > 0) {
         task.dailyReports.forEach(r => {
           // Employee visibility check:
-          // If employee, only see reports on tasks assigned to them or submitted by them
+          // If employee, see reports on tasks assigned to them, submitted by them, or assigned by them
           if (isEmployee) {
             const isAssigned = task.assignees.some(a => 
               a.employeeId === currentEmpId || 
@@ -82,7 +82,8 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
               (currentEmpName && a.employeeName.toLowerCase().includes(currentEmpName))
             );
             const isReporter = r.employeeId === currentEmpId || (currentEmpName && r.employeeName.toLowerCase().includes(currentEmpName));
-            if (!isAssigned && !isReporter) return;
+            const isAssigner = isTaskAssignedByMe(task, currentUser);
+            if (!isAssigned && !isReporter && !isAssigner) return;
           } else if (isManager && currentUser.department && !isCEO && !isHR) {
             if (task.department !== currentUser.department) return;
           }

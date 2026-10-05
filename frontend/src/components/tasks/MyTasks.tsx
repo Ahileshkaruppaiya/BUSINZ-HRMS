@@ -7,15 +7,16 @@ import {
   Paperclip, 
   FileText 
 } from 'lucide-react';
-import { TaskItemEnhanced, TaskAssigneeStatus, computeDueStatus } from '../../types/tasks';
+import { TaskItemEnhanced, TaskAssigneeStatus, computeDueStatus, isTaskAssignedByMe } from '../../types/tasks';
 import { StandardFloatingActionBar } from '../common/StandardFloatingActionBar';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
 interface MyTasksProps {
   onSelectTask: (taskId: string) => void;
+  onSwitchToAssigned?: () => void;
 }
 
-export const MyTasks: React.FC<MyTasksProps> = ({ onSelectTask }) => {
+export const MyTasks: React.FC<MyTasksProps> = ({ onSelectTask, onSwitchToAssigned }) => {
   const { enhancedTasks, currentUser } = useHRMS();
 
   // Default directly to 'pending' (To Do) so newly created tasks appear immediately
@@ -55,6 +56,11 @@ export const MyTasks: React.FC<MyTasksProps> = ({ onSelectTask }) => {
   }, [enhancedTasks, currentEmpId, currentUser]);
 
   const today = new Date().toISOString().split('T')[0];
+
+  // Count tasks assigned by the current user to others
+  const assignedByMeCount = useMemo(() => {
+    return enhancedTasks.filter(t => isTaskAssignedByMe(t, currentUser)).length;
+  }, [enhancedTasks, currentUser]);
 
   // Section categorization
   const sectionTasks = useMemo(() => {
@@ -141,6 +147,40 @@ export const MyTasks: React.FC<MyTasksProps> = ({ onSelectTask }) => {
             {sec.label} <span style={{ opacity: 0.85, marginLeft: '6px', background: activeSection === sec.id ? 'rgba(255,255,255,0.25)' : '#E2E8F0', color: activeSection === sec.id ? '#fff' : '#475569', padding: '1px 7px', borderRadius: '99px', fontSize: '0.72rem', fontWeight: 700 }}>{sec.count}</span>
           </button>
         ))}
+
+        {onSwitchToAssigned && assignedByMeCount > 0 && (
+          <button
+            type="button"
+            onClick={onSwitchToAssigned}
+            className="btn btn-secondary"
+            style={{ 
+              fontSize: '0.82rem', 
+              padding: '7px 14px', 
+              borderRadius: '8px', 
+              color: '#0E7490',
+              borderColor: '#CFFAFE',
+              background: '#ECFEFF',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginLeft: 'auto'
+            }}
+          >
+            <span>Assigned by Me</span>
+            <span style={{ 
+              background: '#0E7490', 
+              color: '#ffffff', 
+              padding: '1px 7px', 
+              borderRadius: '99px', 
+              fontSize: '0.72rem', 
+              fontWeight: 700 
+            }}>
+              {assignedByMeCount}
+            </span>
+            <span>→</span>
+          </button>
+        )}
       </div>
 
       {/* TASKS LIST VIEW */}
@@ -172,6 +212,27 @@ export const MyTasks: React.FC<MyTasksProps> = ({ onSelectTask }) => {
                     <CheckCircle2 size={36} style={{ opacity: 0.3, margin: '0 auto 10px' }} />
                     <div style={{ fontWeight: 600 }}>No tasks in this section</div>
                     <div style={{ fontSize: '0.78rem' }}>You are all caught up!</div>
+                    {onSwitchToAssigned && assignedByMeCount > 0 && (
+                      <div style={{ marginTop: '14px' }}>
+                        <button
+                          type="button"
+                          onClick={onSwitchToAssigned}
+                          className="btn btn-primary btn-sm"
+                          style={{
+                            background: '#0E7490',
+                            borderColor: '#0E7490',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontWeight: 600,
+                            padding: '6px 14px',
+                            borderRadius: '8px'
+                          }}
+                        >
+                          View Tasks Assigned by You ({assignedByMeCount}) →
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (

@@ -241,7 +241,9 @@ export interface TaskItemEnhanced {
   momId?: string;
   momItemNumber?: string;
   createdBy: string;
+  createdById?: string;
   assignedBy: string;
+  assignedById?: string;
   responsiblePersonId: string;
   responsiblePersonName: string;
   department: string;
@@ -469,4 +471,40 @@ export function calculateEmployeeTaskMetrics(
     averageProgress,
     workloadLevel
   };
+}
+
+/**
+ * Determines whether a task was assigned/created by the specified user
+ */
+export function isTaskAssignedByMe(task: TaskItemEnhanced, currentUser: any): boolean {
+  if (!task || !currentUser) return false;
+
+  const currentEmpId = (currentUser.employeeId || currentUser.id || '').toLowerCase().trim();
+  const currentName = (currentUser.name || '').toLowerCase().trim();
+
+  // 1. Check createdById or assignedById
+  if ((task as any).createdById && currentEmpId && (task as any).createdById.toLowerCase().trim() === currentEmpId) {
+    return true;
+  }
+  if ((task as any).assignedById && currentEmpId && (task as any).assignedById.toLowerCase().trim() === currentEmpId) {
+    return true;
+  }
+
+  // 2. Check createdBy string
+  const createdBy = (task.createdBy || '').toLowerCase().trim();
+  if (currentName && createdBy) {
+    if (createdBy === currentName || createdBy.includes(currentName) || currentName.includes(createdBy)) {
+      return true;
+    }
+  }
+
+  // 3. Check assignedBy string (e.g. "AJITH KUMAR (Employee)")
+  const assignedBy = (task.assignedBy || '').toLowerCase().trim();
+  if (currentName && assignedBy) {
+    if (assignedBy.includes(currentName) || currentName.includes(assignedBy)) {
+      return true;
+    }
+  }
+
+  return false;
 }

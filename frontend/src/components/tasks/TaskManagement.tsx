@@ -15,6 +15,7 @@ import {
 import { TaskRegister } from './TaskRegister';
 import { NewTaskForm } from './NewTaskForm';
 import { MyTasks } from './MyTasks';
+import { AssignedTasks } from './AssignedTasks';
 import { TeamTasks } from './TeamTasks';
 import { DailyTaskReportManagement } from './DailyTaskReportManagement';
 import { TaskDetailModal } from './TaskDetailModal';
@@ -22,7 +23,7 @@ import { TaskReports } from './TaskReports';
 import { ExportDropdown } from '../common/ExportDropdown';
 import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
-import { computeDueStatus } from '../../types/tasks';
+import { computeDueStatus, isTaskAssignedByMe } from '../../types/tasks';
 
 interface TaskManagementProps {
   openAddModal?: boolean;
@@ -40,8 +41,26 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
 
   // Active Tab State - defaults to 'my_tasks' for employees, 'register' for HR/CEO
   const [activeTab, setActiveTab] = useState<
-    'register' | 'my_tasks' | 'team_tasks' | 'daily_reports' | 'new_task' | 'reports'
-  >(isEmployee ? 'my_tasks' : 'register');
+    'register' | 'my_tasks' | 'assigned_tasks' | 'team_tasks' | 'daily_reports' | 'new_task' | 'reports'
+  >(() => {
+    try {
+      const saved = sessionStorage.getItem('vrm_task_active_tab');
+      if (saved && ['register', 'my_tasks', 'assigned_tasks', 'team_tasks', 'daily_reports', 'reports'].includes(saved)) {
+        if (isEmployee && (saved === 'register' || saved === 'team_tasks' || saved === 'reports')) {
+          return 'my_tasks';
+        }
+        return saved as any;
+      }
+    } catch (e) {}
+    return isEmployee ? 'my_tasks' : 'register';
+  });
+
+  const handleTabChange = (tab: 'register' | 'my_tasks' | 'assigned_tasks' | 'team_tasks' | 'daily_reports' | 'new_task' | 'reports') => {
+    setActiveTab(tab);
+    try {
+      sessionStorage.setItem('vrm_task_active_tab', tab);
+    } catch (e) {}
+  };
 
   // Selected Task for Detail Modal
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -49,27 +68,27 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
   // If user opened via quick add modal trigger
   useEffect(() => {
     if (openAddModal) {
-      setActiveTab('new_task');
+      handleTabChange('new_task');
     }
   }, [openAddModal]);
 
   // Sync tab when user switches role in demo
   useEffect(() => {
     if (!openAddModal) {
-      if (isEmployee) {
-        setActiveTab('my_tasks');
+      if (isEmployee && (activeTab === 'register' || activeTab === 'team_tasks' || activeTab === 'reports')) {
+        handleTabChange('my_tasks');
       }
     }
   }, [currentUser.role, isEmployee, openAddModal]);
 
   const handleTaskCreated = (newTaskId: string) => {
     setSelectedTaskId(newTaskId);
-    setActiveTab('my_tasks');
+    handleTabChange('assigned_tasks');
     if (onCloseQuickAdd) onCloseQuickAdd();
   };
 
   const handleCancelCreate = () => {
-    setActiveTab(isEmployee ? 'my_tasks' : 'register');
+    handleTabChange(isEmployee ? 'my_tasks' : 'register');
     if (onCloseQuickAdd) onCloseQuickAdd();
   };
 
@@ -183,6 +202,12 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
     t.overallStatus !== 'COMPLETED' && t.overallStatus !== 'CLOSED'
   ).length;
 
+  // Count tasks assigned by current user
+  const assignedTasksCount = enhancedTasks.filter(t => 
+    isTaskAssignedByMe(t, currentUser) &&
+    t.overallStatus !== 'COMPLETED' && t.overallStatus !== 'CLOSED'
+  ).length;
+
   // Count total daily reports
   const dailyReportsCount = enhancedTasks.reduce((acc, t) => acc + (t.dailyReports?.length || 0), 0);
 
@@ -191,13 +216,21 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
       {/* Standard Page Header */}
       <div className="page-header">
         <div className="page-title-group">
-          <h1>{isEmployee ? (activeTab === 'daily_reports' ? 'Daily Task Reports' : 'My Tasks') : 'Task Management'}</h1>
+          <h1>
+            {activeTab === 'assigned_tasks'
+              ? 'Assigned Tasks'
+              : isEmployee 
+                ? (activeTab === 'daily_reports' ? 'Daily Task Reports' : 'My Tasks') 
+                : 'Task Management'}
+          </h1>
           <p className="page-subtitle">
-            {isEmployee 
-              ? `Personal task workspace — monitor deliverables and submit daily reports (${currentUser.name})`
-              : isCEO 
-                ? 'Assign deliverables, monitor company progress, and review department execution'
-                : 'Assign, track, and monitor department deliverables and task completion progress'}
+            {activeTab === 'assigned_tasks'
+              ? `Track deliverables, assignee progress, and status of tasks assigned by you (${currentUser.name})`
+              : isEmployee 
+                ? `Personal task workspace — monitor deliverables and submit daily reports (${currentUser.name})`
+                : isCEO 
+                  ? 'Assign deliverables, monitor company progress, and review department execution'
+                  : 'Assign, track, and monitor department deliverables and task completion progress'}
           </p>
         </div>
         <div className="header-actions" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -214,7 +247,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
             <button
               type="button"
               className="btn btn-secondary btn-sm"
-              onClick={() => setActiveTab(isEmployee ? 'my_tasks' : 'register')}
+              onClick={() => handleTabChange(isEmployee ? 'my_tasks' : 'register')}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
             >
               <ListTodo size={16} /> {isEmployee ? 'My Tasks' : 'Task Register'}
@@ -223,7 +256,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              onClick={() => setActiveTab('new_task')}
+              onClick={() => handleTabChange('new_task')}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, background: '#0E7490', borderColor: '#0E7490' }}
             >
               <Plus size={16} /> Assign Task
@@ -247,6 +280,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
               {[
                 { id: 'register', label: 'Task Register', icon: ListTodo },
                 { id: 'my_tasks', label: 'My Tasks', icon: UserCheck, badge: myTasksCount },
+                { id: 'assigned_tasks', label: 'Assigned Tasks', icon: CheckSquare, badge: assignedTasksCount },
                 { id: 'team_tasks', label: 'Team Tasks', icon: Users },
                 { id: 'daily_reports', label: 'Daily Reports', icon: FileCheck, badge: dailyReportsCount },
                 { id: 'reports', label: 'Reports', icon: BarChart3 }
@@ -257,7 +291,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
                 return (
                   <button
                     key={t.id}
-                    onClick={() => setActiveTab(t.id as any)}
+                    onClick={() => handleTabChange(t.id as any)}
                     style={{ 
                       fontSize: '0.82rem', 
                       padding: '8px 16px', 
@@ -309,7 +343,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
         </div>
       )}
 
-      {/* Top Navigation for Employees: My Tasks & Daily Reports */}
+      {/* Top Navigation for Employees: My Tasks, Assigned Tasks & Daily Reports */}
       {isEmployee && (
         <div style={{ 
           padding: '8px 16px', 
@@ -322,6 +356,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             {[
               { id: 'my_tasks', label: 'My Tasks', icon: UserCheck, badge: myTasksCount },
+              { id: 'assigned_tasks', label: 'Assigned Tasks', icon: CheckSquare, badge: assignedTasksCount },
               { id: 'daily_reports', label: 'Daily Reports', icon: FileCheck }
             ].map(t => {
               const Icon = t.icon;
@@ -330,7 +365,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
               return (
                 <button
                   key={t.id}
-                  onClick={() => setActiveTab(t.id as any)}
+                  onClick={() => handleTabChange(t.id as any)}
                   style={{ 
                     fontSize: '0.82rem', 
                     padding: '8px 16px', 
@@ -351,7 +386,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
                   <span>{t.label}</span>
                   {t.badge !== undefined && t.badge > 0 && (
                     <span style={{ 
-                      background: isActive ? 'rgba(255, 255, 255, 0.25)' : '#EF4444', 
+                      background: isActive ? 'rgba(255, 255, 255, 0.25)' : '#0E7490', 
                       color: '#ffffff', 
                       fontSize: '0.7rem', 
                       fontWeight: 700, 
@@ -373,13 +408,21 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
       {!isEmployee && activeTab === 'register' && (
         <TaskRegister 
           onSelectTask={(id) => setSelectedTaskId(id)}
-          onOpenNewTask={() => setActiveTab('new_task')}
+          onOpenNewTask={() => handleTabChange('new_task')}
         />
       )}
 
       {activeTab === 'my_tasks' && (
         <MyTasks 
           onSelectTask={(id) => setSelectedTaskId(id)}
+          onSwitchToAssigned={() => handleTabChange('assigned_tasks')}
+        />
+      )}
+
+      {activeTab === 'assigned_tasks' && (
+        <AssignedTasks 
+          onSelectTask={(id) => setSelectedTaskId(id)}
+          onAssignNewTask={() => handleTabChange('new_task')}
         />
       )}
 
