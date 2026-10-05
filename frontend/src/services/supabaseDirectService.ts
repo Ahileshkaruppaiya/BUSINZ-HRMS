@@ -51,6 +51,38 @@ const resolveDepartmentId = async (departmentName?: string, departmentId?: strin
   return undefined;
 };
 
+const resolveEmployeeUuid = async (employeeIdOrCode?: string): Promise<string | undefined> => {
+  const clean = (employeeIdOrCode || '').trim();
+  if (!clean) return undefined;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+    return clean;
+  }
+
+  try {
+    const byEmployeeCode = await fetch(`${SUPABASE_URL}/rest/v1/employees?employee_id=eq.${encodeURIComponent(clean)}&select=id&limit=1`, {
+      headers: getHeaders(),
+    });
+    if (byEmployeeCode.ok) {
+      const rows = await byEmployeeCode.json();
+      if (Array.isArray(rows) && rows[0]?.id) return rows[0].id;
+    }
+
+    if (clean.includes('@')) {
+      const byEmail = await fetch(`${SUPABASE_URL}/rest/v1/employees?email=eq.${encodeURIComponent(clean.toLowerCase())}&select=id&limit=1`, {
+        headers: getHeaders(),
+      });
+      if (byEmail.ok) {
+        const rows = await byEmail.json();
+        if (Array.isArray(rows) && rows[0]?.id) return rows[0].id;
+      }
+    }
+  } catch (err) {
+    console.warn('[SupabaseDirect] resolveEmployeeUuid notice:', err);
+  }
+
+  return undefined;
+};
+
 export const supabaseDirect = {
   /**
    * Fetches all active employees directly from Supabase REST
@@ -722,7 +754,7 @@ export const supabaseDirect = {
   },
 
   async insertLeaveRequest(req: {
-    employee_id: string; // UUID from employees.id
+    employee_id: string; // UUID from employees.id, or employee code resolved before insert
     leave_type: string;
     start_date: string;
     end_date: string;
@@ -731,6 +763,11 @@ export const supabaseDirect = {
     status?: string;
   }): Promise<{ success: boolean; data?: any; error?: any }> {
     try {
+      const employeeUuid = await resolveEmployeeUuid(req.employee_id);
+      if (!employeeUuid) {
+        return { success: false, error: `Employee '${req.employee_id}' was not found in Supabase employees table.` };
+      }
+
       // Map to PostgreSQL enum hr_leave_type: ['Casual Leave', 'Sick Leave', 'Paid Leave', 'Unpaid Leave', 'Work From Home']
       const rawType = (req.leave_type || '').toLowerCase();
       let normType = 'Casual Leave';
@@ -743,7 +780,7 @@ export const supabaseDirect = {
       const normStatus = validStatuses.includes(req.status || '') ? req.status : 'Pending';
 
       const payload = {
-        employee_id: req.employee_id,
+        employee_id: employeeUuid,
         leave_type: normType,
         start_date: req.start_date,
         end_date: req.end_date,
@@ -1004,7 +1041,7 @@ export const supabaseDirect = {
   },
 
   async insertExpense(expense: {
-    employee_id: string; // UUID from employees.id
+    employee_id: string; // UUID from employees.id, or employee code resolved before insert
     category: string;
     amount: number;
     date: string;
@@ -1013,6 +1050,11 @@ export const supabaseDirect = {
     status?: string;
   }): Promise<{ success: boolean; data?: any; error?: any }> {
     try {
+      const employeeUuid = await resolveEmployeeUuid(expense.employee_id);
+      if (!employeeUuid) {
+        return { success: false, error: `Employee '${expense.employee_id}' was not found in Supabase employees table.` };
+      }
+
       // Map to PostgreSQL enum hr_expense_status: ['Pending Manager', 'Pending Finance', 'Approved', 'Rejected', 'Reimbursed']
       let normStatus = 'Pending Manager';
       const rawStatus = (expense.status || '').toLowerCase();
@@ -1022,7 +1064,7 @@ export const supabaseDirect = {
       else if (rawStatus.includes('finance')) normStatus = 'Pending Finance';
 
       const payload = {
-        employee_id: expense.employee_id,
+        employee_id: employeeUuid,
         category: expense.category || 'Travel',
         amount: Number(expense.amount) || 0,
         date: expense.date,

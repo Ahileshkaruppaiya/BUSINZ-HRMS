@@ -2755,6 +2755,14 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('expenses_data', expenses);
+      }
+    } catch {}
+  }, [expenses]);
+
+  useEffect(() => {
+    try {
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('holiday_policies_data', holidayPolicies);
       }
     } catch {}
@@ -3045,6 +3053,17 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     const now = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minNeededDate = tomorrow.toISOString().split('T')[0];
+    if (requestData.neededByDate && requestData.neededByDate < minNeededDate) {
+      return { success: false, message: `Funds needed by date must be a future date (${minNeededDate} onwards). Past dates cannot be requested.` };
+    }
+
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const defaultDeductionMonth = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+    const deductionStartMonth = requestData.deductionStartMonth || defaultDeductionMonth;
+
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const timestamp = `${dateStr} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const loanId = `ADV-${now.getFullYear()}-${String(loanRecords.length + 1).padStart(3, '0')}`;
@@ -3068,6 +3087,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       requestedDate: dateStr,
       status: 'Pending',
       monthlyDeduction: monthlyEMI,
+      deductionStartMonth,
       outstandingBalance: requestData.requestedAmount,
       repaymentSchedule: schedule,
       auditLogs: [
@@ -3115,7 +3135,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const approvedAmt = options.approvedAmount ?? rec.requestedAmount;
         const approvedM = options.approvedMonths ?? rec.installmentMonths;
         const emi = options.monthlyDeduction ?? Math.round(approvedAmt / approvedM);
-        const startMonth = options.deductionStartMonth || 'Sep 2026';
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const defaultDeductionMonth = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+        const startMonth = options.deductionStartMonth || rec.deductionStartMonth || defaultDeductionMonth;
 
         const schedule: LoanRepaymentInstallment[] = Array.from({ length: approvedM }).map((_, idx) => {
           return {
@@ -3207,7 +3229,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const amt = details.disbursedAmount || rec.approvedAmount || rec.requestedAmount;
       const months = rec.approvedMonths || rec.installmentMonths || 3;
       const emi = rec.monthlyDeduction || Math.round(amt / months);
-      const startMonth = rec.deductionStartMonth || 'Sep 2026';
+      const nextMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+      const defaultDeductionMonth = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+      const startMonth = rec.deductionStartMonth || defaultDeductionMonth;
 
       const schedule: LoanRepaymentInstallment[] = Array.from({ length: months }).map((_, idx) => {
         return {
@@ -5210,6 +5234,21 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const applyLeave = (req: Omit<LeaveRequest, 'id' | 'status' | 'appliedDate'>) => {
     const today = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minAllowedDate = tomorrow.toISOString().split('T')[0];
+
+    // Strictly enforce future date only: block past dates (yesterday, previous months)
+    let safeStartDate = req.startDate;
+    let safeEndDate = req.endDate;
+    if (!safeStartDate || safeStartDate < minAllowedDate) {
+      console.warn(`[applyLeave] Past start date (${req.startDate}) blocked. Enforcing minimum future date: ${minAllowedDate}`);
+      safeStartDate = minAllowedDate;
+    }
+    if (!safeEndDate || safeEndDate < safeStartDate) {
+      safeEndDate = safeStartDate;
+    }
+
     const emp = employees.find(e => e.employeeId === req.employeeId) || employees[0];
 
     const isWfh = req.leaveType === 'Work From Home' || 
@@ -5230,8 +5269,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } : (req.sandwichDetails || calculateSandwichLeave({
       employee: emp,
       leaveType: req.leaveType,
-      startDate: req.startDate,
-      endDate: req.endDate,
+      startDate: safeStartDate,
+      endDate: safeEndDate,
       policies: sandwichPolicies,
       holidays: holidayPolicies,
       existingLeaves: leaveRequests,
@@ -5249,6 +5288,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       id: tempLeaveId,
       status: 'Pending',
       appliedDate: today,
+      startDate: safeStartDate,
+      endDate: safeEndDate,
       daysCount: finalDaysCount,
       sandwichDetails: sandwichCalc,
       isSandwichApplied: isSandwich,
@@ -5259,22 +5300,28 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     setLeaveRequests(prev => [newReq, ...prev]);
+    if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+      supabaseDirect.saveCompanySetting('leave_requests_data', [newReq, ...leaveRequests]).catch(() => {});
+    }
 
     // Persist to central Supabase PostgreSQL leave_requests table
-    const targetEmpDbId = emp?.id && emp.id.length === 36 ? emp.id : (req.employeeId && req.employeeId.length === 36 ? req.employeeId : undefined);
-    if (targetEmpDbId) {
-      supabaseDirect.insertLeaveRequest({
-        employee_id: targetEmpDbId,
-        leave_type: req.leaveType,
-        start_date: req.startDate,
-        end_date: req.endDate,
-        days_count: finalDaysCount,
-        reason: req.reason,
-        status: 'Pending',
-      }).catch(err => {
-        console.warn('[HRMSContext] leave request cloud insert notice:', err);
-      });
-    }
+    supabaseDirect.insertLeaveRequest({
+      employee_id: emp?.employeeId || req.employeeId || emp?.id,
+      leave_type: req.leaveType,
+      start_date: safeStartDate,
+      end_date: safeEndDate,
+      days_count: finalDaysCount,
+      reason: req.reason,
+      status: 'Pending',
+    }).then(res => {
+      if (res.data?.id) {
+        setLeaveRequests(curr => curr.map(l => l.id === tempLeaveId ? { ...l, id: res.data.id } : l));
+      } else if (!res.success) {
+        console.warn('[HRMSContext] leave request cloud insert notice:', res.error);
+      }
+    }).catch(err => {
+      console.warn('[HRMSContext] leave request cloud insert notice:', err);
+    });
 
     if (isSandwich) {
       addSandwichAuditLog({
@@ -6670,24 +6717,28 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       status: 'Pending Manager'
     };
     setExpenses(prev => [newExp, ...prev]);
+    if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+      supabaseDirect.saveCompanySetting('expenses_data', [newExp, ...expenses]).catch(() => {});
+    }
 
     const targetEmp = employees.find(e => e.id === exp.employeeId || e.employeeId === exp.employeeId);
-    const targetEmpId = targetEmp?.id && targetEmp.id.length === 36 ? targetEmp.id : (exp.employeeId.length === 36 ? exp.employeeId : undefined);
-    if (targetEmpId) {
-      supabaseDirect.insertExpense({
-        employee_id: targetEmpId,
-        category: exp.category,
-        amount: exp.amount,
-        date: exp.date,
-        description: exp.description,
-        receipt_url: exp.receiptUrl,
-        status: 'Pending Manager',
-      }).then(res => {
-        if (res.data?.id) {
-          setExpenses(curr => curr.map(e => e.id === tempId ? { ...e, id: res.data.id } : e));
-        }
-      });
-    }
+    supabaseDirect.insertExpense({
+      employee_id: targetEmp?.employeeId || exp.employeeId || targetEmp?.id || '',
+      category: exp.category,
+      amount: exp.amount,
+      date: exp.date,
+      description: exp.description,
+      receipt_url: exp.receiptUrl,
+      status: 'Pending Manager',
+    }).then(res => {
+      if (res.data?.id) {
+        setExpenses(curr => curr.map(e => e.id === tempId ? { ...e, id: res.data.id } : e));
+      } else if (!res.success) {
+        console.warn('[HRMSContext] expense cloud insert notice:', res.error);
+      }
+    }).catch(err => {
+      console.warn('[HRMSContext] expense cloud insert notice:', err);
+    });
 
     addNotification({
       title: 'Expense Claim Submitted',
@@ -7810,9 +7861,19 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setAssets([]);
       }
 
-      // Synchronize Expenses (DB table primary, settings fallback)
+      // Synchronize Expenses (DB table primary, company settings fallback)
+      const savedExpenses = Array.isArray(settings.expenses_data) ? settings.expenses_data : [];
+      const expenseKey = (exp: Expense) => [
+        exp.employeeId,
+        exp.category,
+        exp.amount,
+        exp.date,
+        exp.description || '',
+        exp.status || 'Pending Manager'
+      ].join('|').toLowerCase();
+
       if (Array.isArray(rawExpenses) && rawExpenses.length > 0) {
-        setExpenses(rawExpenses.map((exp: any) => ({
+        const mappedExpenses = rawExpenses.map((exp: any) => ({
           id: exp.id,
           employeeId: exp.employee?.employee_id || exp.employee_id,
           employeeName: exp.employee ? `${exp.employee.first_name || ''} ${exp.employee.last_name || ''}`.trim() : 'Staff',
@@ -7823,9 +7884,26 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           description: exp.description || '',
           receiptUrl: exp.receipt_url || '',
           status: exp.status || 'Pending'
-        })));
+        }));
+        const savedOnlyExpenses = savedExpenses.filter((exp: Expense) => (
+          exp?.id &&
+          !mappedExpenses.some((dbExp: Expense) => dbExp.id === exp.id || expenseKey(dbExp) === expenseKey(exp))
+        ));
+        setExpenses(prev => {
+          const mergedCloudExpenses = [...savedOnlyExpenses, ...mappedExpenses];
+          const cloudIds = new Set(mergedCloudExpenses.map((exp: Expense) => exp.id));
+          const cloudKeys = new Set(mergedCloudExpenses.map((exp: Expense) => expenseKey(exp)));
+          const localOnlyExpenses = prev.filter((exp: Expense) => (
+            String(exp.id).startsWith('EXP-') &&
+            !cloudIds.has(exp.id) &&
+            !cloudKeys.has(expenseKey(exp))
+          ));
+          return [...localOnlyExpenses, ...mergedCloudExpenses];
+        });
+      } else if (savedExpenses.length > 0) {
+        setExpenses(savedExpenses);
       } else {
-        setExpenses([]);
+        setExpenses(prev => (isInitial ? [] : prev));
       }
 
       // Synchronize Recruitment: Jobs & Candidates

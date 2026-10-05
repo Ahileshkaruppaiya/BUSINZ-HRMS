@@ -154,6 +154,17 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   const [manualRepaymentModalRecord, setManualRepaymentModalRecord] = useState<LoanRecord | null>(null);
   const [scheduleModalRecord, setScheduleModalRecord] = useState<LoanRecord | null>(null);
 
+  const getLocalDateString = (offsetDays: number = 0) => {
+    const date = new Date();
+    date.setDate(date.getDate() + offsetDays);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getFutureRequestDateString = () => getLocalDateString(1);
+
   // Sync quick add modal trigger from header
   useEffect(() => {
     if (openAddModal) {
@@ -175,7 +186,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     installmentMonths: 3,
     purpose: 'Emergency Medical & Personal Expense',
     reasonDetails: '',
-    neededByDate: new Date().toISOString().split('T')[0]
+    neededByDate: getFutureRequestDateString()
   });
 
   const normalizeRepaymentMonthsInput = (value: string, maxMonths: number, minMonths: number = 1): number => {
@@ -196,6 +207,16 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     return `${year}-${month}-${day}`;
   };
 
+  const upcomingPayrollCycles = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 12 }).map((_, idx) => {
+      const d = new Date(now.getFullYear(), now.getMonth() + idx, 1);
+      const val = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+      const full = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      return { val, label: `${full} Cycle` };
+    });
+  }, []);
+
   // Review Form State
   const [reviewFormData, setReviewFormData] = useState<{
     action: 'Approve' | 'Reject';
@@ -211,7 +232,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     approvedAmount: 0,
     approvedMonths: 0,
     monthlyDeduction: 0,
-    deductionStartMonth: 'Sep 2026',
+    deductionStartMonth: 'Nov 2026',
     internalHrNotes: '',
     employeeVisibleNotes: '',
     rejectionReason: 'Request exceeds allowable repayment ratio or eligibility guidelines.'
@@ -225,7 +246,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     transactionRef: string;
     notes: string;
   }>({
-    disbursedDate: '2026-09-08',
+    disbursedDate: getTodayDateString(),
     disbursedAmount: 0,
     paymentMode: 'NEFT',
     transactionRef: '',
@@ -378,7 +399,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     const empId = targetEmployee?.employeeId || currentUser?.employeeId || 'EMP-001';
     const elig = calculateEmployeeLoanEligibility(empId);
     const maxAmt = elig.maxEligibleAmount || 50000;
-    const requestDate = getTodayDateString();
+    const requestDate = getFutureRequestDateString();
     const policyMin = elig.policy?.minRepaymentMonths ?? 1;
     const policyMax = elig.policy?.maxRepaymentMonths ?? 3;
     const defaultMonths = Math.min(Math.max(3, policyMin), policyMax);
@@ -428,11 +449,15 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       return;
     }
 
-    const requestDate = getTodayDateString();
-    if (requestFormData.neededByDate && requestFormData.neededByDate < requestDate) {
-      showFeedback('error', 'Funds needed by date cannot be before the request date.');
+    const minNeededByDate = getFutureRequestDateString();
+    if (!requestFormData.neededByDate || requestFormData.neededByDate < minNeededByDate) {
+      showFeedback('error', `Funds needed by date must be a future date (${formatDateDDMMYYYY(minNeededByDate)} onwards). Past dates (yesterday, previous months) cannot be requested.`);
       return;
     }
+
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const defaultDeductionMonth = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' });
 
     const res = submitLoanRequest({
       employeeId: targetEmployee.employeeId,
@@ -447,7 +472,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       requestedAmount,
       installmentMonths: requestFormData.installmentMonths,
       monthlyDeduction: Math.round(requestedAmount / (requestFormData.installmentMonths || 1)),
-      deductionStartMonth: 'Oct 2026',
+      deductionStartMonth: defaultDeductionMonth,
       purpose: requestFormData.purpose,
       reasonDetails: requestFormData.reasonDetails,
       neededByDate: requestFormData.neededByDate
@@ -467,12 +492,14 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     setReviewModalRecord(record);
     const amt = record.approvedAmount || record.requestedAmount;
     const months = record.approvedMonths || record.installmentMonths;
+    const nextMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+    const defaultDeductionMonth = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' });
     setReviewFormData({
       action: 'Approve',
       approvedAmount: amt,
       approvedMonths: months,
       monthlyDeduction: record.monthlyDeduction || Math.round(amt / months),
-      deductionStartMonth: record.deductionStartMonth || 'Sep 2026',
+      deductionStartMonth: record.deductionStartMonth || defaultDeductionMonth,
       internalHrNotes: record.internalHrNotes || '',
       employeeVisibleNotes: record.employeeVisibleNotes || '',
       rejectionReason: record.rejectionReason || 'Request does not meet current organizational loan criteria.'
@@ -502,7 +529,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   const openDisbursementModal = (record: LoanRecord) => {
     setDisbursementModalRecord(record);
     setDisbursementFormData({
-      disbursedDate: '2026-09-08',
+      disbursedDate: getTodayDateString(),
       disbursedAmount: record.approvedAmount || record.requestedAmount,
       paymentMode: 'NEFT',
       transactionRef: `NEFT-VRM-${Math.floor(10000000 + Math.random() * 90000000)}`,
@@ -765,7 +792,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                   {formatCurrency(myTotalMonthlyEMI)}
                 </div>
                 <div className="kpi-caption" style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '2px' }}>
-                  Next payroll deduction: 30th Sep 2026
+                  Next payroll deduction: 31st Oct 2026
                 </div>
               </div>
             </div>
@@ -970,7 +997,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                   {formatCurrency(adminKPIs.thisMonthDeductions)}
                 </div>
                 <div className="kpi-caption" style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '2px' }}>
-                  Scheduled September deduction
+                  Scheduled payroll deductions
                 </div>
               </div>
             </div>
@@ -1591,23 +1618,36 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Funds Needed By Date
+                        Funds Needed By Date (Future Date Only) *
                       </label>
                       <input 
                         type="date"
+                        required
                         className="form-control"
-                        min={getTodayDateString()}
+                        min={getFutureRequestDateString()}
                         value={requestFormData.neededByDate}
                         onChange={e => {
-                          const requestDate = getTodayDateString();
+                          const requestDate = getFutureRequestDateString();
                           const selectedDate = e.target.value;
                           setRequestFormData({
                             ...requestFormData,
-                            neededByDate: selectedDate && selectedDate < requestDate ? requestDate : selectedDate
+                            neededByDate: !selectedDate || selectedDate < requestDate ? requestDate : selectedDate
                           });
+                        }}
+                        onBlur={() => {
+                          const requestDate = getFutureRequestDateString();
+                          if (!requestFormData.neededByDate || requestFormData.neededByDate < requestDate) {
+                            setRequestFormData(prev => ({
+                              ...prev,
+                              neededByDate: requestDate
+                            }));
+                          }
                         }}
                         style={{ height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                       />
+                      <span style={{ fontSize: '0.69rem', color: '#64748B', display: 'block', marginTop: '3px' }}>
+                        Allowed: {formatDateDDMMYYYY(getFutureRequestDateString())} onwards. Past dates blocked.
+                      </span>
                     </div>
                   </div>
 
@@ -1985,9 +2025,9 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                           value={reviewFormData.deductionStartMonth}
                           onChange={e => setReviewFormData({ ...reviewFormData, deductionStartMonth: e.target.value })}
                         >
-                          <option value="Sep 2026">September 2026 Cycle</option>
-                          <option value="Oct 2026">October 2026 Cycle</option>
-                          <option value="Nov 2026">November 2026 Cycle</option>
+                          {upcomingPayrollCycles.map(c => (
+                            <option key={c.val} value={c.val}>{c.label}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -2117,7 +2157,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
               <div style={{ maxWidth: '720px', margin: '0 auto' }}>
                 <form id="disbursement-form" onSubmit={handleDisbursementSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <div style={{ padding: '16px', background: '#ECFEFF', borderRadius: '12px', fontSize: '0.85rem', color: '#0E7490', border: '1px solid #A5F3FC' }}>
-                    <strong>Important:</strong> Disbursing this loan activates monthly repayment deductions starting from <strong>{disbursementModalRecord.deductionStartMonth || 'Sep 2026'}</strong>.
+                    <strong>Important:</strong> Disbursing this loan activates monthly repayment deductions starting from <strong>{disbursementModalRecord.deductionStartMonth || 'Nov 2026'}</strong>.
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>

@@ -76,6 +76,15 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
   const currentEmployeeName = currentEmployee
     ? `${currentEmployee.firstName} ${currentEmployee.lastName}`.trim()
     : (currentUser.name || 'Staff Member');
+  const getLocalDateString = (offsetDays: number = 0) => {
+    const date = new Date();
+    date.setDate(date.getDate() + offsetDays);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const minRequestDate = getLocalDateString(1);
 
   // Multi-row selection state
   const [selectedLeaveIds, setSelectedLeaveIds] = useState<string[]>([]);
@@ -113,8 +122,8 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
   const [showWfhModal, setShowWfhModal] = useState<boolean>(false);
   const [wfhForm, setWfhForm] = useState({
     employeeId: currentEmployeeId,
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    startDate: minRequestDate,
+    endDate: minRequestDate,
     reason: ''
   });
 
@@ -133,6 +142,15 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
 
   const handleWfhSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const currentMin = getLocalDateString(1);
+    if (!wfhForm.startDate || wfhForm.startDate < currentMin) {
+      alert(`Work From Home start date must be a future date (${formatDateDDMMYYYY(currentMin)} onwards). Past dates (yesterday, previous months) cannot be requested.`);
+      return;
+    }
+    if (!wfhForm.endDate || wfhForm.endDate < wfhForm.startDate) {
+      alert('Work From Home end date cannot be before start date.');
+      return;
+    }
     const targetEmpId = isEmployeeRole ? currentEmployeeId : wfhForm.employeeId;
     const emp = employees.find(e => e.employeeId === targetEmpId || e.id === targetEmpId) || currentEmployee || employees[0];
 
@@ -151,8 +169,8 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
     if (onCloseQuickAdd) onCloseQuickAdd();
     setWfhForm(prev => ({
       ...prev,
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date().toISOString().split('T')[0],
+      startDate: minRequestDate,
+      endDate: minRequestDate,
       reason: ''
     }));
   };
@@ -179,8 +197,8 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
   const [form, setForm] = useState({
     employeeId: currentEmployeeId,
     leaveType: leavePolicies[0]?.name || 'Casual Leave (CL)',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    startDate: minRequestDate,
+    endDate: minRequestDate,
     reason: '',
     attachmentUrl: ''
   });
@@ -200,12 +218,36 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
     internalReason: ''
   });
 
+  const openLeaveModal = () => {
+    const nextMin = getLocalDateString(1);
+    setForm(prev => ({
+      ...prev,
+      employeeId: isEmployeeRole ? currentEmployeeId : (prev.employeeId || currentEmployeeId),
+      startDate: nextMin,
+      endDate: nextMin,
+      reason: ''
+    }));
+    setShowModal(true);
+  };
+
+  const openWfhRequestModal = () => {
+    const nextMin = getLocalDateString(1);
+    setWfhForm(prev => ({
+      ...prev,
+      employeeId: isEmployeeRole ? currentEmployeeId : (prev.employeeId || currentEmployeeId),
+      startDate: nextMin,
+      endDate: nextMin,
+      reason: ''
+    }));
+    setShowWfhModal(true);
+  };
+
   React.useEffect(() => {
-    if (openApplyModal) setShowModal(true);
+    if (openApplyModal) openLeaveModal();
   }, [openApplyModal]);
 
   React.useEffect(() => {
-    if (openWfhModal) setShowWfhModal(true);
+    if (openWfhModal) openWfhRequestModal();
   }, [openWfhModal]);
 
   React.useEffect(() => {
@@ -235,6 +277,15 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const currentMin = getLocalDateString(1);
+    if (!form.startDate || form.startDate < currentMin) {
+      alert(`Leave start date must be a future date (${formatDateDDMMYYYY(currentMin)} onwards). Past dates (yesterday, previous months) cannot be requested.`);
+      return;
+    }
+    if (!form.endDate || form.endDate < form.startDate) {
+      alert('Leave end date cannot be before start date.');
+      return;
+    }
     const targetEmpId = isEmployeeRole ? currentEmployeeId : form.employeeId;
     const emp = employees.find(e => e.employeeId === targetEmpId || e.id === targetEmpId) || currentEmployee || employees[0];
     
@@ -367,7 +418,7 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
             <button 
               type="button"
               className="btn btn-outline-primary btn-sm" 
-              onClick={() => setShowWfhModal(true)}
+              onClick={openWfhRequestModal}
               style={{ 
                 borderColor: '#0E7490', 
                 color: '#0E7490', 
@@ -385,7 +436,7 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
             <button 
               type="button"
               className="btn btn-primary btn-sm" 
-              onClick={() => setShowModal(true)}
+              onClick={openLeaveModal}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '10px', padding: '8px 16px' }}
             >
               <Plus size={16} /> Apply Leave Request
@@ -826,27 +877,62 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label" style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                      FROM DATE
+                      FROM DATE (FUTURE DATES ONLY) <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input 
                       className="form-control" 
                       type="date" 
                       value={form.startDate} 
-                      onChange={e => setForm({ ...form, startDate: e.target.value })} 
+                      min={minRequestDate}
+                      onChange={e => {
+                        const val = e.target.value;
+                        const nextStart = !val || val < minRequestDate ? minRequestDate : val;
+                        setForm(prev => ({
+                          ...prev,
+                          startDate: nextStart,
+                          endDate: prev.endDate < nextStart ? nextStart : prev.endDate
+                        }));
+                      }} 
+                      onBlur={() => {
+                        if (!form.startDate || form.startDate < minRequestDate) {
+                          setForm(prev => ({
+                            ...prev,
+                            startDate: minRequestDate,
+                            endDate: prev.endDate < minRequestDate ? minRequestDate : prev.endDate
+                          }));
+                        }
+                      }}
                       style={{ borderRadius: '10px', backgroundColor: '#f8fafc', fontSize: '0.85rem' }}
                       required 
                     />
+                    <span style={{ fontSize: '0.69rem', color: '#64748B', display: 'block', marginTop: '3px' }}>
+                      Allowed: {formatDateDDMMYYYY(minRequestDate)} onwards. Past dates blocked.
+                    </span>
                   </div>
 
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label" style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                      TO DATE
+                      TO DATE <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input 
                       className="form-control" 
                       type="date" 
                       value={form.endDate} 
-                      onChange={e => setForm({ ...form, endDate: e.target.value })} 
+                      min={form.startDate || minRequestDate}
+                      onChange={e => {
+                        const minEnd = form.startDate || minRequestDate;
+                        const val = e.target.value;
+                        setForm(prev => ({
+                          ...prev,
+                          endDate: !val || val < minEnd ? minEnd : val
+                        }));
+                      }} 
+                      onBlur={() => {
+                        const minEnd = form.startDate || minRequestDate;
+                        if (!form.endDate || form.endDate < minEnd) {
+                          setForm(prev => ({ ...prev, endDate: minEnd }));
+                        }
+                      }}
                       style={{ borderRadius: '10px', backgroundColor: '#f8fafc', fontSize: '0.85rem' }}
                       required 
                     />
@@ -1281,35 +1367,59 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
-                      START DATE
+                      START DATE (FUTURE DATES ONLY) <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
                       type="date"
                       className="form-control"
                       value={wfhForm.startDate}
+                      min={minRequestDate}
                       onChange={e => {
-                        const s = e.target.value;
+                        const val = e.target.value;
+                        const s = !val || val < minRequestDate ? minRequestDate : val;
                         setWfhForm(prev => ({
                           ...prev,
                           startDate: s,
                           endDate: prev.endDate < s ? s : prev.endDate
                         }));
                       }}
+                      onBlur={() => {
+                        if (!wfhForm.startDate || wfhForm.startDate < minRequestDate) {
+                          setWfhForm(prev => ({
+                            ...prev,
+                            startDate: minRequestDate,
+                            endDate: prev.endDate < minRequestDate ? minRequestDate : prev.endDate
+                          }));
+                        }
+                      }}
                       required
                       style={{ borderRadius: '10px' }}
                     />
+                    <span style={{ fontSize: '0.69rem', color: '#64748B', display: 'block', marginTop: '3px' }}>
+                      Allowed: {formatDateDDMMYYYY(minRequestDate)} onwards. Past dates blocked.
+                    </span>
                   </div>
 
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label" style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
-                      END DATE
+                      END DATE <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
                       type="date"
                       className="form-control"
                       value={wfhForm.endDate}
-                      min={wfhForm.startDate}
-                      onChange={e => setWfhForm({ ...wfhForm, endDate: e.target.value })}
+                      min={wfhForm.startDate || minRequestDate}
+                      onChange={e => {
+                        const minEnd = wfhForm.startDate || minRequestDate;
+                        const val = e.target.value;
+                        setWfhForm(prev => ({ ...prev, endDate: !val || val < minEnd ? minEnd : val }));
+                      }}
+                      onBlur={() => {
+                        const minEnd = wfhForm.startDate || minRequestDate;
+                        if (!wfhForm.endDate || wfhForm.endDate < minEnd) {
+                          setWfhForm(prev => ({ ...prev, endDate: minEnd }));
+                        }
+                      }}
                       required
                       style={{ borderRadius: '10px' }}
                     />

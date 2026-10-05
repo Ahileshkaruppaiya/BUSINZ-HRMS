@@ -31,7 +31,7 @@ import {
 type CompanyInfoFormErrors = Partial<Record<keyof CompanyInfo, string>>;
 
 const cleanText = (value: string) => value.replace(/\s+/g, ' ').trim();
-const cleanCompanyText = (value: string) => value.replace(/[^A-Za-z0-9\s&.,'()/-]/g, '').replace(/\s+/g, ' ');
+const cleanCompanyText = (value: string) => value.replace(/[<>]/g, '').replace(/\s+/g, ' ');
 const cleanAlphaNumeric = (value: string, maxLength?: number) => value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, maxLength);
 const cleanRocNumber = (value: string) => value.replace(/[^A-Za-z0-9/-]/g, '').toUpperCase().slice(0, 30);
 const cleanPhoneNumber = (value: string) => value.replace(/\D/g, '').slice(0, 15);
@@ -424,12 +424,13 @@ export const CompanyDetailsSettings: React.FC = () => {
   const [resetNotice, setResetNotice] = useState<string | null>(null);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [validationSummary, setValidationSummary] = useState<string | null>(null);
+  const [isInfoDirty, setIsInfoDirty] = useState(false);
   const [officialPhoneCountryCode, setOfficialPhoneCountryCode] = useState(
     () => parsePhoneWithCountryCode((companyInfo || INITIAL_COMPANY_INFO).officialPhone).countryCode
   );
 
   useEffect(() => {
-    if (companyInfo) {
+    if (companyInfo && !isInfoDirty && !isSavingInfo) {
       const parsedPhone = parsePhoneWithCountryCode(companyInfo.officialPhone);
       setOfficialPhoneCountryCode(parsedPhone.countryCode);
       setInfoForm({
@@ -438,7 +439,7 @@ export const CompanyDetailsSettings: React.FC = () => {
         officialPhone: parsedPhone.localNumber
       });
     }
-  }, [companyInfo]);
+  }, [companyInfo, isInfoDirty, isSavingInfo]);
 
   // Branch Modal State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -587,6 +588,7 @@ export const CompanyDetailsSettings: React.FC = () => {
 
     try {
       updateCompanyInfo(normalized);
+      setIsInfoDirty(false);
       setSaveSuccessState('saved');
       setInfoSavedSuccess(true);
       showCloudNotice('Company details saved and synchronized across HRMS!');
@@ -609,6 +611,7 @@ export const CompanyDetailsSettings: React.FC = () => {
     const parsedPhone = parsePhoneWithCountryCode(restored.officialPhone);
     setOfficialPhoneCountryCode(parsedPhone.countryCode);
     setInfoForm({ ...restored, officialPhone: parsedPhone.localNumber });
+    setIsInfoDirty(false);
     setResetNotice('Changes reset to last saved company details.');
     setTimeout(() => setResetNotice(null), 3500);
   };
@@ -623,6 +626,7 @@ export const CompanyDetailsSettings: React.FC = () => {
     setValidationSummary(null);
     setOfficialPhoneCountryCode('+91');
     setInfoForm(blank);
+    setIsInfoDirty(false);
     updateCompanyInfo(blank);
     setShowClearConfirmModal(false);
     setResetNotice('All saved company details have been cleared.');
@@ -805,6 +809,7 @@ export const CompanyDetailsSettings: React.FC = () => {
   };
 
   const setInfoField = <K extends keyof CompanyInfo>(field: K, value: CompanyInfo[K]) => {
+    setIsInfoDirty(true);
     setInfoForm(prev => ({ ...prev, [field]: value }));
     setInfoErrors(prev => {
       if (!prev[field]) return prev;

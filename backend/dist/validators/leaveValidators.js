@@ -13,6 +13,15 @@ export const createLeaveSchema = z.object({
 }, {
     message: 'endDate must be greater than or equal to startDate',
     path: ['endDate'],
+}).refine((data) => {
+    if (!data.startDate)
+        return true;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return data.startDate >= todayStr;
+}, {
+    message: 'startDate must be today or a future date. Past dates are not allowed.',
+    path: ['startDate'],
 });
 export const reviewLeaveSchema = z.object({
     decision: z.enum(['Approved', 'Rejected', 'approved', 'rejected'], {
