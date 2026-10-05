@@ -148,39 +148,6 @@ export const MyTasks: React.FC<MyTasksProps> = ({ onSelectTask, onSwitchToAssign
           </button>
         ))}
 
-        {onSwitchToAssigned && assignedByMeCount > 0 && (
-          <button
-            type="button"
-            onClick={onSwitchToAssigned}
-            className="btn btn-secondary"
-            style={{ 
-              fontSize: '0.82rem', 
-              padding: '7px 14px', 
-              borderRadius: '8px', 
-              color: '#0E7490',
-              borderColor: '#CFFAFE',
-              background: '#ECFEFF',
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginLeft: 'auto'
-            }}
-          >
-            <span>Assigned by Me</span>
-            <span style={{ 
-              background: '#0E7490', 
-              color: '#ffffff', 
-              padding: '1px 7px', 
-              borderRadius: '99px', 
-              fontSize: '0.72rem', 
-              fontWeight: 700 
-            }}>
-              {assignedByMeCount}
-            </span>
-            <span>→</span>
-          </button>
-        )}
       </div>
 
       {/* TASKS LIST VIEW */}

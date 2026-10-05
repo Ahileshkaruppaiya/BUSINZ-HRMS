@@ -31,6 +31,10 @@ interface FlatDailyReportItem {
   taskStartDate?: string;
   priority: string;
   department: string;
+  assignedBy: string;
+  assignedTo: string;
+  isAssignedByMe: boolean;
+  isAssignedToMe: boolean;
   reportDate: string;
   employeeId: string;
   employeeName: string;
@@ -51,6 +55,7 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
   const isHR = currentUser.role === 'HR Manager' || currentUser.role === 'HR Admin' || (currentUser as any).department?.toLowerCase().includes('hr');
   const isManager = currentUser.role === 'Department Manager' || currentUser.role === 'Department Head' || currentUser.role === 'Manager';
   const isEmployee = currentUser.role === 'Employee' || currentUser.role === 'Assignee' || (!isCEO && !isHR && !isManager && !isSuperAdmin);
+  const isBroadAccess = isCEO || isHR;
 
   const currentEmpId = currentUser.employeeId || currentUser.id || 'EMP-001';
   const currentEmpName = (currentUser.name || '').trim().toLowerCase();
@@ -60,6 +65,7 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
   const [selectedDept, setSelectedDept] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [reportScope, setReportScope] = useState<'assigned_to_me' | 'assigned_by_me' | 'all'>(isBroadAccess ? 'all' : 'assigned_to_me');
 
   // Pagination & Selection
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,16 +79,17 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
     enhancedTasks.forEach(task => {
       if (task.dailyReports && task.dailyReports.length > 0) {
         task.dailyReports.forEach(r => {
+          const isAssigned = task.assignees.some(a => 
+            a.employeeId === currentEmpId || 
+            a.employeeId === currentUser.id || 
+            (currentEmpName && a.employeeName.toLowerCase().includes(currentEmpName))
+          );
+          const isAssigner = isTaskAssignedByMe(task, currentUser);
+
           // Employee visibility check:
           // If employee, see reports on tasks assigned to them, submitted by them, or assigned by them
           if (isEmployee) {
-            const isAssigned = task.assignees.some(a => 
-              a.employeeId === currentEmpId || 
-              a.employeeId === currentUser.id || 
-              (currentEmpName && a.employeeName.toLowerCase().includes(currentEmpName))
-            );
             const isReporter = r.employeeId === currentEmpId || (currentEmpName && r.employeeName.toLowerCase().includes(currentEmpName));
-            const isAssigner = isTaskAssignedByMe(task, currentUser);
             if (!isAssigned && !isReporter && !isAssigner) return;
           } else if (isManager && currentUser.department && !isCEO && !isHR) {
             if (task.department !== currentUser.department) return;
@@ -97,6 +104,10 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
             taskStartDate: task.startDate || task.taskDate,
             priority: task.priority,
             department: task.department,
+            assignedBy: task.assignedBy || task.createdBy || 'Not specified',
+            assignedTo: task.assignees?.map(a => a.employeeName).filter(Boolean).join(', ') || task.responsiblePersonName || 'Not assigned',
+            isAssignedByMe: isAssigner,
+            isAssignedToMe: isAssigned,
             reportDate: r.reportDate,
             employeeId: r.employeeId,
             employeeName: r.employeeName,
@@ -115,9 +126,18 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
     return list.sort((a, b) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime());
   }, [enhancedTasks, isEmployee, isManager, isCEO, isHR, currentEmpId, currentEmpName, currentUser]);
 
+  const scopeCounts = useMemo(() => ({
+    all: allReports.length,
+    assigned_to_me: allReports.filter(r => r.isAssignedToMe).length,
+    assigned_by_me: allReports.filter(r => r.isAssignedByMe).length
+  }), [allReports]);
+
   // Filtered reports
   const filteredReports = useMemo(() => {
     return allReports.filter(r => {
+      if (reportScope === 'assigned_to_me' && !r.isAssignedToMe) return false;
+      if (reportScope === 'assigned_by_me' && !r.isAssignedByMe) return false;
+
       // Search
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
@@ -125,6 +145,8 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
           r.taskNumber.toLowerCase().includes(q) ||
           r.taskTitle.toLowerCase().includes(q) ||
           r.employeeName.toLowerCase().includes(q) ||
+          r.assignedBy.toLowerCase().includes(q) ||
+          r.assignedTo.toLowerCase().includes(q) ||
           r.department.toLowerCase().includes(q) ||
           r.workDoneToday.toLowerCase().includes(q);
         if (!matchesSearch) return false;
@@ -147,7 +169,7 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
 
       return true;
     });
-  }, [allReports, searchTerm, selectedDept, selectedStatus, selectedDate]);
+  }, [allReports, reportScope, searchTerm, selectedDept, selectedStatus, selectedDate]);
 
   // Pagination Slice
   const totalPages = Math.ceil(filteredReports.length / pageSize) || 1;
@@ -179,8 +201,13 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
     setSelectedDept('All');
     setSelectedStatus('All');
     setSelectedDate('');
+    setReportScope(isBroadAccess ? 'all' : 'assigned_to_me');
     setCurrentPage(1);
   };
+
+  const showAssignedByColumn = reportScope !== 'assigned_by_me';
+  const showAssignedToColumn = reportScope !== 'assigned_to_me';
+  const columnCount = 9 + (showAssignedByColumn ? 1 : 0) + (showAssignedToColumn ? 1 : 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', animation: 'fadeIn 0.2s ease-in-out' }}>
@@ -198,6 +225,54 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
         justifyContent: 'space-between'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: 1 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+            {[
+              { id: 'assigned_to_me', label: 'Assigned to Me', count: scopeCounts.assigned_to_me },
+              { id: 'assigned_by_me', label: 'Assigned by Me', count: scopeCounts.assigned_by_me },
+              { id: 'all', label: 'All', count: scopeCounts.all }
+            ].map(scope => {
+              const active = reportScope === scope.id;
+              return (
+                <button
+                  key={scope.id}
+                  type="button"
+                  onClick={() => { setReportScope(scope.id as typeof reportScope); setCurrentPage(1); }}
+                  style={{
+                    height: '30px',
+                    border: active ? '1px solid #0E7490' : '1px solid transparent',
+                    background: active ? '#0E7490' : 'transparent',
+                    color: active ? '#FFFFFF' : '#334155',
+                    borderRadius: '8px',
+                    padding: '0 10px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>{scope.label}</span>
+                  <span style={{
+                    minWidth: '20px',
+                    height: '18px',
+                    padding: '0 6px',
+                    borderRadius: '99px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: active ? 'rgba(255,255,255,0.22)' : '#E2E8F0',
+                    color: active ? '#FFFFFF' : '#475569',
+                    fontSize: '0.68rem',
+                    lineHeight: 1
+                  }}>
+                    {scope.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* Search Box */}
           <div style={{ position: 'relative', minWidth: '240px', maxWidth: '340px', flex: 1 }}>
             <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
@@ -264,7 +339,7 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
             />
           </div>
 
-          {(searchTerm || selectedDept !== 'All' || selectedStatus !== 'All' || selectedDate) && (
+          {(searchTerm || selectedDept !== 'All' || selectedStatus !== 'All' || selectedDate || reportScope !== (isBroadAccess ? 'all' : 'assigned_to_me')) && (
             <button
               type="button"
               onClick={handleResetFilters}
@@ -305,6 +380,12 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
                 <th style={{ padding: '12px 14px', fontWeight: 700, fontSize: '0.78rem', color: '#1E293B', whiteSpace: 'nowrap' }}>Task Number</th>
                 <th style={{ padding: '12px 14px', fontWeight: 700, fontSize: '0.78rem', color: '#1E293B' }}>Task Title</th>
                 <th style={{ padding: '12px 14px', fontWeight: 700, fontSize: '0.78rem', color: '#1E293B', whiteSpace: 'nowrap' }}>Reporter / Employee</th>
+                {showAssignedByColumn && (
+                  <th style={{ padding: '12px 14px', fontWeight: 700, fontSize: '0.78rem', color: '#1E293B', whiteSpace: 'nowrap' }}>Assigned By</th>
+                )}
+                {showAssignedToColumn && (
+                  <th style={{ padding: '12px 14px', fontWeight: 700, fontSize: '0.78rem', color: '#1E293B', whiteSpace: 'nowrap' }}>Assigned To</th>
+                )}
                 <th style={{ padding: '12px 14px', fontWeight: 700, fontSize: '0.78rem', color: '#1E293B', whiteSpace: 'nowrap' }}>Department</th>
                 <th style={{ padding: '12px 14px', fontWeight: 700, fontSize: '0.78rem', color: '#1E293B', minWidth: '220px' }}>Work Completed Today</th>
                 <th style={{ padding: '12px 14px', fontWeight: 700, fontSize: '0.78rem', color: '#1E293B', whiteSpace: 'nowrap' }}>Workflow Stage</th>
@@ -314,7 +395,7 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
             <tbody>
               {paginatedReports.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '40px 16px', color: '#94A3B8' }}>
+                  <td colSpan={columnCount} style={{ textAlign: 'center', padding: '40px 16px', color: '#94A3B8' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <FileText size={36} color="#CBD5E1" />
                       <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#64748B' }}>No daily reports match your filters</span>
@@ -423,6 +504,34 @@ export const DailyTaskReportManagement: React.FC<DailyTaskReportManagementProps>
                           </span>
                         </div>
                       </td>
+
+                      {showAssignedByColumn && (
+                        <td style={{ padding: '12px 14px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1E293B' }}>
+                            {item.assignedBy}
+                          </span>
+                        </td>
+                      )}
+
+                      {showAssignedToColumn && (
+                        <td style={{ padding: '12px 14px', verticalAlign: 'middle', whiteSpace: 'nowrap', maxWidth: '220px' }}>
+                          <span
+                            title={item.assignedTo}
+                            style={{
+                              display: 'inline-block',
+                              maxWidth: '220px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              verticalAlign: 'middle',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              color: '#1E293B'
+                            }}
+                          >
+                            {item.assignedTo}
+                          </span>
+                        </td>
+                      )}
 
                       {/* Department */}
                       <td style={{ padding: '12px 14px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>

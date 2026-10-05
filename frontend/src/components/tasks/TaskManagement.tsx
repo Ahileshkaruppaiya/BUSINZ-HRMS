@@ -212,12 +212,57 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
   const teamTasksCount = enhancedTasks.filter(t => {
     const count = t.assignees ? t.assignees.length : 0;
     if (count <= 1) return false;
+    if (!isCEO && !isHR) {
+      const currentEmpId = (currentUser.employeeId || currentUser.id || '').toLowerCase().trim();
+      const currentName = (currentUser.name || '').toLowerCase().trim();
+      const isAssignedToMe = t.assignees.some(a => {
+        const assigneeEmpId = (a.employeeId || '').toLowerCase().trim();
+        const assigneeName = (a.employeeName || '').toLowerCase().trim();
+        return (
+          (currentEmpId && assigneeEmpId === currentEmpId) ||
+          (currentName && (assigneeName === currentName || assigneeName.includes(currentName) || currentName.includes(assigneeName)))
+        );
+      });
+      if (!isAssignedToMe) return false;
+    }
     if (isManager && currentUser.department && t.department !== currentUser.department) return false;
     return t.overallStatus !== 'COMPLETED' && t.overallStatus !== 'CLOSED';
   }).length;
 
-  // Count total daily reports
-  const dailyReportsCount = enhancedTasks.reduce((acc, t) => acc + (t.dailyReports?.length || 0), 0);
+  // Count daily reports visible to the current user
+  const dailyReportsCount = enhancedTasks.reduce((acc, t) => {
+    const reportCount = t.dailyReports?.length || 0;
+    if (reportCount === 0) return acc;
+
+    if (isEmployee) {
+      const currentEmpId = (currentUser.employeeId || currentUser.id || '').toLowerCase().trim();
+      const currentName = (currentUser.name || '').toLowerCase().trim();
+      const isAssignedToMe = t.assignees.some(a => {
+        const assigneeEmpId = (a.employeeId || '').toLowerCase().trim();
+        const assigneeName = (a.employeeName || '').toLowerCase().trim();
+        return (
+          (currentEmpId && assigneeEmpId === currentEmpId) ||
+          (currentName && assigneeName.includes(currentName))
+        );
+      });
+      const isReporter = t.dailyReports?.some(r => {
+        const reporterEmpId = (r.employeeId || '').toLowerCase().trim();
+        const reporterName = (r.employeeName || '').toLowerCase().trim();
+        return (
+          (currentEmpId && reporterEmpId === currentEmpId) ||
+          (currentName && reporterName.includes(currentName))
+        );
+      });
+      const isAssigner = isTaskAssignedByMe(t, currentUser);
+      return (isAssignedToMe || isReporter || isAssigner) ? acc + reportCount : acc;
+    }
+
+    if (isManager && currentUser.department && !isCEO && !isHR && t.department !== currentUser.department) {
+      return acc;
+    }
+
+    return acc + reportCount;
+  }, 0);
 
   return (
     <div className="task-management-module" style={{ animation: 'fadeIn 0.2s ease-in-out' }}>

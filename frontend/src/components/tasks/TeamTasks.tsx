@@ -19,8 +19,14 @@ interface TeamTasksProps {
 export const TeamTasks: React.FC<TeamTasksProps> = ({ onSelectTask }) => {
   const { enhancedTasks, departments, currentUser } = useHRMS();
 
+  const isSuperAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'ERP Administrator';
+  const isCEO = isSuperAdmin || currentUser.role === 'CEO' || currentUser.designation === 'CEO' || currentUser.employeeId === 'EMP-000';
+  const isHR = currentUser.role === 'HR Manager' || currentUser.role === 'HR Admin' || (currentUser as any).department?.toLowerCase().includes('hr');
   const isManager = currentUser.role === 'Department Manager' || currentUser.role === 'Department Head' || currentUser.role === 'Manager';
+  const isBroadAccess = isCEO || isHR;
   const targetDept = isManager ? currentUser.department : 'All';
+  const currentEmpId = (currentUser.employeeId || currentUser.id || '').toLowerCase().trim();
+  const currentName = (currentUser.name || '').toLowerCase().trim();
 
   const [selectedDept, setSelectedDept] = useState<string>(targetDept || 'All');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -35,8 +41,20 @@ export const TeamTasks: React.FC<TeamTasksProps> = ({ onSelectTask }) => {
       const assigneeCount = t.assignees ? t.assignees.length : 0;
       if (assigneeCount <= 1) return false;
 
-      if (selectedDept !== 'All' && t.department !== selectedDept) return false;
-      if (isManager && currentUser.department && t.department !== currentUser.department) return false;
+      if (!isBroadAccess) {
+        const isAssignedToMe = t.assignees.some(a => {
+          const assigneeEmpId = (a.employeeId || '').toLowerCase().trim();
+          const assigneeName = (a.employeeName || '').toLowerCase().trim();
+          return (
+            (currentEmpId && assigneeEmpId === currentEmpId) ||
+            (currentName && (assigneeName === currentName || assigneeName.includes(currentName) || currentName.includes(assigneeName)))
+          );
+        });
+        if (!isAssignedToMe) return false;
+      }
+
+      if (isBroadAccess && selectedDept !== 'All' && t.department !== selectedDept) return false;
+      if (!isBroadAccess && isManager && currentUser.department && t.department !== currentUser.department) return false;
 
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
@@ -52,7 +70,7 @@ export const TeamTasks: React.FC<TeamTasksProps> = ({ onSelectTask }) => {
 
       return true;
     });
-  }, [enhancedTasks, selectedDept, isManager, currentUser, searchTerm]);
+  }, [enhancedTasks, selectedDept, isManager, isBroadAccess, currentUser, currentEmpId, currentName, searchTerm]);
 
   // Paginated tasks
   const paginatedTasks = useMemo(() => {
@@ -163,7 +181,7 @@ export const TeamTasks: React.FC<TeamTasksProps> = ({ onSelectTask }) => {
           </div>
 
           {/* Department Filter */}
-          {!isManager && (
+          {isBroadAccess && (
             <select 
               value={selectedDept} 
               onChange={e => {

@@ -43,7 +43,8 @@ export const AssignedTasks: React.FC<AssignedTasksProps> = ({ onSelectTask, onAs
 
   const today = new Date().toISOString().split('T')[0];
 
-  // 1. Filter all tasks assigned or created by the current user
+  // 1. Filter only tasks assigned or created by the current user.
+  // My Tasks handles tasks assigned to the current user; keep these tabs separate.
   const assignedByMeTasks = useMemo(() => {
     return enhancedTasks.filter(task => isTaskAssignedByMe(task, currentUser));
   }, [enhancedTasks, currentUser]);
