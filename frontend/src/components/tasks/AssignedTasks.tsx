@@ -326,28 +326,6 @@ export const AssignedTasks: React.FC<AssignedTasksProps> = ({ onSelectTask, onAs
               <option key={d.id} value={d.name}>{d.name}</option>
             ))}
           </select>
-
-          {onAssignNewTask && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={onAssignNewTask}
-              style={{ 
-                height: '36px', 
-                padding: '0 14px', 
-                borderRadius: '8px',
-                background: '#0E7490',
-                borderColor: '#0E7490',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontWeight: 700,
-                fontSize: '0.82rem'
-              }}
-            >
-              <Plus size={15} /> Assign Task
-            </button>
-          )}
         </div>
       </div>
 
