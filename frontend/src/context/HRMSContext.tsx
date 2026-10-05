@@ -2747,6 +2747,14 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     try {
       if (isCloudInitialized.current && !isSyncingFromCloud.current) {
+        supabaseDirect.saveCompanySetting('leave_requests_data', leaveRequests);
+      }
+    } catch {}
+  }, [leaveRequests]);
+
+  useEffect(() => {
+    try {
+      if (isCloudInitialized.current && !isSyncingFromCloud.current) {
         supabaseDirect.saveCompanySetting('holiday_policies_data', holidayPolicies);
       }
     } catch {}
@@ -7734,7 +7742,17 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setAttendanceRecords([]);
       }
 
-      // Synchronize Leaves (DB table primary, settings fallback)
+      // Synchronize Leaves (DB table primary, company settings fallback)
+      const savedLeaveRequests = Array.isArray(settings.leave_requests_data) ? settings.leave_requests_data : [];
+      const leaveKey = (l: LeaveRequest) => [
+        l.employeeId,
+        l.leaveType,
+        l.startDate,
+        l.endDate,
+        l.reason || '',
+        l.status || 'Pending'
+      ].join('|').toLowerCase();
+
       if (Array.isArray(rawLeaves) && rawLeaves.length > 0) {
         const mappedLeaves = rawLeaves.map((l: any) => ({
           id: l.id,
@@ -7751,24 +7769,23 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           approvedBy: l.approved_by,
           comment: l.comment
         }));
-        const leaveKey = (l: LeaveRequest) => [
-          l.employeeId,
-          l.leaveType,
-          l.startDate,
-          l.endDate,
-          l.reason || '',
-          l.status || 'Pending'
-        ].join('|').toLowerCase();
+        const savedOnlyLeaves = savedLeaveRequests.filter((l: LeaveRequest) => (
+          l?.id &&
+          !mappedLeaves.some((dbLeave: LeaveRequest) => dbLeave.id === l.id || leaveKey(dbLeave) === leaveKey(l))
+        ));
         setLeaveRequests(prev => {
-          const dbIds = new Set(mappedLeaves.map((l: LeaveRequest) => l.id));
-          const dbKeys = new Set(mappedLeaves.map((l: LeaveRequest) => leaveKey(l)));
-          const localOnlyLeaves = prev.filter(l => (
+          const mergedCloudLeaves = [...savedOnlyLeaves, ...mappedLeaves];
+          const cloudIds = new Set(mergedCloudLeaves.map((l: LeaveRequest) => l.id));
+          const cloudKeys = new Set(mergedCloudLeaves.map((l: LeaveRequest) => leaveKey(l)));
+          const localOnlyLeaves = prev.filter((l: LeaveRequest) => (
             String(l.id).startsWith('LR-') &&
-            !dbIds.has(l.id) &&
-            !dbKeys.has(leaveKey(l))
+            !cloudIds.has(l.id) &&
+            !cloudKeys.has(leaveKey(l))
           ));
-          return [...localOnlyLeaves, ...mappedLeaves];
+          return [...localOnlyLeaves, ...mergedCloudLeaves];
         });
+      } else if (savedLeaveRequests.length > 0) {
+        setLeaveRequests(savedLeaveRequests);
       } else {
         setLeaveRequests(prev => (isInitial ? [] : prev));
       }

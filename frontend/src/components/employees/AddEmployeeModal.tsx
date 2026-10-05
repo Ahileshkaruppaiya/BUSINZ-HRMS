@@ -753,8 +753,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const handleChange = (field: string, value: any) => {
     let sanitizedValue = value;
 
-    // Names (Letters, spaces, '.', "'", '-' allowed, max 100)
-    if (['firstName', 'lastName', 'emergencyName'].includes(field)) {
+    // Names (Letters, spaces, '.', "'", '-' allowed)
+    if (['firstName', 'lastName'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s.'-]/g, '').slice(0, 15) : value;
+    }
+    if (field === 'emergencyName') {
       sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s.'-]/g, '').slice(0, 100) : value;
     }
 
@@ -883,7 +886,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       if (!formData.firstName.trim()) return 'First Name is mandatory.';
       const cleanFname = formData.firstName.trim();
       if (cleanFname.length < 2) return 'First Name must be at least 2 characters.';
-      if (cleanFname.length > 100) return 'First Name cannot exceed 100 characters.';
+      if (cleanFname.length > 15) return 'First Name cannot exceed 15 characters.';
       if (!/^[a-zA-Z][a-zA-Z\s.'-]*$/.test(cleanFname)) {
         return 'First Name must contain letters and spaces only. Numbers and invalid symbols are not allowed.';
       }
@@ -896,7 +899,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
       const cleanLname = formData.lastName.trim();
       if (!cleanLname) return 'Last Name is mandatory.';
-      if (cleanLname.length > 100) return 'Last Name cannot exceed 100 characters.';
+      if (cleanLname.length > 15) return 'Last Name cannot exceed 15 characters.';
       if (!/^[a-zA-Z][a-zA-Z\s.'-]*$/.test(cleanLname)) {
         return 'Last Name must contain letters and spaces only. Numbers and invalid symbols are not allowed.';
       }
@@ -2072,7 +2075,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   type="text"
                   name="hrms_add_emp_fname"
                   autoComplete="off"
-                  maxLength={100}
+                  maxLength={15}
                   className="form-control" 
                   value={formData.firstName} 
                   onChange={e => handleChange('firstName', e.target.value)}
@@ -2091,7 +2094,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   type="text"
                   name="hrms_add_emp_lname"
                   autoComplete="off"
-                  maxLength={100}
+                  maxLength={15}
                   className="form-control" 
                   value={formData.lastName} 
                   onChange={e => handleChange('lastName', e.target.value)}

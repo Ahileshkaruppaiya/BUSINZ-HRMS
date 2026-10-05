@@ -27,6 +27,14 @@ import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 export const AssetManagement: React.FC = () => {
   const { assets, addAsset, assignAsset, deleteAsset, employees, currentUser, hasPermission } = useHRMS();
 
+  const getTodayDateString = () => new Date().toISOString().split('T')[0];
+
+  const getWarrantyDefaultDate = (purchaseDate: string) => {
+    const baseDate = purchaseDate ? new Date(purchaseDate) : new Date();
+    baseDate.setFullYear(baseDate.getFullYear() + 1);
+    return baseDate.toISOString().split('T')[0];
+  };
+
   const isHRorAdmin = 
     currentUser.role === 'Super Admin' || 
     currentUser.role === 'Admin' || 
@@ -100,9 +108,9 @@ export const AssetManagement: React.FC = () => {
     name: '',
     category: 'Laptops & Computers' as AssetItem['category'],
     serialNumber: '',
-    purchaseDate: new Date().toISOString().split('T')[0],
+    purchaseDate: getTodayDateString(),
     purchaseCost: 1200,
-    warrantyExpiry: '2027-12-31',
+    warrantyExpiry: getWarrantyDefaultDate(getTodayDateString()),
     condition: 'New' as AssetItem['condition'],
     notes: ''
   });
@@ -169,9 +177,9 @@ export const AssetManagement: React.FC = () => {
       name: '',
       category: 'Laptops & Computers',
       serialNumber: '',
-      purchaseDate: new Date().toISOString().split('T')[0],
+      purchaseDate: getTodayDateString(),
       purchaseCost: 1200,
-      warrantyExpiry: '2027-12-31',
+      warrantyExpiry: getWarrantyDefaultDate(getTodayDateString()),
       condition: 'New',
       notes: ''
     });
@@ -213,7 +221,13 @@ export const AssetManagement: React.FC = () => {
               className="btn btn-primary btn-sm"
               onClick={() => {
                 const randomTag = `AST-${Math.floor(Math.random() * 900 + 100)}`;
-                setAddForm(prev => ({ ...prev, assetTag: randomTag }));
+                const purchaseDate = getTodayDateString();
+                setAddForm(prev => ({
+                  ...prev,
+                  assetTag: randomTag,
+                  purchaseDate,
+                  warrantyExpiry: getWarrantyDefaultDate(purchaseDate)
+                }));
                 setShowAddModal(true);
               }}
               style={{
@@ -855,7 +869,7 @@ export const AssetManagement: React.FC = () => {
                         setAddForm({
                           ...addForm,
                           purchaseDate,
-                          warrantyExpiry: addForm.warrantyExpiry && addForm.warrantyExpiry < purchaseDate ? purchaseDate : addForm.warrantyExpiry
+                          warrantyExpiry: addForm.warrantyExpiry || getWarrantyDefaultDate(purchaseDate)
                         });
                       }}
                     />
@@ -866,15 +880,10 @@ export const AssetManagement: React.FC = () => {
                     <input 
                       className="form-control" 
                       type="date" 
-                      min={addForm.purchaseDate}
                       value={addForm.warrantyExpiry} 
                       onChange={e => {
-                        const warrantyExpiry = e.target.value;
                         setAddFormError(null);
-                        setAddForm({
-                          ...addForm,
-                          warrantyExpiry: warrantyExpiry && warrantyExpiry < addForm.purchaseDate ? addForm.purchaseDate : warrantyExpiry
-                        });
+                        setAddForm({ ...addForm, warrantyExpiry: e.target.value });
                       }}
                     />
                   </div>

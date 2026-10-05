@@ -404,7 +404,14 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       return;
     }
 
-    if (requestFormData.requestedAmount > elig.maxEligibleAmount) {
+    const requestedAmount = toNum(requestFormData.requestedAmount);
+
+    if (requestedAmount <= 0) {
+      showFeedback('error', 'Please enter a valid requested amount greater than zero.');
+      return;
+    }
+
+    if (requestedAmount > elig.maxEligibleAmount) {
       showFeedback('error', `Requested amount exceeds maximum eligible limit of ${formatCurrency(elig.maxEligibleAmount)}.`);
       return;
     }
@@ -437,9 +444,9 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       requestType: requestFormData.requestType,
       basicSalary: toNum(targetEmployee.basicSalary),
       eligibleLimitAmount: elig.maxEligibleAmount,
-      requestedAmount: requestFormData.requestedAmount,
+      requestedAmount,
       installmentMonths: requestFormData.installmentMonths,
-      monthlyDeduction: Math.round(requestFormData.requestedAmount / (requestFormData.installmentMonths || 1)),
+      monthlyDeduction: Math.round(requestedAmount / (requestFormData.installmentMonths || 1)),
       deductionStartMonth: 'Oct 2026',
       purpose: requestFormData.purpose,
       reasonDetails: requestFormData.reasonDetails,
@@ -1531,8 +1538,14 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                         max={Math.max(modalElig.maxEligibleAmount || 50000, 10000)}
                         required
                         className="form-control"
-                        value={requestFormData.requestedAmount}
-                        onChange={e => setRequestFormData({ ...requestFormData, requestedAmount: Number(e.target.value) })}
+                        value={requestFormData.requestedAmount > 0 ? requestFormData.requestedAmount : ''}
+                        onChange={e => {
+                          const rawValue = e.target.value;
+                          setRequestFormData({
+                            ...requestFormData,
+                            requestedAmount: rawValue === '' ? 0 : Number(rawValue)
+                          });
+                        }}
                         style={{ height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                       />
                     </div>

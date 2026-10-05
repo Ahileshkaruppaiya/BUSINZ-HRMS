@@ -1127,7 +1127,17 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
       {/* ======================================================== */}
       {showModal && (
         <div className="modal-overlay" style={{ zIndex: 1050 }}>
-          <div className="modal-content" style={{ maxWidth: '640px', borderRadius: '20px', overflow: 'hidden' }}>
+          <div
+            className="modal-content"
+            style={{
+              maxWidth: '640px',
+              maxHeight: '92vh',
+              borderRadius: '20px',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
             <div className="modal-header" style={{ padding: '18px 24px', borderBottom: '1px solid #E2E8F0' }}>
               <div>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#0F172A' }}>
@@ -1158,8 +1168,8 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
               </button>
             </div>
 
-            <form onSubmit={handleSubmit}>
-              <div className="modal-body" style={{ padding: '24px', maxHeight: '78vh', overflowY: 'auto' }}>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+              <div className="modal-body" style={{ padding: '24px', overflowY: 'auto', minHeight: 0, flex: 1 }}>
                 {formError && (
                   <div style={{
                     padding: '10px 14px',
@@ -1447,7 +1457,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
               </div>
 
               {/* Modal Footer */}
-              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: '10px', flexShrink: 0 }}>
                 <button 
                   type="button" 
                   className="btn btn-secondary btn-sm" 

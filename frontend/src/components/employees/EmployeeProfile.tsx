@@ -397,6 +397,11 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     Object.prototype.hasOwnProperty.call(salaryInputDrafts, key) ? salaryInputDrafts[key] : value
   );
 
+  const parseSalaryLikeNumber = (value: string): number | null => {
+    const match = value.replace(/,/g, '').match(/[0-9]+(?:\.[0-9]+)?/);
+    return match ? Number(match[0]) : null;
+  };
+
   const setSalaryDraft = (key: string, rawValue: string) => {
     setSalaryInputDrafts(prev => {
       const next = { ...prev };
@@ -437,8 +442,11 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   const handleChange = (field: string, value: any) => {
     let sanitizedValue = value;
 
-    // Names (Letters, spaces, '.', "'", '-' allowed, max 100)
-    if (['firstName', 'lastName', 'emergencyName'].includes(field)) {
+    // Names (Letters, spaces, '.', "'", '-' allowed)
+    if (['firstName', 'lastName'].includes(field)) {
+      sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s.'-]/g, '').slice(0, 15) : value;
+    }
+    if (field === 'emergencyName') {
       sanitizedValue = typeof value === 'string' ? value.replace(/[^a-zA-Z\s.'-]/g, '').slice(0, 100) : value;
     }
 
@@ -733,8 +741,8 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
       alert('First Name must be at least 2 characters.');
       return;
     }
-    if (cleanFname.length > 100) {
-      alert('First Name cannot exceed 100 characters.');
+    if (cleanFname.length > 15) {
+      alert('First Name cannot exceed 15 characters.');
       return;
     }
     if (!/^[a-zA-Z][a-zA-Z\s.'-]*$/.test(cleanFname)) {
@@ -753,8 +761,8 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     // Validate Last Name
     const cleanLname = (formData.lastName || '').trim();
     if (cleanLname) {
-      if (cleanLname.length > 100) {
-        alert('Last Name cannot exceed 100 characters.');
+      if (cleanLname.length > 15) {
+        alert('Last Name cannot exceed 15 characters.');
         return;
       }
       if (!/^[a-zA-Z][a-zA-Z\s.'-]*$/.test(cleanLname)) {
@@ -899,9 +907,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
         return;
       }
     }
-    if (formData.lastDrawnSalary) {
-      const sal = parseFloat(formData.lastDrawnSalary);
-      if (isNaN(sal) || sal <= 0) {
+    if (formData.lastDrawnSalary?.trim()) {
+      const sal = parseSalaryLikeNumber(formData.lastDrawnSalary);
+      if (sal !== null && (!Number.isFinite(sal) || sal <= 0)) {
         alert('Last drawn salary must be a positive number.');
         return;
       }
@@ -1345,7 +1353,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
-              maxLength={100}
+              maxLength={15}
               value={formData.firstName} 
               onChange={(e) => handleChange('firstName', e.target.value)} 
               onKeyDown={(e) => {
@@ -1367,7 +1375,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
           {isEditing ? (
             <input 
               type="text" 
-              maxLength={100}
+              maxLength={15}
               value={formData.lastName} 
               onChange={(e) => handleChange('lastName', e.target.value)} 
               onKeyDown={(e) => {
