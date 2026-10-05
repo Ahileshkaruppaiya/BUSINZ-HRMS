@@ -46,7 +46,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
     try {
       const saved = sessionStorage.getItem('vrm_task_active_tab');
       if (saved && ['register', 'my_tasks', 'assigned_tasks', 'team_tasks', 'daily_reports', 'reports'].includes(saved)) {
-        if (isEmployee && (saved === 'register' || saved === 'team_tasks' || saved === 'reports')) {
+        if (isEmployee && (saved === 'register' || saved === 'reports')) {
           return 'my_tasks';
         }
         return saved as any;
@@ -75,7 +75,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
   // Sync tab when user switches role in demo
   useEffect(() => {
     if (!openAddModal) {
-      if (isEmployee && (activeTab === 'register' || activeTab === 'team_tasks' || activeTab === 'reports')) {
+      if (isEmployee && (activeTab === 'register' || activeTab === 'reports')) {
         handleTabChange('my_tasks');
       }
     }
@@ -208,6 +208,14 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
     t.overallStatus !== 'COMPLETED' && t.overallStatus !== 'CLOSED'
   ).length;
 
+  // Count team tasks (assigned to 2 or more members)
+  const teamTasksCount = enhancedTasks.filter(t => {
+    const count = t.assignees ? t.assignees.length : 0;
+    if (count <= 1) return false;
+    if (isManager && currentUser.department && t.department !== currentUser.department) return false;
+    return t.overallStatus !== 'COMPLETED' && t.overallStatus !== 'CLOSED';
+  }).length;
+
   // Count total daily reports
   const dailyReportsCount = enhancedTasks.reduce((acc, t) => acc + (t.dailyReports?.length || 0), 0);
 
@@ -219,18 +227,22 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
           <h1>
             {activeTab === 'assigned_tasks'
               ? 'Assigned Tasks'
-              : isEmployee 
-                ? (activeTab === 'daily_reports' ? 'Daily Task Reports' : 'My Tasks') 
-                : 'Task Management'}
+              : activeTab === 'team_tasks'
+                ? 'Team Tasks'
+                : isEmployee 
+                  ? (activeTab === 'daily_reports' ? 'Daily Task Reports' : 'My Tasks') 
+                  : 'Task Management'}
           </h1>
           <p className="page-subtitle">
             {activeTab === 'assigned_tasks'
               ? `Track deliverables, assignee progress, and status of tasks assigned by you (${currentUser.name})`
-              : isEmployee 
-                ? `Personal task workspace — monitor deliverables and submit daily reports (${currentUser.name})`
-                : isCEO 
-                  ? 'Assign deliverables, monitor company progress, and review department execution'
-                  : 'Assign, track, and monitor department deliverables and task completion progress'}
+              : activeTab === 'team_tasks'
+                ? 'Collaborative deliverables assigned to 2 or more team members with independent progress tracking'
+                : isEmployee 
+                  ? `Personal task workspace — monitor deliverables and submit daily reports (${currentUser.name})`
+                  : isCEO 
+                    ? 'Assign deliverables, monitor company progress, and review department execution'
+                    : 'Assign, track, and monitor department deliverables and task completion progress'}
           </p>
         </div>
         <div className="header-actions" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -281,7 +293,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
                 { id: 'register', label: 'Task Register', icon: ListTodo },
                 { id: 'my_tasks', label: 'My Tasks', icon: UserCheck, badge: myTasksCount },
                 { id: 'assigned_tasks', label: 'Assigned Tasks', icon: CheckSquare, badge: assignedTasksCount },
-                { id: 'team_tasks', label: 'Team Tasks', icon: Users },
+                { id: 'team_tasks', label: 'Team Tasks', icon: Users, badge: teamTasksCount },
                 { id: 'daily_reports', label: 'Daily Reports', icon: FileCheck, badge: dailyReportsCount },
                 { id: 'reports', label: 'Reports', icon: BarChart3 }
               ].map(t => {
@@ -343,7 +355,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
         </div>
       )}
 
-      {/* Top Navigation for Employees: My Tasks, Assigned Tasks & Daily Reports */}
+      {/* Top Navigation for Employees: My Tasks, Assigned Tasks, Team Tasks & Daily Reports */}
       {isEmployee && (
         <div style={{ 
           padding: '8px 16px', 
@@ -353,11 +365,12 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
           border: '1px solid #E7ECF3',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             {[
               { id: 'my_tasks', label: 'My Tasks', icon: UserCheck, badge: myTasksCount },
               { id: 'assigned_tasks', label: 'Assigned Tasks', icon: CheckSquare, badge: assignedTasksCount },
-              { id: 'daily_reports', label: 'Daily Reports', icon: FileCheck }
+              { id: 'team_tasks', label: 'Team Tasks', icon: Users, badge: teamTasksCount },
+              { id: 'daily_reports', label: 'Daily Reports', icon: FileCheck, badge: dailyReportsCount }
             ].map(t => {
               const Icon = t.icon;
               const isActive = activeTab === t.id;
@@ -426,7 +439,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
         />
       )}
 
-      {!isEmployee && activeTab === 'team_tasks' && (
+      {activeTab === 'team_tasks' && (
         <TeamTasks 
           onSelectTask={(id) => setSelectedTaskId(id)}
         />

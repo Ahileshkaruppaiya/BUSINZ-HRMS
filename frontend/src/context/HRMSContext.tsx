@@ -825,7 +825,7 @@ interface HRMSContextType {
     hoursSpent?: number;
     processStatus: TaskAssigneeStatus;
   }) => void;
-  updateTaskProcessStatus: (taskId: string, newStatus: TaskAssigneeStatus, remarks?: string) => void;
+  updateTaskProcessStatus: (taskId: string, newStatus: TaskAssigneeStatus, remarks?: string, targetAssigneeId?: string) => void;
   addTaskComment: (taskId: string, content: string, attachments?: string[]) => void;
   addTaskAttachment: (taskId: string, attachment: Omit<TaskAttachment, 'id' | 'taskId' | 'uploadedAt'>) => void;
   addTaskLink: (taskId: string, link: { title: string; url: string }) => void;
@@ -2561,14 +2561,26 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return aName && assignedByClean && (aName === assignedByClean || assignedByClean.startsWith(aName) || aName.startsWith(assignedByClean));
     });
 
+    const { overallStatus, overallProgress } = computeTaskOverallStatusAndProgress(
+      task.assignees || [],
+      task.overallStatus,
+      task.dueDate
+    );
+
     if (hasSelfAssignee) {
       return {
         ...task,
+        overallStatus,
+        overallProgress,
         assignedBy: 'Velmurugan (CEO)',
         createdBy: 'Velmurugan (CEO)'
       };
     }
-    return task;
+    return {
+      ...task,
+      overallStatus,
+      overallProgress
+    };
   };
 
   // Enhanced Enterprise Tasks & Systems (Supabase Cloud + LocalStorage Fallback)
@@ -6238,7 +6250,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
-  const updateTaskProcessStatus = (taskId: string, newStatus: TaskAssigneeStatus, remarks?: string) => {
+  const updateTaskProcessStatus = (
+    taskId: string, 
+    newStatus: TaskAssigneeStatus, 
+    remarks?: string,
+    targetAssigneeId?: string
+  ) => {
     const today = new Date().toISOString().split('T')[0];
     const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -6254,22 +6271,60 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         'Blocked': 30
       };
 
-      const updatedAssignees = t.assignees.map(a => ({
-        ...a,
-        individualStatus: newStatus,
-        progressPercentage: progressMap[newStatus] ?? a.progressPercentage,
-        latestRemark: remarks || a.latestRemark,
-        completedDate: newStatus === 'Completed' ? today : a.completedDate,
-        updatedAt: new Date().toISOString()
-      }));
+      const currentEmpId = currentUser.employeeId || currentUser.id || '';
+      const currentEmpName = (currentUser.name || '').toLowerCase().trim();
+
+      // Determine which assignee is targeted
+      let targetId = targetAssigneeId;
+      if (!targetId) {
+        const matchingAssignee = t.assignees.find(a => 
+          (currentEmpId && (a.employeeId === currentEmpId || a.id === currentEmpId)) ||
+          (currentUser.id && a.employeeId === currentUser.id) ||
+          (currentEmpName && a.employeeName && (
+            a.employeeName.toLowerCase() === currentEmpName ||
+            a.employeeName.toLowerCase().includes(currentEmpName) ||
+            currentEmpName.includes(a.employeeName.toLowerCase())
+          ))
+        );
+        if (matchingAssignee) {
+          targetId = matchingAssignee.id || matchingAssignee.employeeId;
+        } else if (t.assignees.length === 1) {
+          targetId = t.assignees[0].id || t.assignees[0].employeeId;
+        }
+      }
+
+      const updatedAssignees = t.assignees.map(a => {
+        const isMatch = targetId 
+          ? (a.id === targetId || a.employeeId === targetId || a.employeeName.toLowerCase().trim() === targetId.toLowerCase().trim())
+          : false;
+
+        if (isMatch) {
+          return {
+            ...a,
+            individualStatus: newStatus,
+            progressPercentage: progressMap[newStatus] ?? (newStatus === 'Completed' ? 100 : a.progressPercentage),
+            latestRemark: remarks || a.latestRemark,
+            completedDate: newStatus === 'Completed' ? (a.completedDate || today) : undefined,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return a;
+      });
 
       const { overallStatus, overallProgress } = computeTaskOverallStatusAndProgress(updatedAssignees, t.overallStatus, t.dueDate);
+
+      const targetAssigneeObj = t.assignees.find(a => 
+        targetId && (a.id === targetId || a.employeeId === targetId || a.employeeName.toLowerCase().trim() === targetId.toLowerCase().trim())
+      );
+      const actorOrTargetName = targetAssigneeObj ? targetAssigneeObj.employeeName : currentUser.name;
 
       const newTimeline: TaskTimelineEvent = {
         id: `TL-${Date.now()}`,
         taskId,
-        title: `Process Stage Changed to "${newStatus}"`,
-        description: remarks ? `Stage updated to ${newStatus} by ${currentUser.name}: "${remarks}". Notified to CEO, HR & Assignee.` : `Stage changed to ${newStatus} by ${currentUser.name}. Notified to CEO, HR & Assignee.`,
+        title: `${actorOrTargetName} Status: "${newStatus}"`,
+        description: remarks 
+          ? `Status for ${actorOrTargetName} updated to ${newStatus} by ${currentUser.name}: "${remarks}". Overall progress: ${overallProgress}%.` 
+          : `Status for ${actorOrTargetName} updated to ${newStatus} by ${currentUser.name}. Overall progress: ${overallProgress}%.`,
         timestamp: `${today} ${nowTime}`,
         iconType: newStatus === 'Completed' ? 'closed' : 'status_change',
         actorName: currentUser.name
@@ -6279,10 +6334,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         id: `AUD-${Date.now()}`,
         taskId,
         taskNumber: t.taskNumber,
-        action: 'Process Stage Update',
+        action: 'Member Status Update',
         module: 'Task Workflow',
-        oldValue: t.overallStatus,
-        newValue: newStatus,
+        oldValue: `${actorOrTargetName}: ${targetAssigneeObj?.individualStatus || 'N/A'}`,
+        newValue: `${actorOrTargetName}: ${newStatus} (${progressMap[newStatus] ?? 0}%) | Overall: ${overallProgress}% [${overallStatus}]`,
         performedBy: currentUser.name,
         performedByRole: currentUser.role,
         timestamp: `${today} ${nowTime}`
@@ -6302,8 +6357,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }));
 
     addNotification({
-      title: `Task Process Updated: ${newStatus}`,
-      message: `Task stage set to "${newStatus}" by ${currentUser.name}. Notified to CEO, HR & Assignee.`,
+      title: `Task Status Updated: ${newStatus}`,
+      message: `Task progress updated. New status: "${newStatus}".`,
       priority: newStatus === 'Completed' ? 'Important' : 'Normal',
       category: 'Task',
       link: taskId

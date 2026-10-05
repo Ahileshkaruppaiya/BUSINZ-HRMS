@@ -186,7 +186,7 @@ export const AssignedTasks: React.FC<AssignedTasksProps> = ({ onSelectTask, onAs
       case 'IN PROGRESS':
         return { bg: '#ECFEFF', color: '#0E7490', label: 'In Progress' };
       case 'PARTIALLY COMPLETED':
-        return { bg: '#F3E8FF', color: '#7E22CE', label: 'Partial' };
+        return { bg: '#F3E8FF', color: '#7E22CE', label: 'Partially Completed' };
       case 'OVERDUE':
         return { bg: '#FEE2E2', color: '#DC2626', label: 'Overdue' };
       case 'OPEN':
@@ -469,16 +469,18 @@ export const AssignedTasks: React.FC<AssignedTasksProps> = ({ onSelectTask, onAs
                         {task.assignees.length === 0 ? (
                           <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>Unassigned</span>
                         ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            {task.assignees.slice(0, 2).map(asn => {
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                            {task.assignees.slice(0, 3).map(asn => {
                               const asnStyle = getAssigneeStatusStyle(asn.individualStatus);
+                              const progress = asn.progressPercentage ?? (asn.individualStatus === 'Completed' ? 100 : 0);
+                              const isCompleted = asn.individualStatus === 'Completed' || progress === 100;
                               return (
                                 <div key={asn.id || asn.employeeId} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <div style={{ 
                                     width: '22px', 
                                     height: '22px', 
                                     borderRadius: '9999px', 
-                                    background: '#0E7490', 
+                                    background: isCompleted ? '#16A34A' : '#0E7490', 
                                     color: '#ffffff', 
                                     fontSize: '0.65rem', 
                                     fontWeight: 700, 
@@ -497,25 +499,26 @@ export const AssignedTasks: React.FC<AssignedTasksProps> = ({ onSelectTask, onAs
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap'
-                                  }}>
+                                  }} title={asn.employeeName}>
                                     {asn.employeeName}
                                   </span>
                                   <span style={{ 
                                     fontSize: '0.65rem', 
                                     fontWeight: 700, 
-                                    padding: '1px 5px', 
+                                    padding: '1px 6px', 
                                     borderRadius: '4px',
                                     background: asnStyle.bg,
-                                    color: asnStyle.color
+                                    color: asnStyle.color,
+                                    whiteSpace: 'nowrap'
                                   }}>
-                                    {asn.individualStatus || 'Pending'}
+                                    {asn.individualStatus || 'Pending'} ({progress}%)
                                   </span>
                                 </div>
                               );
                             })}
-                            {task.assignees.length > 2 && (
+                            {task.assignees.length > 3 && (
                               <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
-                                +{task.assignees.length - 2} more assignees
+                                +{task.assignees.length - 3} more assignees
                               </span>
                             )}
                           </div>

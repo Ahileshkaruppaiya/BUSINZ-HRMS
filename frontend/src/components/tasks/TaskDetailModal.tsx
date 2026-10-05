@@ -262,7 +262,7 @@ const TaskDetailModalInner: React.FC<TaskDetailModalProps> = ({ taskId, onClose 
 
     // 2. Always synchronize/update process stage if assigned person
     if (canEditProcess) {
-      updateTaskProcessStatus(task.id, selectedStage, dailyWorkDone.trim() || undefined);
+      updateTaskProcessStatus(task.id, selectedStage, dailyWorkDone.trim() || undefined, myAssignee?.id || myAssignee?.employeeId);
     }
 
     // 3. Show feedback & close
@@ -287,7 +287,7 @@ const TaskDetailModalInner: React.FC<TaskDetailModalProps> = ({ taskId, onClose 
 
     // Synchronize process status if authorized
     if (canEditProcess) {
-      updateTaskProcessStatus(task.id, selectedStage, dailyWorkDone.trim());
+      updateTaskProcessStatus(task.id, selectedStage, dailyWorkDone.trim(), myAssignee?.id || myAssignee?.employeeId);
     }
 
     setDailyWorkDone('');
@@ -519,67 +519,206 @@ const TaskDetailModalInner: React.FC<TaskDetailModalProps> = ({ taskId, onClose 
           </div>
 
           {/* ------------------------------------------------------ */}
-          {/* 2. PROCESS STAGE (DROPDOWN FORMAT IN SOFTWARE THEME)   */}
+          {/* 2. PROCESS STAGE & INDEPENDENT ASSIGNEE STATUSES        */}
           {/* ------------------------------------------------------ */}
-          <div style={{ background: '#FFFFFF', borderRadius: '14px', padding: '16px 20px', border: '1px solid #E7ECF3', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '14px', padding: '18px 20px', border: '1px solid #E7ECF3', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', paddingBottom: '14px', borderBottom: '1px solid #F1F5F9' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ background: '#0E7490', color: '#FFFFFF', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.74rem', fontWeight: 800 }}>2</span>
                 <div>
                   <h3 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#1E293B', margin: 0 }}>
-                    Process Stage
+                    {task.assignees.length > 1 ? `Team Member Updates (${task.assignees.length} Members)` : 'Process Stage'}
                   </h3>
                   <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '2px' }}>
-                    Current workflow status: <strong style={{ color: selectedStage === 'Completed' ? '#16A34A' : '#0E7490' }}>{selectedStage}</strong>
+                    Overall Task Progress: <strong style={{ color: task.overallProgress === 100 ? '#16A34A' : '#0E7490' }}>{task.overallProgress}%</strong> • Status: <strong style={{ color: task.overallStatus === 'COMPLETED' ? '#16A34A' : '#0E7490' }}>{task.overallStatus}</strong>
+                    {task.assignees.length > 1 && (
+                      <span style={{ marginLeft: '6px', color: '#64748B' }}>
+                        ({task.assignees.filter(a => a.individualStatus === 'Completed' || a.progressPercentage === 100).length} of {task.assignees.length} members completed)
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {canEditProcess ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569' }}>
-                    Change Status:
-                  </label>
-                  <select
-                    value={selectedStage}
-                    onChange={(e) => setSelectedStage(e.target.value as TaskAssigneeStatus)}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '8px',
-                      border: '1.5px solid #0E7490',
-                      background: '#ECFEFF',
-                      color: '#0E7490',
-                      fontWeight: 700,
-                      fontSize: '0.82rem',
-                      cursor: 'pointer',
-                      outline: 'none'
-                    }}
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="In Process">In Process</option>
-                    <option value="Under Review">Under Review</option>
-                    <option value="Completed">Completed</option>
-                  </select>
+              {/* Overall Progress Bar */}
+              <div style={{ minWidth: '180px', flex: 1, maxWidth: '280px', margin: '0 12px' }}>
+                <div style={{ height: '8px', background: '#E2E8F0', borderRadius: '999px', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${task.overallProgress}%`,
+                    height: '100%',
+                    background: task.overallProgress === 100 ? '#16A34A' : '#0E7490',
+                    borderRadius: '999px',
+                    transition: 'width 0.3s ease'
+                  }} />
                 </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span
-                    style={{
-                      padding: '6px 18px',
-                      borderRadius: '8px',
-                      border: '1.5px solid #0E7490',
-                      background: '#ECFEFF',
-                      color: '#0E7490',
-                      fontWeight: 700,
-                      fontSize: '0.82rem',
-                      display: 'inline-block'
-                    }}
-                  >
-                    {selectedStage}
-                  </span>
-                </div>
-              )}
+              </div>
             </div>
+
+            {/* If Single Assignee */}
+            {task.assignees.length <= 1 ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '14px', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ fontSize: '0.82rem', color: '#334155', fontWeight: 600 }}>
+                  Assignee: <strong>{task.assignees[0]?.employeeName || 'Assigned Person'}</strong> ({task.assignees[0]?.individualStatus || 'Pending'} - {task.assignees[0]?.progressPercentage || 0}%)
+                </div>
+                {canEditProcess ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569' }}>Change Status:</label>
+                    <select
+                      value={task.assignees[0]?.individualStatus || selectedStage}
+                      onChange={(e) => {
+                        const newSt = e.target.value as TaskAssigneeStatus;
+                        setSelectedStage(newSt);
+                        updateTaskProcessStatus(task.id, newSt, undefined, task.assignees[0]?.id || task.assignees[0]?.employeeId);
+                      }}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #0E7490',
+                        background: '#ECFEFF',
+                        color: '#0E7490',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="Pending">Pending (0%)</option>
+                      <option value="In Process">In Process (50%)</option>
+                      <option value="Under Review">Under Review (90%)</option>
+                      <option value="Completed">Completed (100%)</option>
+                    </select>
+                  </div>
+                ) : (
+                  <span style={{ padding: '6px 18px', borderRadius: '8px', border: '1.5px solid #0E7490', background: '#ECFEFF', color: '#0E7490', fontWeight: 700, fontSize: '0.82rem' }}>
+                    {task.assignees[0]?.individualStatus || selectedStage}
+                  </span>
+                )}
+              </div>
+            ) : (
+              /* If Multiple Assignees (Team Task): Render each member independently */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '14px' }}>
+                {task.assignees.map((a) => {
+                  const isCompleted = a.individualStatus === 'Completed' || (a.progressPercentage || 0) === 100;
+                  const canEditThis = (a.employeeId && (a.employeeId === currentEmpId || a.employeeId === currentUser.id)) ||
+                    (currentEmpName && a.employeeName && (
+                      a.employeeName.toLowerCase() === currentEmpName ||
+                      a.employeeName.toLowerCase().includes(currentEmpName) ||
+                      currentEmpName.includes(a.employeeName.toLowerCase())
+                    )) || isCEO || isHR || isSuperAdmin || isAssigner || isResponsiblePerson;
+
+                  return (
+                    <div 
+                      key={a.id || a.employeeId} 
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 16px',
+                        background: isCompleted ? '#F0FDF4' : '#F8FAFC',
+                        border: isCompleted ? '1px solid #BBF7D0' : '1px solid #E2E8F0',
+                        borderRadius: '10px',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                      }}
+                    >
+                      {/* Member Info */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '9999px',
+                          background: isCompleted ? '#16A34A' : '#0E7490',
+                          color: '#ffffff',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          {a.employeeName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{a.employeeName}</span>
+                            {a.role === 'RESPONSIBLE' && (
+                              <span style={{ fontSize: '0.65rem', background: '#FEF3C7', color: '#B45309', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                Lead
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                            {a.employeeDepartment || task.department}
+                            {a.completedDate && <span style={{ marginLeft: '6px', color: '#16A34A', fontWeight: 600 }}>• Done {formatDateDDMMYYYY(a.completedDate)}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Individual Progress Bar */}
+                      <div style={{ minWidth: '140px', flex: 1, maxWidth: '200px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', fontWeight: 600, color: '#475569', marginBottom: '3px' }}>
+                          <span>Individual Progress</span>
+                          <span style={{ fontWeight: 700, color: isCompleted ? '#16A34A' : '#0E7490' }}>
+                            {a.progressPercentage || 0}%
+                          </span>
+                        </div>
+                        <div style={{ height: '6px', background: '#E2E8F0', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${a.progressPercentage || 0}%`,
+                            height: '100%',
+                            background: isCompleted ? '#16A34A' : '#0E7490',
+                            borderRadius: '999px',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                      </div>
+
+                      {/* Independent Status Control */}
+                      {canEditThis ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748B' }}>Status:</label>
+                          <select
+                            value={a.individualStatus || 'Pending'}
+                            onChange={(e) => {
+                              const newSt = e.target.value as TaskAssigneeStatus;
+                              updateTaskProcessStatus(task.id, newSt, undefined, a.id || a.employeeId);
+                            }}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: '8px',
+                              border: isCompleted ? '1.5px solid #16A34A' : '1.5px solid #0E7490',
+                              background: isCompleted ? '#DCFCE7' : '#ECFEFF',
+                              color: isCompleted ? '#166534' : '#0E7490',
+                              fontWeight: 700,
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                              outline: 'none'
+                            }}
+                          >
+                            <option value="Pending">Pending (0%)</option>
+                            <option value="In Process">In Process (50%)</option>
+                            <option value="Under Review">Under Review (90%)</option>
+                            <option value="Completed">Completed (100%)</option>
+                            <option value="Blocked">Blocked (30%)</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <span style={{
+                          padding: '4px 12px',
+                          borderRadius: '6px',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          background: isCompleted ? '#DCFCE7' : '#F1F5F9',
+                          color: isCompleted ? '#166534' : '#475569'
+                        }}>
+                          {a.individualStatus || 'Pending'} ({a.progressPercentage || 0}%)
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* ------------------------------------------------------ */}

@@ -311,7 +311,7 @@ export function computeTaskOverallStatusAndProgress(
   ).length;
 
   const startedCount = assignees.filter(
-    a => a.individualStatus === 'In Progress' || a.progressPercentage > 0
+    a => a.individualStatus === 'In Progress' || a.individualStatus === 'In Process' || a.individualStatus === 'Under Review' || a.progressPercentage > 0
   ).length;
 
   const today = new Date().toISOString().split('T')[0];
