@@ -1131,14 +1131,15 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
             className="modal-content"
             style={{
               maxWidth: '640px',
-              maxHeight: '92vh',
+              height: 'calc(100vh - 40px)',
+              maxHeight: '820px',
               borderRadius: '20px',
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column'
             }}
           >
-            <div className="modal-header" style={{ padding: '18px 24px', borderBottom: '1px solid #E2E8F0' }}>
+            <div className="modal-header" style={{ padding: '18px 24px', borderBottom: '1px solid #E2E8F0', flexShrink: 0 }}>
               <div>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#0F172A' }}>
                   Submit Expense Claim
@@ -1168,7 +1169,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1, overflow: 'hidden' }}>
               <div className="modal-body" style={{ padding: '24px', overflowY: 'auto', minHeight: 0, flex: 1 }}>
                 {formError && (
                   <div style={{
@@ -1457,7 +1458,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
               </div>
 
               {/* Modal Footer */}
-              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: '10px', flexShrink: 0 }}>
+              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: '10px', flexShrink: 0, position: 'sticky', bottom: 0, zIndex: 2 }}>
                 <button 
                   type="button" 
                   className="btn btn-secondary btn-sm" 
