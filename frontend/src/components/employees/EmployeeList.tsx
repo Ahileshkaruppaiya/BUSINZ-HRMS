@@ -166,6 +166,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
     { key: 'email', label: 'Email' },
     { key: 'department', label: 'Department' },
     { key: 'designation', label: 'Designation' },
+    { key: 'joiningDate', label: 'Date of Joining' },
     { key: 'workLocation', label: 'Location' },
     { key: 'status', label: 'Status' }
   ];
@@ -177,6 +178,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
     email: e.email,
     department: getEmployeeDepartmentDisplay(e),
     designation: e.designation,
+    joiningDate: formatDateDDMMYYYY(e.joiningDate),
     workLocation: e.workLocation || 'Chennai HQ',
     status: e.status
   }));

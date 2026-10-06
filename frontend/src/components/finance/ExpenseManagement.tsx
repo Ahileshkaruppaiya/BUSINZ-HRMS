@@ -62,12 +62,15 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
 
   const isEmployeeRole = currentUser.role === 'Employee' && !isAccountsUser && !isApprovalAuthority;
   const canApprove = isApprovalAuthority;
+  // Accounts only hands over the amount after HR/CEO approval (cannot approve)
+  const canDisburse = isAccountsUser;
+  const isAccountsOnly = isAccountsUser && !isApprovalAuthority;
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [scopeTab, setScopeTab] = useState<'all' | 'my' | 'approved'>(isEmployeeRole ? 'my' : 'all');
+  const [scopeTab, setScopeTab] = useState<'all' | 'my' | 'approved'>(isEmployeeRole ? 'my' : (isAccountsOnly ? 'approved' : 'all'));
 
   // Multi-row selection
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
@@ -302,8 +305,8 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
       { field: 'Claimed Reimbursement Amount', value: `₹${toNum(exp.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
       { field: 'Expense Description', value: exp.description || `${exp.category} Business Expense` },
       { field: 'Current Claim Status', value: exp.status },
-      { field: 'Approval Authority', value: exp.approvedBy || 'HR & CEO Executive Approval' },
-      { field: 'Disbursement Status', value: exp.status === 'Reimbursed' ? 'Approved for Accounts Payout / Disbursed' : 'Awaiting HR/CEO Sign-off' },
+      { field: 'Approval Authority (HR / CEO)', value: exp.approvedBy || 'Awaiting HR / CEO Approval' },
+      { field: 'Disbursement Status', value: exp.status === 'Reimbursed' ? `Amount handed over by Accounts${exp.reimbursedBy ? ` (${exp.reimbursedBy})` : ''}${exp.reimbursedDate ? ` on ${formatDateDDMMYYYY(exp.reimbursedDate)}` : ''}` : exp.status === 'Approved' ? 'Approved by HR/CEO • Awaiting Accounts Payout' : 'Awaiting HR/CEO Sign-off' },
       { field: 'Bill Proof Attachment', value: exp.receiptUrl ? 'Verified & Digitally Attached in Dossier' : 'No Digital Receipt Attached' }
     ];
     downloadPDF(data, `Expense Reimbursement Voucher - ${exp.employeeName}`, `Expense_Voucher_${exp.employeeId}_${exp.id}`, columns);
@@ -322,6 +325,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
       { label: 'Amount (INR)', key: 'amount' },
       { label: 'Status', key: 'status' },
       { label: 'Approved By', key: 'approvedBy' },
+      { label: 'Paid By (Accounts)', key: 'reimbursedBy' },
       { label: 'Description', key: 'description' }
     ];
     const data = source.map(e => ({
@@ -334,6 +338,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
       amount: toNum(e.amount).toFixed(2),
       status: e.status,
       approvedBy: e.approvedBy || '-',
+      reimbursedBy: e.reimbursedBy || '-',
       description: e.description || ''
     }));
     return { columns, data };
@@ -378,19 +383,41 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
   };
 
   // Batch actions
+  const isPendingStatus = (status: Expense['status']) => status === 'Pending Finance' || status === 'Pending Manager';
+
+  // HR / CEO approval → claim moves to Accounts for payout
   const handleBatchApprove = () => {
-    selectedRowIds.forEach(id => {
-      approveExpense(id, currentUser.name, 'Reimbursed');
-    });
+    if (!canApprove) return;
+    expenses
+      .filter(e => selectedRowIds.includes(e.id) && isPendingStatus(e.status))
+      .forEach(e => approveExpense(e.id, currentUser.name, 'Approved'));
     setSelectedRowIds([]);
   };
 
   const handleBatchReject = () => {
-    selectedRowIds.forEach(id => {
-      approveExpense(id, currentUser.name, 'Rejected');
-    });
+    if (!canApprove) return;
+    expenses
+      .filter(e => selectedRowIds.includes(e.id) && isPendingStatus(e.status))
+      .forEach(e => approveExpense(e.id, currentUser.name, 'Rejected'));
     setSelectedRowIds([]);
   };
+
+  // Accounts hands over the amount for HR/CEO-approved claims
+  const handleMarkPaid = (id: string) => {
+    if (!canDisburse) return;
+    approveExpense(id, currentUser.name, 'Reimbursed');
+  };
+
+  const handleBatchMarkPaid = () => {
+    if (!canDisburse) return;
+    expenses
+      .filter(e => selectedRowIds.includes(e.id) && e.status === 'Approved')
+      .forEach(e => approveExpense(e.id, currentUser.name, 'Reimbursed'));
+    setSelectedRowIds([]);
+  };
+
+  const selectedPendingCount = expenses.filter(e => selectedRowIds.includes(e.id) && isPendingStatus(e.status)).length;
+  const selectedApprovedCount = expenses.filter(e => selectedRowIds.includes(e.id) && e.status === 'Approved').length;
 
   // Metric cards calculations: Scoped to employee's own claims for Employee role; company-wide for HR/CEO
   const scopedExpenses = isEmployeeRole ? expenses.filter(isUserExpense) : expenses;
@@ -405,7 +432,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
         <div className="page-title-group">
           <h1>Finance &amp; Expense Claims</h1>
           <p className="page-subtitle">
-            Submit expense claims with verified bill/receipt proofs. HR and CEO review amount proofs and approve corporate reimbursements.
+            Submit expense claims with verified bill/receipt proofs. Only HR or CEO approves claims — approved claims go to Accounts, who hand over the amount.
           </p>
         </div>
 
@@ -424,7 +451,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
               fontSize: '0.82rem',
               fontWeight: 700
             }}>
-              <ShieldCheck size={16} /> Accounts Disbursal Access • Approved by HR / CEO
+              <ShieldCheck size={16} /> Accounts Payout Access • Pays claims approved by HR / CEO
             </div>
           )}
 
@@ -634,7 +661,8 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
             >
               <option value="ALL">All Statuses</option>
               <option value="Pending">Pending Review</option>
-              <option value="Reimbursed">Reimbursed</option>
+              <option value="Approved">Approved (Awaiting Payment)</option>
+              <option value="Reimbursed">Paid / Reimbursed</option>
               <option value="Rejected">Rejected</option>
             </select>
           </div>
@@ -812,9 +840,10 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                       <td>
                         <span className={`status-pill ${
                           exp.status === 'Reimbursed' ? 'success' : 
+                          exp.status === 'Approved' ? 'cyan' :
                           exp.status === 'Rejected' ? 'danger' : 'pending'
                         }`} style={{ fontSize: '0.74rem', fontWeight: 600 }}>
-                          {exp.status}
+                          {exp.status === 'Reimbursed' ? 'Paid' : exp.status === 'Approved' ? 'Approved • Awaiting Payment' : exp.status}
                         </span>
                       </td>
 
@@ -831,8 +860,8 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                                 <button 
                                   className="btn btn-success btn-sm" 
                                   style={{ padding: '6px 14px', fontSize: '0.78rem', borderRadius: '8px', fontWeight: 700, whiteSpace: 'nowrap' }}
-                                  onClick={() => approveExpense(exp.id, currentUser.name, 'Reimbursed')}
-                                  title="Approve and disburse reimbursement"
+                                  onClick={() => approveExpense(exp.id, currentUser.name, 'Approved')}
+                                  title="Approve claim and send to Accounts for payout"
                                 >
                                   Approve
                                 </button>
@@ -850,6 +879,25 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                                 Awaiting HR/CEO
                               </span>
                             )
+                          ) : exp.status === 'Approved' ? (
+                            canDisburse ? (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => handleMarkPaid(exp.id)}
+                                style={{ padding: '6px 14px', fontSize: '0.78rem', borderRadius: '8px', fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#0E7490', borderColor: '#0E7490' }}
+                                title={`Approved by ${exp.approvedBy || 'HR/CEO'} — hand over the amount and mark as paid`}
+                              >
+                                <IndianRupee size={13} /> Mark as Paid
+                              </button>
+                            ) : (
+                              <span
+                                style={{ fontSize: '0.74rem', color: '#0E7490', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', background: '#ECFEFF', border: '1px solid #A5F3FC' }}
+                                title={exp.approvedBy ? `Approved by ${exp.approvedBy}` : 'Approved by HR/CEO'}
+                              >
+                                {isApprovalAuthority ? 'Sent to Accounts' : 'Approved • Awaiting Payment'}
+                              </span>
+                            )
                           ) : (
                             <span style={{ 
                               fontSize: '0.74rem', 
@@ -859,8 +907,10 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                               borderRadius: '6px', 
                               background: exp.status === 'Reimbursed' ? '#DCFCE7' : '#F1F5F9',
                               border: exp.status === 'Reimbursed' ? '1px solid #BBF7D0' : '1px solid #E2E8F0'
-                            }}>
-                              {exp.status === 'Reimbursed' ? (exp.approvedBy ? `Approved by ${exp.approvedBy}` : 'Approved by HR/CEO') : (exp.status === 'Rejected' ? 'Rejected' : 'Completed')}
+                            }}
+                              title={exp.status === 'Reimbursed' && exp.approvedBy ? `Approved by ${exp.approvedBy}` : undefined}
+                            >
+                              {exp.status === 'Reimbursed' ? (exp.reimbursedBy ? `Paid by ${exp.reimbursedBy}` : (exp.approvedBy ? `Approved by ${exp.approvedBy}` : 'Paid')) : (exp.status === 'Rejected' ? 'Rejected' : 'Completed')}
                             </span>
                           )}
 
@@ -1058,15 +1108,16 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
             {selectedRowIds.length} Claim{selectedRowIds.length > 1 ? 's' : ''} Selected
           </span>
 
-          {canApprove && (
+          {canApprove && selectedPendingCount > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
                 type="button"
                 className="btn btn-success btn-sm"
                 onClick={handleBatchApprove}
                 style={{ borderRadius: '8px', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600 }}
+                title="Approve selected pending claims and send to Accounts"
               >
-                ✓ Approve Selected
+                ✓ Approve Selected ({selectedPendingCount})
               </button>
               <button
                 type="button"
@@ -1077,6 +1128,18 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                 ✕ Reject Selected
               </button>
             </div>
+          )}
+
+          {canDisburse && selectedApprovedCount > 0 && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={handleBatchMarkPaid}
+              style={{ borderRadius: '8px', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, backgroundColor: '#0E7490', borderColor: '#0E7490', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              title="Mark selected HR/CEO-approved claims as paid"
+            >
+              <IndianRupee size={14} /> Mark as Paid ({selectedApprovedCount})
+            </button>
           )}
 
           {!isEmployeeRole && (
@@ -1248,7 +1311,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                 <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 600, fontSize: '0.84rem' }}>
-                      Category *
+                      Category <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <select 
                       className="form-control" 
@@ -1268,7 +1331,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
 
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 600, fontSize: '0.84rem' }}>
-                      Amount (₹) *
+                      Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <div style={{ position: 'relative' }}>
                       <IndianRupee size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#0E7490' }} />
@@ -1289,7 +1352,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                 {/* Expense Date */}
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label className="form-label" style={{ fontWeight: 600, fontSize: '0.84rem' }}>
-                    Expense Date *
+                    Expense Date <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input 
                     type="date"
@@ -1304,7 +1367,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                 {/* Description */}
                 <div className="form-group" style={{ marginBottom: '20px' }}>
                   <label className="form-label" style={{ fontWeight: 600, fontSize: '0.84rem' }}>
-                    Description / Purpose of Expense *
+                    Description / Purpose of Expense <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <textarea 
                     className="form-control" 
@@ -1330,7 +1393,7 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                   <div style={{ marginBottom: '10px' }}>
                     <label style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <ImageIcon size={16} color="#0E7490" />
-                      <span>Upload Bill / Receipt Image Proof *</span>
+                      <span>Upload Bill / Receipt Image Proof <span style={{ color: '#EF4444' }}>*</span></span>
                     </label>
                   </div>
 
@@ -1779,14 +1842,28 @@ export const ExpenseManagement: React.FC<ExpenseManagementProps> = ({ openAddMod
                       type="button"
                       className="btn btn-success btn-sm"
                       onClick={() => {
-                        approveExpense(viewingReceiptExpense.id, currentUser.name, 'Reimbursed');
+                        approveExpense(viewingReceiptExpense.id, currentUser.name, 'Approved');
                         setViewingReceiptExpense(null);
                       }}
                       style={{ borderRadius: '10px', padding: '8px 18px', fontWeight: 700 }}
+                      title="Approve and send to Accounts for payout"
                     >
-                      <CheckCircle2 size={15} /> Approve &amp; Reimburse ({formatCurrency(viewingReceiptExpense.amount)})
+                      <CheckCircle2 size={15} /> Approve &amp; Send to Accounts ({formatCurrency(viewingReceiptExpense.amount)})
                     </button>
                   </>
+                )}
+                {canDisburse && viewingReceiptExpense.status === 'Approved' && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      handleMarkPaid(viewingReceiptExpense.id);
+                      setViewingReceiptExpense(null);
+                    }}
+                    style={{ borderRadius: '10px', padding: '8px 18px', fontWeight: 700, backgroundColor: '#0E7490', borderColor: '#0E7490', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <IndianRupee size={15} /> Mark as Paid ({formatCurrency(viewingReceiptExpense.amount)})
+                  </button>
                 )}
                 {(viewingReceiptExpense.status === 'Reimbursed' || viewingReceiptExpense.status === 'Approved') && (
                   <button

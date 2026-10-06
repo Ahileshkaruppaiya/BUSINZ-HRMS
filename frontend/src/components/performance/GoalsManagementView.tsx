@@ -3,6 +3,7 @@ import { useHRMS } from '../../context/HRMSContext';
 import { GoalItem, EmployeePerformanceDetail } from '../../types/performance';
 import { INITIAL_GOALS } from '../../data/performanceInitialData';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { getMonthInfo } from '../../utils/monthUtils';
 import {
   Target,
   Plus,
@@ -42,8 +43,8 @@ export const GoalsManagementView: React.FC<GoalsManagementViewProps> = ({
   const [goalName, setGoalName] = useState('');
   const [goalDesc, setGoalDesc] = useState('');
   const [goalEmpId, setGoalEmpId] = useState(employees[0]?.employeeId || '');
-  const [startDate, setStartDate] = useState('2026-09-01');
-  const [dueDate, setDueDate] = useState('2026-10-31');
+  const [startDate, setStartDate] = useState(() => getMonthInfo().monthStart);
+  const [dueDate, setDueDate] = useState(() => getMonthInfo().monthEnd);
   const [targetMetric, setTargetMetric] = useState('');
   const [weightage, setWeightage] = useState(30);
 
@@ -550,7 +551,7 @@ export const GoalsManagementView: React.FC<GoalsManagementViewProps> = ({
             <form onSubmit={handleCreateGoal} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  Goal Name *
+                  Goal Name <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"
@@ -578,7 +579,7 @@ export const GoalsManagementView: React.FC<GoalsManagementViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Assign to Employee *
+                    Assign to Employee <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <select
                     value={goalEmpId}
@@ -595,7 +596,7 @@ export const GoalsManagementView: React.FC<GoalsManagementViewProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Weightage (%) *
+                    Weightage (%) <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="number"
@@ -610,7 +611,7 @@ export const GoalsManagementView: React.FC<GoalsManagementViewProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  Target Metric *
+                  Target Metric <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"

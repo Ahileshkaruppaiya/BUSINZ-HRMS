@@ -563,7 +563,7 @@ export const PerformanceReviewsView: React.FC<PerformanceReviewsViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Select Employee *
+                    Select Employee <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <select
                     value={revEmpId}
@@ -580,7 +580,7 @@ export const PerformanceReviewsView: React.FC<PerformanceReviewsViewProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Review Cycle *
+                    Review Cycle <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <select
                     value={revCycle}
@@ -609,7 +609,7 @@ export const PerformanceReviewsView: React.FC<PerformanceReviewsViewProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  Overall Rating (1 to 5 Scale) *
+                  Overall Rating (1 to 5 Scale) <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   {[1, 2, 3, 4, 5].map(num => (

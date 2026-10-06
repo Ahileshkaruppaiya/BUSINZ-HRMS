@@ -647,7 +647,7 @@ export const PipManagementView: React.FC<PipManagementViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Select Employee *
+                    Select Employee <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <select
                     value={selectedEmpId}
@@ -664,7 +664,7 @@ export const PipManagementView: React.FC<PipManagementViewProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Duration (Days) *
+                    Duration (Days) <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <select
                     value={durationDays}
@@ -680,7 +680,7 @@ export const PipManagementView: React.FC<PipManagementViewProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  1. What is the problem? (Performance Issue) *
+                  1. What is the problem? (Performance Issue) <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <textarea
                   required
@@ -694,7 +694,7 @@ export const PipManagementView: React.FC<PipManagementViewProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  2. What should improve? (Improvement Area) *
+                  2. What should improve? (Improvement Area) <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <textarea
                   required
@@ -708,7 +708,7 @@ export const PipManagementView: React.FC<PipManagementViewProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  3. What is the target? (Expected Target) *
+                  3. What is the target? (Expected Target) <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"

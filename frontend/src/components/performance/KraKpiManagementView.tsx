@@ -657,7 +657,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
             <form onSubmit={handleCreateKra} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  KRA Title / Area *
+                  KRA Title / Area <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"
@@ -685,7 +685,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Assign to Employee *
+                    Assign to Employee <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <select
                     value={kraEmployeeId}
@@ -702,7 +702,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Weightage (%) *
+                    Weightage (%) <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="number"
@@ -718,7 +718,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Target Metric *
+                    Target Metric <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -802,7 +802,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
             <form onSubmit={handleCreateKpi} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  KPI Indicator Name *
+                  KPI Indicator Name <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"
@@ -817,7 +817,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Assign to Employee *
+                    Assign to Employee <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <select
                     value={kpiEmployeeId}
@@ -834,7 +834,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Weightage (%) *
+                    Weightage (%) <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="number"
@@ -850,7 +850,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Target Value *
+                    Target Value <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -864,7 +864,7 @@ export const KraKpiManagementView: React.FC<KraKpiManagementViewProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                    Actual Value *
+                    Actual Value <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="text"

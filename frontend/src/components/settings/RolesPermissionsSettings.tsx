@@ -1348,7 +1348,7 @@ export const RolesPermissionsSettings: React.FC = () => {
             <form onSubmit={handleRoleFormSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Role Name *
+                  Role Name <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"
@@ -1369,7 +1369,7 @@ export const RolesPermissionsSettings: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Department *
+                  Department <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <select
                   value={roleFormData.department}
@@ -1548,7 +1548,7 @@ export const RolesPermissionsSettings: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  New Role Name *
+                  New Role Name <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"
@@ -1746,7 +1746,7 @@ export const RolesPermissionsSettings: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Module Display Name *
+                  Module Display Name <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"

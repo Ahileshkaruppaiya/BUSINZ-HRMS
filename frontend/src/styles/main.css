@@ -2126,6 +2126,15 @@ input[type="checkbox"].table-checkbox {
   margin-bottom: 6px;
 }
 
+.required-star,
+.mandatory-star,
+.form-label .required-star,
+.form-label .mandatory-star {
+  color: #EF4444 !important;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
 .form-control, input.form-control, select.form-control, textarea.form-control {
   width: 100%;
   padding: 10px 14px;

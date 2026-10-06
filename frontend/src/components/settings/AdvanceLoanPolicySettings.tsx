@@ -847,7 +847,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Policy Name */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Policy Name *
+                        Policy Name <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input 
                         type="text"
@@ -862,7 +862,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Applicable Employees */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Applicable Employees *
+                        Applicable Employees <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"
@@ -880,7 +880,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Policy Status */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Policy Status *
+                        Policy Status <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"
@@ -974,7 +974,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Minimum Working Period */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Minimum Working Period (Months) *
+                        Minimum Working Period (Months) <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input 
                         type="number"
@@ -993,7 +993,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Maximum Advance Amount */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Maximum Advance Amount (₹) *
+                        Maximum Advance Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input 
                         type="number"
@@ -1009,7 +1009,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Maximum Salary % */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Maximum Salary % *
+                        Maximum Salary % <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input 
                         type="number"
@@ -1050,7 +1050,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Request Limit */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Request Limit *
+                        Request Limit <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"
@@ -1071,7 +1071,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Previous Advance Pending */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Previous Advance Pending *
+                        Previous Advance Pending <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"
@@ -1089,7 +1089,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Reason Required */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Reason Required *
+                        Reason Required <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"
@@ -1128,7 +1128,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Repayment Type */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Repayment Type *
+                        Repayment Type <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"
@@ -1147,7 +1147,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Maximum Repayment Months */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Maximum Repayment Months *
+                        Maximum Repayment Months <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input 
                         type="number"
@@ -1166,7 +1166,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Deduction Start */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Deduction Start *
+                        Deduction Start <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"
@@ -1184,7 +1184,7 @@ export const AdvanceLoanPolicySettings: React.FC = () => {
                     {/* Approval By */}
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Approval By *
+                        Approval By <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"

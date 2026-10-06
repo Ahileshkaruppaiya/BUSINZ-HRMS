@@ -127,7 +127,7 @@ export const TaskMasters: React.FC = () => {
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
             <div>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Name / Label *</label>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Name / Label <span style={{ color: '#EF4444' }}>*</span></label>
               <input 
                 type="text"
                 placeholder="e.g. Cybersecurity Audit"
@@ -140,7 +140,7 @@ export const TaskMasters: React.FC = () => {
             </div>
 
             <div>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Code *</label>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Code <span style={{ color: '#EF4444' }}>*</span></label>
               <input 
                 type="text"
                 placeholder="e.g. CYBER"

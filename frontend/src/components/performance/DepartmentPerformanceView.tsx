@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
+import { getMonthInfo } from '../../utils/monthUtils';
 import {
   DepartmentPerformanceDetail,
   EmployeePerformanceDetail,
@@ -55,7 +56,8 @@ export const DepartmentPerformanceView: React.FC<DepartmentPerformanceViewProps>
   );
 
   // Filters State
-  const [periodFilter, setPeriodFilter] = useState<'All Periods' | 'September 2026' | 'August 2026' | 'Q3 2026'>('All Periods');
+  const currentMonthInfo = useMemo(() => getMonthInfo(), []);
+  const [periodFilter, setPeriodFilter] = useState<string>('All Periods');
   const [kpiFilter, setKpiFilter] = useState<'ALL' | 'ON_TRACK' | 'AT_RISK' | 'BELOW_TARGET'>('ALL');
   const [pipFilter, setPipFilter] = useState<'ALL' | 'ACTIVE_PIP' | 'NOT_ON_PIP'>('ALL');
   const [searchFilter, setSearchFilter] = useState<string>('');
@@ -572,9 +574,8 @@ export const DepartmentPerformanceView: React.FC<DepartmentPerformanceViewProps>
                 }}
               >
                 <option value="All Periods">All Evaluation Periods</option>
-                <option value="September 2026">September 2026 (Current)</option>
-                <option value="August 2026">August 2026</option>
-                <option value="Q3 2026">Q3 2026 Quarterly</option>
+                <option value={currentMonthInfo.fullLabel}>{currentMonthInfo.fullLabel} (Current)</option>
+                <option value={`Q${Math.floor(currentMonthInfo.monthIndex / 3) + 1} ${currentMonthInfo.year}`}>Q{Math.floor(currentMonthInfo.monthIndex / 3) + 1} {currentMonthInfo.year} Quarterly</option>
               </select>
             </div>
 

@@ -362,7 +362,7 @@ export const HolidayCalendarSettings: React.FC = () => {
             </div>
             <form onSubmit={handleSaveHoliday} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Holiday Name *</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Holiday Name <span style={{ color: '#EF4444' }}>*</span></label>
                 <input
                   type="text"
                   required
@@ -374,7 +374,7 @@ export const HolidayCalendarSettings: React.FC = () => {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Date *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Date <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="date"
                     required

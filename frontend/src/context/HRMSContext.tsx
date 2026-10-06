@@ -130,6 +130,7 @@ import {
   validateAttendancePunchTime
 } from '../services/trustedTimeService';
 import { payrollApi } from '../services/payrollApi';
+import { getMonthInfo } from '../utils/monthUtils';
 import { API_BASE_URL } from '../config/api';
 import { supabaseDirect } from '../services/supabaseDirectService';
 import {
@@ -870,6 +871,7 @@ interface HRMSContextType {
   processPayrollBatch: () => void | Promise<void>;
   updateEmployeeSalaryScheme: (employeeId: string, withPf: boolean) => void;
   updatePayrollRecordAdvanceDeduction: (recordId: string, amount: number) => void;
+  markPayrollRecordsPaid: (recordIds: string[]) => void;
 
   departments: DepartmentItem[];
   addDepartment: (dept: Omit<DepartmentItem, 'id' | 'employeeCount'>) => void;
@@ -1126,6 +1128,71 @@ interface HRMSContextType {
 }
 
 const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
+
+/**
+ * Attendance check_in / check_out are TIMESTAMPTZ columns. Supabase returns them in UTC
+ * (e.g. "2026-10-06T04:00:00+00:00"). Convert to the user's local wall-clock "HH:MM"
+ * instead of slicing the raw UTC string (which showed IST punches 5h30m behind).
+ */
+const dbTimestampToLocalHHMM = (value?: string | null): string | null => {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw || raw === '--:--') return null;
+
+  // Case 1: Already formatted 12-hour AM/PM string ("02:47 PM", "9:17 AM")
+  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (ampmMatch) {
+    const hh = ampmMatch[1].padStart(2, '0');
+    const mm = ampmMatch[2];
+    const mer = ampmMatch[3].toUpperCase();
+    return `${hh}:${mm} ${mer}`;
+  }
+
+  // Case 2: Full ISO timestamp or datetime string from PostgreSQL TIMESTAMPTZ (stored in UTC)
+  if (raw.includes('T') || raw.includes('Z') || /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const parsed = new Date(raw.includes('T') ? raw : raw.replace(/\s+/, 'T'));
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+  }
+
+  // Case 3: 24-hour time string ("14:47" or "09:17" or "14:47:00")
+  const hhmmMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (hhmmMatch) {
+    let hours = parseInt(hhmmMatch[1], 10);
+    const mins = hhmmMatch[2];
+    const mer = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    return `${String(hours).padStart(2, '0')}:${mins} ${mer}`;
+  }
+
+  return raw;
+};
+
+/** Convert a local date + wall-clock time ("HH:MM", "HH:MM:SS" or "hh:mm AM") into a UTC ISO instant for TIMESTAMPTZ storage in IST (+05:30). */
+const localDateTimeToIso = (date: string, time?: string | null): string | null => {
+  if (!date || !time) return null;
+  const match = String(time).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const mins = parseInt(match[2], 10);
+  const secs = match[3] ? parseInt(match[3], 10) : 0;
+  const meridiem = match[4]?.toUpperCase();
+  if (meridiem === 'PM' && hours < 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
+  const [y, m, d] = date.split('-').map(n => parseInt(n, 10));
+  if (!y || !m || !d) return null;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const isoLocal = `${pad(y)}-${pad(m)}-${pad(d)}T${pad(hours)}:${pad(mins)}:${pad(secs)}+05:30`;
+  const parsed = new Date(isoLocal);
+  return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
 
 export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Pure Supabase Cloud Architecture: purge any remaining business data from browser localStorage
@@ -2397,8 +2464,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     const employeeDbId = emp.id && emp.id.length === 36 ? emp.id : undefined;
-    const checkInIso = cleanCheckIn ? `${entry.date}T${cleanCheckIn.length === 5 ? `${cleanCheckIn}:00` : cleanCheckIn}` : null;
-    const checkOutIso = cleanCheckOut ? `${entry.date}T${cleanCheckOut.length === 5 ? `${cleanCheckOut}:00` : cleanCheckOut}` : null;
+    const checkInIso = cleanCheckIn ? localDateTimeToIso(entry.date, cleanCheckIn) : null;
+    const checkOutIso = cleanCheckOut ? localDateTimeToIso(entry.date, cleanCheckOut) : null;
     if (persistedAttendanceId && persistedAttendanceId.length === 36) {
       supabaseDirect.updateAttendanceRecord(persistedAttendanceId, {
         check_in: checkInIso,
@@ -2536,9 +2603,29 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAttendanceGlobalSettings(prev => ({ ...prev, ...settings }));
   };
 
-  const [faceLogs, setFaceLogs] = useState<FaceLog[]>(INITIAL_FACE_LOGS);
+  const [faceLogs, setFaceLogs] = useState<FaceLog[]>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('vrm_hrms_face_logs');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch {}
+    return INITIAL_FACE_LOGS;
+  });
 
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_leave_requests_persistent');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [leavePolicies, setLeavePolicies] = useState<LeavePolicyItem[]>(INITIAL_LEAVE_POLICIES);
   const [holidayPolicies, setHolidayPolicies] = useState<HolidayItem[]>([]);
@@ -2547,7 +2634,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [attendanceConfig, setAttendanceConfig] = useState<GlobalAttendanceConfig>(INITIAL_GLOBAL_ATTENDANCE_CONFIG);
   const [policyDocuments, setPolicyDocuments] = useState<PolicyDocumentItem[]>(INITIAL_POLICY_DOCUMENTS);
   const [businessSettings, setBusinessSettings] = useState<BusinessProfileSettings>(INITIAL_BUSINESS_SETTINGS);
-  const [shiftRequests, setShiftRequests] = useState<ShiftRequest[]>([]);
+  const [shiftRequests, setShiftRequests] = useState<ShiftRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('vrm_hrms_shift_requests_persistent');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [tasks, setTasks] = useState<TaskItem[]>([]);
 
   // Ensure tasks are never self-assigned ("oru person own task assign pannakudathu")
@@ -2612,6 +2708,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  // Cross-user notifications persisted in company_settings so recipients (CEO / HR / employee) see them on their own login
+  const [sharedNotifications, setSharedNotifications] = useState<NotificationItem[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
   const [departments, setDepartments] = useState<DepartmentItem[]>(INITIAL_DEPTS);
   const [designations, setDesignations] = useState<DesignationItem[]>([]);
@@ -2677,7 +2775,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addSandwichAuditLog = (log: Omit<SandwichAuditLog, 'id' | 'timestamp' | 'user' | 'userRole'>) => {
     const now = new Date();
-    const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    const formatted = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     const userRole = currentUser.role === 'Super Admin' ? 'CEO' : currentUser.role;
     const newEntry: SandwichAuditLog = {
       id: `SAL-${Date.now()}`,
@@ -3163,8 +3261,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (options.action === 'Approve') {
         const approvedAmt = options.approvedAmount ?? rec.requestedAmount;
-        const approvedM = options.approvedMonths ?? rec.installmentMonths;
-        const emi = options.monthlyDeduction ?? Math.round(approvedAmt / approvedM);
+        const isAdvanceSalary = rec.requestType === 'Advance Salary' || rec.requestType === 'Salary Advance';
+        // Advance Salary: no repayment period — full amount recovered from next month's salary
+        const approvedM = isAdvanceSalary ? 1 : (options.approvedMonths ?? rec.installmentMonths);
+        const emi = isAdvanceSalary ? approvedAmt : (options.monthlyDeduction ?? Math.round(approvedAmt / approvedM));
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const defaultDeductionMonth = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' });
         const startMonth = options.deductionStartMonth || rec.deductionStartMonth || defaultDeductionMonth;
@@ -3190,7 +3290,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           outstandingBalance: approvedAmt,
           deductionStartMonth: startMonth,
           internalHrNotes: options.internalHrNotes || rec.internalHrNotes,
-          employeeVisibleNotes: options.employeeVisibleNotes || `Approved for ${formatCurrency(approvedAmt)} across ${approvedM} months.`,
+          employeeVisibleNotes: options.employeeVisibleNotes || (isAdvanceSalary
+            ? `Approved for ${formatCurrency(approvedAmt)}. Full amount will be deducted from your ${startMonth} salary.`
+            : `Approved for ${formatCurrency(approvedAmt)} across ${approvedM} months.`),
           repaymentSchedule: schedule,
           hrApproval: !isCEO ? {
             approvedBy: approverName,
@@ -5109,7 +5211,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const now = clockValidation.trustedNow;
     const today = evalResult.shiftDate;
-    const nowTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const nowTime = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
     const emp = employees.find(e => e.id === empId || e.employeeId === empId);
     const empName = emp ? `${emp.firstName} ${emp.lastName}` : 'Employee';
     const dept = emp ? emp.department : 'General';
@@ -5162,8 +5264,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const existingCheckIn = copy[existingIdx].checkIn || nowTime;
         const inMins = parseTimeToMinutes(existingCheckIn);
         const outMins = parseTimeToMinutes(nowTime);
+        let diffMins = outMins - inMins;
+        if (diffMins < 0) diffMins += 24 * 60;
         const workedHours = existingCheckIn 
-          ? Math.max(0.5, Math.round(((outMins - inMins) / 60) * 10) / 10)
+          ? Math.round((diffMins / 60) * 100) / 100
           : (status === 'Present' ? 8 : 4);
 
         const updatedRecord = {
@@ -5184,7 +5288,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Persist update to central database
         if (copy[existingIdx].id && copy[existingIdx].id.length === 36) {
           supabaseDirect.updateAttendanceRecord(copy[existingIdx].id, {
-            check_out: new Date().toISOString(),
+            check_out: now.toISOString(),
             working_hours: workedHours,
             status: calculatedStatus,
             late_status: copy[existingIdx].lateStatus || calculatedLateStatus,
@@ -5208,7 +5312,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           date: today,
           checkIn: nowTime,
           checkOut: null,
-          workingHours: 8,
+          workingHours: 0,
           status: calculatedStatus,
           lateStatus: calculatedLateStatus,
           location: location || { lat: 13.151968, lng: 80.2086053, address: 'HQ Office', inGeofence: true },
@@ -5221,8 +5325,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           supabaseDirect.insertAttendanceRecord({
             employee_id: targetEmpDbId,
             date: today,
-            check_in: new Date().toISOString(),
-            working_hours: 8,
+            check_in: now.toISOString(),
+            working_hours: 0,
             status: calculatedStatus,
             late_status: calculatedLateStatus,
             method,
@@ -5259,7 +5363,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addFaceLog = (log: Omit<FaceLog, 'id'>) => {
     const newLog: FaceLog = { ...log, id: `FL-${Date.now()}` };
-    setFaceLogs(prev => [newLog, ...prev]);
+    setFaceLogs(prev => {
+      const updated = [newLog, ...prev.filter(l => l.id !== newLog.id)].slice(0, 200);
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('vrm_hrms_face_logs', JSON.stringify(updated));
+        }
+      } catch {}
+      supabaseDirect.saveCompanySetting('face_logs_data', updated).catch(() => {});
+      return updated;
+    });
   };
 
   const applyLeave = (req: Omit<LeaveRequest, 'id' | 'status' | 'appliedDate'>) => {
@@ -5329,10 +5442,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       unpaidDaysCount: isWfh ? 0 : sandwichCalc.unpaidDays
     };
 
-    setLeaveRequests(prev => [newReq, ...prev]);
-    if (isCloudInitialized.current && !isSyncingFromCloud.current) {
-      supabaseDirect.saveCompanySetting('leave_requests_data', [newReq, ...leaveRequests]).catch(() => {});
-    }
+    const newReqList = [newReq, ...leaveRequests];
+    setLeaveRequests(newReqList);
+    try {
+      localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(newReqList));
+    } catch {}
+    supabaseDirect.saveCompanySetting('leave_requests_data', newReqList).catch(() => {});
 
     // Persist to central Supabase PostgreSQL leave_requests table
     supabaseDirect.insertLeaveRequest({
@@ -5345,7 +5460,14 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       status: 'Pending',
     }).then(res => {
       if (res.data?.id) {
-        setLeaveRequests(curr => curr.map(l => l.id === tempLeaveId ? { ...l, id: res.data.id } : l));
+        setLeaveRequests(curr => {
+          const updated = curr.map(l => l.id === tempLeaveId ? { ...l, id: res.data.id } : l);
+          try {
+            localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(updated));
+          } catch {}
+          supabaseDirect.saveCompanySetting('leave_requests_data', updated).catch(() => {});
+          return updated;
+        });
       } else if (!res.success) {
         console.warn('[HRMSContext] leave request cloud insert notice:', res.error);
       }
@@ -5381,7 +5503,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const approveLeave = (id: string, approvedBy: string) => {
-    setLeaveRequests(prev => prev.map(l => {
+    const updatedLeaves = leaveRequests.map(l => {
       if (l.id === id) {
         const isWfh = l.leaveType === 'Work From Home' || 
           (l.leaveType && l.leaveType.toLowerCase().includes('work from home')) ||
@@ -5464,10 +5586,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             : `Leave request approved by ${approvedBy}. Attendance calendar updated.`
         });
 
-        return { ...l, status: 'Approved', approvedBy };
+        return { ...l, status: 'Approved' as const, approvedBy };
       }
       return l;
-    }));
+    });
+
+    setLeaveRequests(updatedLeaves);
+    try {
+      localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(updatedLeaves));
+    } catch {}
+    supabaseDirect.saveCompanySetting('leave_requests_data', updatedLeaves).catch(() => {});
 
     if (id.length === 36) {
       supabaseDirect.updateLeaveRequestStatus(id, 'Approved');
@@ -5482,7 +5610,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const rejectLeave = (id: string, approvedBy: string, comment?: string) => {
-    setLeaveRequests(prev => prev.map(l => {
+    const updatedLeaves = leaveRequests.map(l => {
       if (l.id === id) {
         const isWfh = l.leaveType === 'Work From Home' || 
           (l.leaveType && l.leaveType.toLowerCase().includes('work from home')) ||
@@ -5494,10 +5622,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           employeeId: l.employeeId,
           reason: comment || `${isWfh ? 'Work From Home' : 'Leave'} request rejected by ${approvedBy}.`
         });
-        return { ...l, status: 'Rejected', approvedBy, comment };
+        return { ...l, status: 'Rejected' as const, approvedBy, comment };
       }
       return l;
-    }));
+    });
+
+    setLeaveRequests(updatedLeaves);
+    try {
+      localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(updatedLeaves));
+    } catch {}
+    supabaseDirect.saveCompanySetting('leave_requests_data', updatedLeaves).catch(() => {});
 
     if (id.length === 36) {
       supabaseDirect.updateLeaveRequestStatus(id, 'Rejected');
@@ -5652,47 +5786,172 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setBusinessSettings(prev => ({ ...prev, ...updates }));
   };
 
+  const SHIFT_REQUESTS_KEY = 'shift_requests_data';
+
+  // Read-merge-write so concurrent submissions/approvals from different users are not lost
+  const persistShiftRequests = async (changed: ShiftRequest[]) => {
+    if (!changed.length) return;
+    try {
+      // Immediate localStorage persistence so shift requests never vanish
+      try {
+        const currentSaved = localStorage.getItem('vrm_hrms_shift_requests_persistent');
+        const list: ShiftRequest[] = currentSaved ? JSON.parse(currentSaved) : [];
+        const map = new Map<string, ShiftRequest>(list.map(r => [r.id, r]));
+        changed.forEach(r => map.set(r.id, r));
+        const mergedLocal = Array.from(map.values()).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        localStorage.setItem('vrm_hrms_shift_requests_persistent', JSON.stringify(mergedLocal));
+      } catch {}
+
+      const remote = await supabaseDirect.getCompanySetting(SHIFT_REQUESTS_KEY);
+      const map = new Map<string, ShiftRequest>((Array.isArray(remote) ? remote : []).map((r: ShiftRequest) => [r.id, r]));
+      changed.forEach(r => {
+        const existing = map.get(r.id);
+        if (!existing || (r.updatedAt || '') >= (existing.updatedAt || '')) {
+          map.set(r.id, r);
+        }
+      });
+      const merged = Array.from(map.values()).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      await supabaseDirect.saveCompanySetting(SHIFT_REQUESTS_KEY, merged);
+      try {
+        localStorage.setItem('vrm_hrms_shift_requests_persistent', JSON.stringify(merged));
+      } catch {}
+    } catch (err) {
+      console.warn('[HRMSContext] shift request cloud save notice:', err);
+    }
+  };
+
+  const sameEmployeeKey = (a?: string, b?: string) =>
+    !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
   const requestShiftChange = (req: Omit<ShiftRequest, 'id' | 'status'>) => {
+    const nowIso = new Date().toISOString();
     const newReq: ShiftRequest = {
       ...req,
       id: `SR-${Date.now()}`,
-      status: 'Pending'
+      status: 'Pending',
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
     setShiftRequests(prev => [newReq, ...prev]);
+    persistShiftRequests([newReq]);
+
+    // Notify approvers (CEO + HR) on their own login
+    pushSharedNotification({
+      title: 'New Shift Change Request',
+      message: `${req.employeeName} requested a shift change from ${req.currentShift} to ${req.requestedShift} (effective ${req.requestedDate}). Reason: ${req.reason || '-'}`,
+      priority: 'Important',
+      category: 'Shift',
+      link: 'shifts',
+      targetRoles: ['CEO', 'HR']
+    });
+
+    addNotification({
+      title: 'Shift Request Submitted',
+      message: `Your request to switch to ${req.requestedShift} has been sent to HR / CEO for approval.`,
+      priority: 'Normal',
+      category: 'Shift'
+    });
   };
 
   const approveShiftRequest = (id: string, approvedBy: string) => {
-    setShiftRequests(prev => prev.map(r => {
-      if (r.id === id) {
-        if (r.employeeId || r.employeeName) {
-          setEmployees(empList => empList.map(emp => {
-            const matchesId = r.employeeId && (emp.employeeId === r.employeeId || emp.id === r.employeeId);
-            const matchesName = r.employeeName && `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === r.employeeName.trim().toLowerCase();
-            if (matchesId || matchesName) {
-              return { ...emp, workShift: r.requestedShift };
-            }
-            return emp;
-          }));
-        }
-        return { ...r, status: 'Approved', approvedBy };
-      }
-      return r;
-    }));
+    const target = shiftRequests.find(r => r.id === id);
+    if (!target) return;
+    const updated: ShiftRequest = { ...target, status: 'Approved', approvedBy, updatedAt: new Date().toISOString() };
+
+    setShiftRequests(prev => prev.map(r => r.id === id ? updated : r));
+    if (updated.employeeId || updated.employeeName) {
+      setEmployees(empList => empList.map(emp => {
+        const matchesId = sameEmployeeKey(updated.employeeId, emp.employeeId) || sameEmployeeKey(updated.employeeId, emp.id);
+        const matchesName = sameEmployeeKey(updated.employeeName, `${emp.firstName} ${emp.lastName}`);
+        return (matchesId || matchesName) ? { ...emp, workShift: updated.requestedShift } : emp;
+      }));
+    }
+    persistShiftRequests([updated]);
+
+    pushSharedNotification({
+      title: 'Shift Request Approved',
+      message: `Your shift change to ${updated.requestedShift} (effective ${updated.requestedDate}) was approved by ${approvedBy}.`,
+      priority: 'Normal',
+      category: 'Shift',
+      link: 'shifts',
+      targetEmployeeIds: [updated.employeeId, updated.employeeName].filter(Boolean) as string[]
+    });
+    pushSharedNotification({
+      title: 'Shift Request Approved',
+      message: `${updated.employeeName}'s shift change to ${updated.requestedShift} was approved by ${approvedBy}.`,
+      priority: 'Normal',
+      category: 'Shift',
+      link: 'shifts',
+      targetRoles: ['CEO', 'HR']
+    });
     addNotification({
       title: 'Shift Request Approved',
-      message: `Shift swap request has been approved by ${approvedBy}.`,
+      message: `You approved ${updated.employeeName}'s shift change to ${updated.requestedShift}.`,
       priority: 'Normal',
-      category: 'Attendance'
+      category: 'Shift'
     });
   };
 
   const rejectShiftRequest = (id: string, rejectedBy: string, reason?: string) => {
-    setShiftRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'Rejected', rejectedBy, rejectionReason: reason || 'Shift swap request was declined by management.' } : r));
+    const target = shiftRequests.find(r => r.id === id);
+    if (!target) return;
+    const finalReason = reason || 'Shift swap request was declined by management.';
+    const updated: ShiftRequest = { ...target, status: 'Rejected', rejectedBy, rejectionReason: finalReason, updatedAt: new Date().toISOString() };
+
+    setShiftRequests(prev => prev.map(r => r.id === id ? updated : r));
+    persistShiftRequests([updated]);
+
+    pushSharedNotification({
+      title: 'Shift Request Declined',
+      message: `Your shift change to ${updated.requestedShift} was declined by ${rejectedBy}. Reason: ${finalReason}`,
+      priority: 'Important',
+      category: 'Shift',
+      link: 'shifts',
+      targetEmployeeIds: [updated.employeeId, updated.employeeName].filter(Boolean) as string[]
+    });
+    pushSharedNotification({
+      title: 'Shift Request Declined',
+      message: `${updated.employeeName}'s shift change to ${updated.requestedShift} was declined by ${rejectedBy}.`,
+      priority: 'Normal',
+      category: 'Shift',
+      link: 'shifts',
+      targetRoles: ['CEO', 'HR']
+    });
     addNotification({
       title: 'Shift Request Declined',
-      message: `Shift swap request was declined by ${rejectedBy}.`,
+      message: `You declined ${updated.employeeName}'s shift change request.`,
       priority: 'Important',
-      category: 'Attendance'
+      category: 'Shift'
+    });
+  };
+
+  /** Re-apply the latest approved shift change per employee (employees table has no work_shift column). */
+  const applyApprovedShiftsToEmployees = (requests: ShiftRequest[]) => {
+    const latestByKey = new Map<string, ShiftRequest>();
+    requests
+      .filter(r => r && r.status === 'Approved' && r.requestedShift)
+      .forEach(r => {
+        const ts = r.updatedAt || r.createdAt || '';
+        [r.employeeId, r.employeeName].filter(Boolean).forEach(k => {
+          const key = String(k).trim().toLowerCase();
+          const prev = latestByKey.get(key);
+          if (!prev || ts >= (prev.updatedAt || prev.createdAt || '')) latestByKey.set(key, r);
+        });
+      });
+    if (latestByKey.size === 0) return;
+    setEmployees(empList => {
+      let changed = false;
+      const next = empList.map(emp => {
+        const r = latestByKey.get((emp.employeeId || '').trim().toLowerCase())
+          || latestByKey.get((emp.id || '').trim().toLowerCase())
+          || latestByKey.get(`${emp.firstName} ${emp.lastName}`.trim().toLowerCase());
+        if (r && emp.workShift !== r.requestedShift) {
+          changed = true;
+          return { ...emp, workShift: r.requestedShift };
+        }
+        return emp;
+      });
+      return changed ? next : empList;
     });
   };
 
@@ -6826,24 +7085,146 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const approveExpense = (id: string, approvedBy: string, nextStatus: Expense['status']) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: nextStatus, approvedBy } : e));
+    setExpenses(prev => prev.map(e => {
+      if (e.id !== id) return e;
+      // Accounts hands over the amount after HR/CEO approval — keep the original approver
+      if (nextStatus === 'Reimbursed') {
+        return {
+          ...e,
+          status: nextStatus,
+          approvedBy: e.approvedBy || approvedBy,
+          reimbursedBy: approvedBy,
+          reimbursedDate: new Date().toISOString().split('T')[0]
+        };
+      }
+      return { ...e, status: nextStatus, approvedBy };
+    }));
     if (id.length === 36) {
       supabaseDirect.updateExpenseStatus(id, nextStatus);
     }
   };
 
+  // ==========================================
+  // SHARED (CROSS-USER) NOTIFICATIONS
+  // ==========================================
+  const SHARED_NOTIFICATIONS_KEY = 'shared_notifications_data';
+  const SHARED_NOTIFICATIONS_LIMIT = 300;
+  const SHARED_NOTIFICATIONS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+  /** Identity keys of the logged-in user used to match targeted notifications */
+  const getUserNotificationKeys = (): string[] => {
+    const u: any = currentUser || {};
+    return Array.from(new Set(
+      [u.employeeId, u.id, u.email, u.name]
+        .filter(Boolean)
+        .map((k: any) => String(k).trim().toLowerCase())
+    ));
+  };
+
+  /** Audience groups the logged-in user belongs to */
+  const getUserAudienceRoles = (): string[] => {
+    const u: any = currentUser || {};
+    const role = String(u.role || '');
+    const desig = String(u.designation || '').toLowerCase();
+    const dept = String(u.department || '').toLowerCase();
+    const roles = ['ALL'];
+    if (role === 'CEO' || role === 'Super Admin' || desig.includes('ceo') || desig.includes('managing director')) roles.push('CEO');
+    if (role === 'HR Manager' || role === 'HR Admin' || role === 'HR' || dept === 'hr' || dept.includes('human resource') || /\bhr\b/.test(desig)) roles.push('HR');
+    if (role === 'Finance Manager' || dept.includes('account') || dept.includes('finance') || desig.includes('account') || desig.includes('finance')) roles.push('ACCOUNTS');
+    return roles;
+  };
+
+  const formatNotificationTime = (iso?: string): string => {
+    if (!iso) return 'Just now';
+    const t = new Date(iso).getTime();
+    if (isNaN(t)) return 'Just now';
+    const diffMin = Math.floor((Date.now() - t) / 60000);
+    if (diffMin < 1) return 'Just now';
+    if (diffMin < 60) return `${diffMin} min ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr} hr ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    return diffDay === 1 ? 'Yesterday' : `${diffDay} days ago`;
+  };
+
+  const isSharedNotificationForMe = (n: NotificationItem): boolean => {
+    const myKeys = getUserNotificationKeys();
+    if (n.senderKey && myKeys.includes(n.senderKey.trim().toLowerCase())) return false;
+    const targetIds = (n.targetEmployeeIds || []).map(id => String(id).trim().toLowerCase());
+    if (targetIds.some(id => myKeys.includes(id))) return true;
+    const myRoles = getUserAudienceRoles();
+    return (n.targetRoles || []).some(r => myRoles.includes(r));
+  };
+
+  // Read-merge-write so notifications from different users are not overwritten
+  const persistSharedNotifications = async (changed: NotificationItem[]) => {
+    if (!changed.length) return;
+    try {
+      const remote = await supabaseDirect.getCompanySetting(SHARED_NOTIFICATIONS_KEY);
+      const map = new Map<string, NotificationItem>((Array.isArray(remote) ? remote : []).map((n: NotificationItem) => [n.id, n]));
+      changed.forEach(n => {
+        const existing = map.get(n.id);
+        const readBy = Array.from(new Set([...(existing?.readBy || []), ...(n.readBy || [])]));
+        map.set(n.id, { ...(existing || {}), ...n, read: false, readBy });
+      });
+      const cutoff = Date.now() - SHARED_NOTIFICATIONS_TTL_MS;
+      const merged = Array.from(map.values())
+        .filter(n => !n.createdAt || new Date(n.createdAt).getTime() >= cutoff)
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+        .slice(0, SHARED_NOTIFICATIONS_LIMIT);
+      await supabaseDirect.saveCompanySetting(SHARED_NOTIFICATIONS_KEY, merged);
+    } catch (err) {
+      console.warn('[HRMSContext] shared notification cloud save notice:', err);
+    }
+  };
+
+  /** Deliver a notification to other users (by audience role and/or employee ID) */
+  const pushSharedNotification = (
+    note: Omit<NotificationItem, 'id' | 'timestamp' | 'read' | 'createdAt' | 'readBy' | 'senderKey'>
+  ) => {
+    const newNote: NotificationItem = {
+      ...note,
+      id: `SN-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: 'Just now',
+      read: false,
+      createdAt: new Date().toISOString(),
+      senderKey: getUserNotificationKeys()[0] || '',
+      readBy: []
+    };
+    setSharedNotifications(prev => [newNote, ...prev]);
+    persistSharedNotifications([newNote]);
+  };
+
   const markNotificationRead = (id: string) => {
+    const shared = sharedNotifications.find(n => n.id === id);
+    if (shared) {
+      const myKey = getUserNotificationKeys()[0];
+      if (!myKey || (shared.readBy || []).includes(myKey)) return;
+      const updated = { ...shared, readBy: [...(shared.readBy || []), myKey] };
+      setSharedNotifications(prev => prev.map(n => n.id === id ? updated : n));
+      persistSharedNotifications([updated]);
+      return;
+    }
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
   const markAllNotificationsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    const myKey = getUserNotificationKeys()[0];
+    if (!myKey) return;
+    const toUpdate = sharedNotifications
+      .filter(n => isSharedNotificationForMe(n) && !(n.readBy || []).includes(myKey))
+      .map(n => ({ ...n, readBy: [...(n.readBy || []), myKey] }));
+    if (!toUpdate.length) return;
+    const updatedMap = new Map(toUpdate.map(n => [n.id, n]));
+    setSharedNotifications(prev => prev.map(n => updatedMap.get(n.id) || n));
+    persistSharedNotifications(toUpdate);
   };
 
   const addNotification = (note: Omit<NotificationItem, 'id' | 'timestamp' | 'read'>) => {
     const newNote: NotificationItem = {
       ...note,
-      id: `NOT-${Date.now()}`,
+      id: `NOT-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: 'Just now',
       read: false
     };
@@ -6852,19 +7233,24 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const processPayrollBatch = async () => {
     const activeAttPolicy = masterAttendancePolicies.find(p => p.status === 'Active');
+    const currentMonthInfo = getMonthInfo();
+    const batchMonthNum = currentMonthInfo.monthIndex + 1;
+    const batchYear = currentMonthInfo.year;
+    const batchMonthName = currentMonthInfo.monthLong;
+    const batchMonthPad = String(batchMonthNum).padStart(2, '0');
 
     let backendRecords: any[] | null = null;
     try {
       // 1. Authoritative backend run execution
-      let run = await payrollApi.createPayrollRun({ payroll_month: 8, payroll_year: 2026 }).catch(() => null);
+      let run = await payrollApi.createPayrollRun({ payroll_month: batchMonthNum, payroll_year: batchYear }).catch(() => null);
       if (!run) {
         const runs = await payrollApi.getPayrollRuns().catch(() => []);
-        run = runs.find(r => r.payrollMonth === 8 && r.payrollYear === 2026) || null;
+        run = runs.find(r => r.payrollMonth === batchMonthNum && r.payrollYear === batchYear) || null;
       }
       if (run && run.status === 'DRAFT') {
         run = await payrollApi.processPayrollRun(run.id).catch(() => run);
       }
-      const rawRecords = await payrollApi.getPayrollRecords({ month: 8, year: 2026 }).catch(() => null) as any[] | null;
+      const rawRecords = await payrollApi.getPayrollRecords({ month: batchMonthNum, year: batchYear }).catch(() => null) as any[] | null;
       if (rawRecords && rawRecords.length > 0) {
         backendRecords = rawRecords;
       }
@@ -6893,8 +7279,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         activeAttPolicy,
         empLeavePolicy,
         payrollSettingsConfig,
-        'August',
-        2026
+        batchMonthName,
+        batchYear
       );
 
       const backendRec = backendRecords?.find((b: any) => b.employeeId === emp.employeeId);
@@ -6904,13 +7290,13 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const resolvedProfessionalTax = calc.professionalTax;
         const resolvedTotalDeductions = calc.totalDeductions;
         return {
-          id: backendRec.id || `PAY-2026-08-${emp.employeeId}`,
+          id: backendRec.id || `PAY-${batchYear}-${batchMonthPad}-${emp.employeeId}`,
           employeeId: emp.employeeId,
           employeeName: `${emp.firstName} ${emp.lastName}`,
           department: emp.department,
           designation: emp.designation,
-          month: 'August',
-          year: 2026,
+          month: batchMonthName,
+          year: batchYear,
           basicSalary: calc.basicSalary,
           allowances: calc.allowances,
           da: calc.da,
@@ -6970,13 +7356,13 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       return {
-        id: `PAY-2026-08-${emp.employeeId}`,
+        id: `PAY-${batchYear}-${batchMonthPad}-${emp.employeeId}`,
         employeeId: emp.employeeId,
         employeeName: `${emp.firstName} ${emp.lastName}`,
         department: emp.department,
         designation: emp.designation,
-        month: 'August',
-        year: 2026,
+        month: batchMonthName,
+        year: batchYear,
         basicSalary: calc.basicSalary,
         allowances: calc.allowances,
         da: calc.da,
@@ -7017,8 +7403,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setEmployeeRewardRecords(prev => prev.map(r => r.payrollStatus === 'Pending' && r.addToPayroll ? { ...r, payrollStatus: 'ProcessedInPayroll' } : r));
 
     // Update active loans with payroll EMI deductions
-    const batchPeriod = 'Aug 2026';
-    const batchId = 'PAY-2026-08';
+    const batchPeriod = `${currentMonthInfo.monthShort} ${batchYear}`;
+    const batchId = `PAY-${batchYear}-${batchMonthPad}`;
     setLoanRecords(prev => prev.map(loan => {
       if ((loan.status === 'Active' || loan.status === 'Disbursed') && toNum(loan.outstandingBalance) > 0) {
         // Unique Deduplication Check: Ensure not already deducted in this batch for this period
@@ -7078,7 +7464,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (emp?.id && emp.id.length === 36) {
         supabaseDirect.insertPayrollRecord({
           employee_id: emp.id,
-          payroll_month: '2026-08-01',
+          payroll_month: `${batchYear}-${batchMonthPad}-01`,
           basic_salary: rec.basicSalary,
           allowances: rec.allowances,
           bonus: rec.bonus,
@@ -7096,7 +7482,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     addNotification({
       title: 'Payroll Batch Processed',
-      message: `August 2026 payroll successfully processed for ${employees.length} employees with automated loan recoveries.`,
+      message: `${batchMonthName} ${batchYear} payroll successfully processed for ${employees.length} employees with automated loan recoveries.`,
       priority: 'Important',
       category: 'Payroll'
     });
@@ -7135,6 +7521,12 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       return rec;
     }));
+  };
+
+  const markPayrollRecordsPaid = (recordIds: string[]) => {
+    if (!recordIds.length) return;
+    const idSet = new Set(recordIds);
+    setPayrollRecords(prev => prev.map(rec => idSet.has(rec.id) ? { ...rec, status: 'Paid' } : rec));
   };
 
   const addDepartment = (dept: Omit<DepartmentItem, 'id' | 'employeeCount'>) => {
@@ -7867,23 +8259,27 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Synchronize Attendance (DB table primary, settings fallback)
       if (Array.isArray(rawAttendance) && rawAttendance.length > 0) {
-        setAttendanceRecords(rawAttendance.map((a: any) => ({
-          id: a.id,
-          employeeId: a.employee?.employee_id || a.employee_id,
-          employeeName: a.employee ? `${a.employee.first_name || ''} ${a.employee.last_name || ''}`.trim() : 'Staff',
-          department: 'General',
-          date: a.date,
-          shiftId: a.shift_id,
-          shiftDate: a.shift_date || a.date,
-          checkIn: a.check_in ? (a.check_in.includes('T') ? a.check_in.split('T')[1].slice(0, 5) : a.check_in.slice(0, 5)) : null,
-          checkOut: a.check_out ? (a.check_out.includes('T') ? a.check_out.split('T')[1].slice(0, 5) : a.check_out.slice(0, 5)) : null,
-          workingHours: a.working_hours ?? 0,
-          status: a.status || 'Present',
-          lateStatus: a.late_status || 'On Time',
-          method: a.method || 'Face Scan',
-          location: { lat: a.location_lat || 13.0827, lng: a.location_lng || 80.2707, address: a.location_address || 'Plant HQ', inGeofence: a.in_geofence ?? true },
-          faceVerified: a.face_verified ?? false,
-        })));
+        setAttendanceRecords(rawAttendance.map((a: any) => {
+          const emp = employees.find(e => e.id === a.employee_id || e.employeeId === a.employee?.employee_id || e.employeeId === a.employee_id);
+          const fullName = a.employee ? `${a.employee.first_name || ''} ${a.employee.last_name || ''}`.trim() : (emp ? `${emp.firstName} ${emp.lastName}` : 'Staff');
+          return {
+            id: a.id,
+            employeeId: a.employee?.employee_id || emp?.employeeId || a.employee_id,
+            employeeName: fullName,
+            department: emp?.department || 'General',
+            date: a.date,
+            shiftId: a.shift_id,
+            shiftDate: a.shift_date || a.date,
+            checkIn: dbTimestampToLocalHHMM(a.check_in),
+            checkOut: dbTimestampToLocalHHMM(a.check_out),
+            workingHours: a.working_hours ?? 0,
+            status: a.status || 'Present',
+            lateStatus: a.late_status || 'On Time',
+            method: a.method || 'Face Scan',
+            location: { lat: a.location_lat || 13.0827, lng: a.location_lng || 80.2707, address: a.location_address || 'Plant HQ', inGeofence: a.in_geofence ?? true },
+            faceVerified: a.face_verified ?? false,
+          };
+        }));
       } else {
         setAttendanceRecords([]);
       }
@@ -7900,40 +8296,55 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ].join('|').toLowerCase();
 
       if (Array.isArray(rawLeaves) && rawLeaves.length > 0) {
-        const mappedLeaves = rawLeaves.map((l: any) => ({
-          id: l.id,
-          employeeId: l.employee?.employee_id || l.employee_id,
-          employeeName: l.employee ? `${l.employee.first_name || ''} ${l.employee.last_name || ''}`.trim() : 'Staff',
-          department: 'General',
-          leaveType: l.leave_type || 'Casual Leave',
-          startDate: l.start_date,
-          endDate: l.end_date,
-          daysCount: Number(l.days_count) || 1,
-          reason: l.reason || '',
-          status: l.status || 'Pending',
-          appliedDate: l.applied_date || l.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
-          approvedBy: l.approved_by,
-          comment: l.comment
-        }));
+        const mappedLeaves = rawLeaves.map((l: any) => {
+          const emp = employees.find(e => e.id === l.employee_id || e.employeeId === l.employee?.employee_id || e.employeeId === l.employee_id);
+          const fullName = l.employee ? `${l.employee.first_name || ''} ${l.employee.last_name || ''}`.trim() : (emp ? `${emp.firstName} ${emp.lastName}` : 'Staff');
+          return {
+            id: l.id,
+            employeeId: l.employee?.employee_id || emp?.employeeId || l.employee_id,
+            employeeName: fullName || 'Staff',
+            department: emp?.department || 'General',
+            leaveType: l.leave_type || 'Casual Leave',
+            startDate: l.start_date,
+            endDate: l.end_date,
+            daysCount: Number(l.days_count) || 1,
+            reason: l.reason || '',
+            status: l.status || 'Pending',
+            appliedDate: l.applied_date || l.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+            approvedBy: l.approved_by,
+            comment: l.comment
+          };
+        });
         const savedOnlyLeaves = savedLeaveRequests.filter((l: LeaveRequest) => (
           l?.id &&
-          !mappedLeaves.some((dbLeave: LeaveRequest) => dbLeave.id === l.id || leaveKey(dbLeave) === leaveKey(l))
+          !mappedLeaves.some((dbLeave: LeaveRequest) => String(dbLeave.id) === String(l.id) || leaveKey(dbLeave) === leaveKey(l))
         ));
         setLeaveRequests(prev => {
           const mergedCloudLeaves = [...savedOnlyLeaves, ...mappedLeaves];
-          const cloudIds = new Set(mergedCloudLeaves.map((l: LeaveRequest) => l.id));
+          const cloudIds = new Set(mergedCloudLeaves.map((l: LeaveRequest) => String(l.id)));
           const cloudKeys = new Set(mergedCloudLeaves.map((l: LeaveRequest) => leaveKey(l)));
           const localOnlyLeaves = prev.filter((l: LeaveRequest) => (
-            String(l.id).startsWith('LR-') &&
-            !cloudIds.has(l.id) &&
+            !cloudIds.has(String(l.id)) &&
             !cloudKeys.has(leaveKey(l))
           ));
-          return [...localOnlyLeaves, ...mergedCloudLeaves];
+          const result = [...localOnlyLeaves, ...mergedCloudLeaves];
+          try { localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(result)); } catch {}
+          return result;
         });
       } else if (savedLeaveRequests.length > 0) {
-        setLeaveRequests(savedLeaveRequests);
+        setLeaveRequests(prev => {
+          const cloudIds = new Set(savedLeaveRequests.map((l: LeaveRequest) => String(l.id)));
+          const cloudKeys = new Set(savedLeaveRequests.map((l: LeaveRequest) => leaveKey(l)));
+          const localOnly = prev.filter(l => !cloudIds.has(String(l.id)) && !cloudKeys.has(leaveKey(l)));
+          const result = [...localOnly, ...savedLeaveRequests];
+          try { localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(result)); } catch {}
+          return result;
+        });
       } else {
-        setLeaveRequests(prev => (isInitial ? [] : prev));
+        setLeaveRequests(prev => {
+          try { localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(prev)); } catch {}
+          return prev;
+        });
       }
 
       // Synchronize Assets (DB table primary, settings fallback)
@@ -8170,9 +8581,55 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setCompanyBranches(settings.company_branches);
         }
 
-        // Shift Requests
+        // Shift Requests (merge so a just-submitted / just-approved local change is not reverted by an older cloud copy)
         if (Array.isArray(settings.shift_requests_data)) {
-          setShiftRequests(settings.shift_requests_data);
+          const cloudRequests = settings.shift_requests_data as ShiftRequest[];
+          setShiftRequests(prev => {
+            const cloudMap = new Map(cloudRequests.map(r => [r.id, r]));
+            const localOnly = prev.filter(r => !cloudMap.has(r.id));
+            const merged = cloudRequests.map(cr => {
+              const local = prev.find(r => r.id === cr.id);
+              return local && (local.updatedAt || '') > (cr.updatedAt || '') ? local : cr;
+            });
+            const result = [...localOnly, ...merged];
+            try { localStorage.setItem('vrm_hrms_shift_requests_persistent', JSON.stringify(result)); } catch {}
+            return result;
+          });
+          applyApprovedShiftsToEmployees(cloudRequests);
+        }
+
+        // Shared cross-user notifications
+        if (Array.isArray(settings.shared_notifications_data)) {
+          const cloudNotes = settings.shared_notifications_data as NotificationItem[];
+          setSharedNotifications(prev => {
+            const cloudIds = new Set(cloudNotes.map(n => n.id));
+            const recentCutoff = Date.now() - 2 * 60 * 1000;
+            const localOnly = prev.filter(n => !cloudIds.has(n.id) && n.createdAt && new Date(n.createdAt).getTime() >= recentCutoff);
+            const localMap = new Map(prev.map(n => [n.id, n]));
+            const merged = cloudNotes.map(n => {
+              const local = localMap.get(n.id);
+              return local
+                ? { ...n, readBy: Array.from(new Set([...(n.readBy || []), ...(local.readBy || [])])) }
+                : n;
+            });
+            return [...localOnly, ...merged];
+          });
+        }
+
+        // Face Logs sync
+        if (Array.isArray(settings.face_logs_data) && settings.face_logs_data.length > 0) {
+          setFaceLogs(prev => {
+            const map = new Map<string, FaceLog>();
+            settings.face_logs_data.forEach((l: FaceLog) => map.set(l.id, l));
+            prev.forEach(l => map.set(l.id, l));
+            const merged = Array.from(map.values()).sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 200);
+            try {
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('vrm_hrms_face_logs', JSON.stringify(merged));
+              }
+            } catch {}
+            return merged;
+          });
         }
 
         // Holiday Policies
@@ -8349,6 +8806,20 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   }, [payrollRecords, activeCompanyId]);
 
+  // Bell feed: shared notifications addressed to this user + this session's local notifications
+  const combinedNotifications = useMemo(() => {
+    const myKeys = getUserNotificationKeys();
+    const shared = sharedNotifications
+      .filter(isSharedNotificationForMe)
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+      .map(n => ({
+        ...n,
+        read: (n.readBy || []).some(k => myKeys.includes(String(k).toLowerCase())),
+        timestamp: formatNotificationTime(n.createdAt)
+      }));
+    return [...shared, ...notifications];
+  }, [sharedNotifications, notifications, currentUser]);
+
   return (
     <HRMSContext.Provider value={{
       currentUser,
@@ -8453,7 +8924,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       expenses,
       addExpense,
       approveExpense,
-      notifications,
+      notifications: combinedNotifications,
       markNotificationRead,
       markAllNotificationsRead,
       addNotification,
@@ -8462,6 +8933,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       processPayrollBatch,
       updateEmployeeSalaryScheme,
       updatePayrollRecordAdvanceDeduction,
+      markPayrollRecordsPaid,
       departments,
       addDepartment,
       updateDepartment,

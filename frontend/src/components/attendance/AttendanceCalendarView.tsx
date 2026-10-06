@@ -62,28 +62,27 @@ export const AttendanceCalendarView: React.FC = () => {
     return attendanceRecords.find(a => a.employeeId === selectedEmpId && a.date === dateStr);
   };
 
-  // Status badge config
+  // Status badge config strictly matching core 5 statuses: Present, Absent, Holiday, WFO, Field Visit
   const getStatusBadge = (rec?: AttendanceRecord, dayNum?: number) => {
     if (!rec) {
-      // Default weekend check
+      // Default Sunday check -> Holiday
       const dateObj = new Date(year, month, dayNum || 1);
-      const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-      if (isWeekend) return { code: 'WO', label: 'Week Off', color: '#64748B', bg: '#F1F5F9' };
-      return { code: '-', label: 'No Record', color: '#94A3B8', bg: '#F8FAFC' };
+      const isSunday = dateObj.getDay() === 0;
+      if (isSunday) return { code: 'H', label: 'Holiday', color: '#1E40AF', bg: '#DBEAFE' };
+      return { code: 'A', label: 'Absent', color: '#B91C1C', bg: '#FEE2E2' };
     }
 
-    const st = rec.status;
-    if (st === 'Present') return { code: 'P', label: 'Present', color: '#15803D', bg: '#DCFCE7' };
-    if (st === 'Late') return { code: 'L', label: 'Late', color: '#B45309', bg: '#FEF3C7' };
-    if (st === 'Absent') return { code: 'A', label: 'Absent', color: '#B91C1C', bg: '#FEE2E2' };
-    if (st === 'Half Day') return { code: 'HD', label: 'Half Day', color: '#D97706', bg: '#FEF3C7' };
-    if (st === 'Work From Home' || (st as string) === 'WFH') return { code: 'WFH', label: 'Work From Home', color: '#0369A1', bg: '#E0F2FE' };
-    if (st === 'On Leave' || (st as string) === 'Leave') return { code: 'L', label: 'On Leave', color: '#7E22CE', bg: '#F3E8FF' };
-    if (st === 'Missing Punch') return { code: 'MP', label: 'Missing Punch', color: '#C2410C', bg: '#FFEDD5' };
-    if (st === 'Holiday') return { code: 'H', label: 'Holiday', color: '#047857', bg: '#D1FAE5' };
-    if (st === 'Week Off') return { code: 'WO', label: 'Week Off', color: '#64748B', bg: '#F1F5F9' };
-    if (rec.otHours && rec.otHours > 0) return { code: 'OT', label: 'Overtime', color: '#6D28D9', bg: '#EDE9FE' };
-
+    const st = (rec.status || '').toLowerCase();
+    if (st === 'absent') return { code: 'A', label: 'Absent', color: '#B91C1C', bg: '#FEE2E2' };
+    if (st.includes('wfo') || st.includes('office') || st.includes('wfh') || st.includes('home')) {
+      return { code: 'WFO', label: 'Work From Office', color: '#4338CA', bg: '#E0E7FF' };
+    }
+    if (st.includes('duty') || st.includes('field') || st.includes('visit') || (rec.method || '').toLowerCase().includes('field')) {
+      return { code: 'FV', label: 'Field Visit', color: '#0E7490', bg: '#CFFAFE' };
+    }
+    if (st === 'holiday' || st.includes('week off')) {
+      return { code: 'H', label: 'Holiday', color: '#1E40AF', bg: '#DBEAFE' };
+    }
     return { code: 'P', label: 'Present', color: '#15803D', bg: '#DCFCE7' };
   };
 
@@ -182,25 +181,13 @@ export const AttendanceCalendarView: React.FC = () => {
           <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#FEE2E2', color: '#B91C1C', fontWeight: 800 }}>A</span> Absent
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#D97706', fontWeight: 800 }}>HD</span> Half Day
+          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#DBEAFE', color: '#1E40AF', fontWeight: 800 }}>H</span> Holiday
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F3E8FF', color: '#7E22CE', fontWeight: 800 }}>L</span> Leave
+          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#E0E7FF', color: '#4338CA', fontWeight: 800 }}>WFO</span> Work From Office
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#E0F2FE', color: '#0369A1', fontWeight: 800 }}>WFH</span> Work From Home
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#FFEDD5', color: '#C2410C', fontWeight: 800 }}>MP</span> Missing Punch
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#EDE9FE', color: '#6D28D9', fontWeight: 800 }}>OT</span> Overtime
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#D1FAE5', color: '#047857', fontWeight: 800 }}>H</span> Holiday
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: 800 }}>WO</span> Week Off
+          <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#CFFAFE', color: '#0E7490', fontWeight: 800 }}>FV</span> Field Visit
         </span>
       </div>
 

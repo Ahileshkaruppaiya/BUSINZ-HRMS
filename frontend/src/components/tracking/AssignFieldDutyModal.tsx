@@ -260,7 +260,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Employee *
+                  Employee <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <select
                   className="vrm-input-select"
@@ -312,7 +312,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Duty Type *
+                  Duty Type <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <select
                   value={dutyType}
@@ -339,7 +339,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Schedule Type *
+                  Schedule Type <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <select
                   value={scheduleType}
@@ -388,7 +388,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
               {scheduleType !== 'One Day' && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                    End Date *
+                    End Date <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="date"
@@ -409,7 +409,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Start Time *
+                  Start Time <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="time"
@@ -428,7 +428,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  End Time *
+                  End Time <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="time"
@@ -450,7 +450,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Customer / Site Name *
+                  Customer / Site Name <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
                   type="text"
@@ -491,7 +491,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
             {/* Row 5: Purpose / Reason */}
             <div>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Purpose / Reason *
+                Purpose / Reason <span style={{ color: '#EF4444' }}>*</span>
               </label>
               <textarea
                 placeholder="Detail the work or site inspection objective..."
@@ -597,7 +597,7 @@ export const AssignFieldDutyModal: React.FC<AssignFieldDutyModalProps> = ({
               {/* Attendance Type Selector */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
-                  Attendance Type *
+                  Attendance Type <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <select
                   value={attendanceType}

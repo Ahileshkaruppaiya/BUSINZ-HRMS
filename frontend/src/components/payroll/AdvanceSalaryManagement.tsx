@@ -6,6 +6,7 @@ import {
   LoanRepaymentInstallment 
 } from '../../types/hrms';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { getLocalDateStr } from '../../utils/monthUtils';
 import { 
   Banknote, 
   Plus, 
@@ -81,6 +82,13 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   const isEmployeeRole = currentUser.role === 'Employee' && !isAccountsUser && !isApprovalAuthority;
   const isViewingAsEmployee = isEmployeeRole;
 
+  // CEO does not apply for advance salary — hide the request action on the CEO page only
+  const isCEOUser =
+    currentUser.role === 'CEO' ||
+    currentUser.role === 'Super Admin' ||
+    (currentUser as any).designation?.toLowerCase().includes('ceo') ||
+    (currentUser as any).designation?.toLowerCase().includes('managing director');
+
   // Target Employee for Personal Advance Salary Application (Strictly own application)
   const targetEmployee = useMemo(() => {
     const found = employees.find(e => 
@@ -128,7 +136,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
   // Admin Tab & Filter State
   type AdminTab = 'pending' | 'approved' | 'active' | 'rejected' | 'closed' | 'all';
-  const [adminTab, setAdminTab] = useState<AdminTab>('pending');
+  const [adminTab, setAdminTab] = useState<AdminTab>(isAccountsUser && !isApprovalAuthority ? 'approved' : 'pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
@@ -167,14 +175,14 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
   // Sync quick add modal trigger from header
   useEffect(() => {
-    if (openAddModal) {
+    if (openAddModal && !isCEOUser) {
       openRequestModal();
     }
   }, [openAddModal]);
 
   // Request Form State
   const [requestFormData, setRequestFormData] = useState<{
-    requestType: 'Advance Salary' | 'Employee Loan' | 'Emergency Loan';
+    requestType: 'Advance Salary' | 'Employee Loan';
     requestedAmount: number;
     installmentMonths: number;
     purpose: string;
@@ -262,7 +270,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     notes: string;
   }>({
     amount: 10000,
-    repaymentDate: '2026-09-08',
+    repaymentDate: getLocalDateStr(),
     paymentMode: 'Bank Transfer',
     referenceNumber: '',
     notes: 'Direct voluntary repayment received.'
@@ -360,7 +368,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       monthlyDeduction: r.monthlyDeduction,
       outstandingBalance: r.outstandingBalance,
       status: r.status,
-      requestedDate: r.requestedDate
+      requestedDate: formatDateDDMMYYYY(r.requestedDate)
     }));
     return { columns, data };
   };
@@ -400,14 +408,12 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     const elig = calculateEmployeeLoanEligibility(empId);
     const maxAmt = elig.maxEligibleAmount || 50000;
     const requestDate = getFutureRequestDateString();
-    const policyMin = elig.policy?.minRepaymentMonths ?? 1;
-    const policyMax = elig.policy?.maxRepaymentMonths ?? 3;
-    const defaultMonths = Math.min(Math.max(3, policyMin), policyMax);
     const initialAmt = Math.min(20000, maxAmt);
     setRequestFormData({
       requestType: 'Advance Salary',
       requestedAmount: initialAmt,
-      installmentMonths: defaultMonths,
+      // Advance Salary is recovered in full from the next month's salary (single installment)
+      installmentMonths: 1,
       purpose: 'Emergency Medical & Personal Expense',
       reasonDetails: '',
       neededByDate: requestDate
@@ -437,13 +443,19 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       return;
     }
 
+    const isAdvanceSalary = requestFormData.requestType === 'Advance Salary';
     const minMonths = elig.policy?.minRepaymentMonths ?? 1;
     const maxMonths = elig.policy?.maxRepaymentMonths ?? 12;
 
+    // Advance Salary has no repayment period: it is fully deducted from next month's salary.
+    const effectiveMonths = isAdvanceSalary ? 1 : requestFormData.installmentMonths;
+
     if (
-      !requestFormData.installmentMonths ||
-      requestFormData.installmentMonths < minMonths ||
-      requestFormData.installmentMonths > maxMonths
+      !isAdvanceSalary && (
+        !effectiveMonths ||
+        effectiveMonths < minMonths ||
+        effectiveMonths > maxMonths
+      )
     ) {
       showFeedback('error', `Repayment period must be between ${minMonths} and ${maxMonths} months.`);
       return;
@@ -470,8 +482,8 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       basicSalary: toNum(targetEmployee.basicSalary),
       eligibleLimitAmount: elig.maxEligibleAmount,
       requestedAmount,
-      installmentMonths: requestFormData.installmentMonths,
-      monthlyDeduction: Math.round(requestedAmount / (requestFormData.installmentMonths || 1)),
+      installmentMonths: effectiveMonths,
+      monthlyDeduction: isAdvanceSalary ? requestedAmount : Math.round(requestedAmount / (effectiveMonths || 1)),
       deductionStartMonth: defaultDeductionMonth,
       purpose: requestFormData.purpose,
       reasonDetails: requestFormData.reasonDetails,
@@ -479,7 +491,9 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     });
 
     if (res.success) {
-      showFeedback('success', `Advance Salary request submitted successfully (Ref: ${res.loanId})!`);
+      showFeedback('success', isAdvanceSalary
+        ? `Advance Salary request submitted (Ref: ${res.loanId}). ${formatCurrency(requestedAmount)} will be auto-deducted from your ${defaultDeductionMonth} salary.`
+        : `Employee Loan request submitted successfully (Ref: ${res.loanId})!`);
       setIsRequestModalOpen(false);
       if (onCloseQuickAdd) onCloseQuickAdd();
     } else {
@@ -487,18 +501,22 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     }
   };
 
+  // Advance Salary = single full recovery from next month's salary
+  const isAdvanceType = (t?: string) => t === 'Advance Salary' || t === 'Salary Advance';
+
   // Open Review Modal
   const openReviewModal = (record: LoanRecord) => {
     setReviewModalRecord(record);
     const amt = record.approvedAmount || record.requestedAmount;
-    const months = record.approvedMonths || record.installmentMonths;
+    const isAdvance = record.requestType === 'Advance Salary' || (record.requestType as string) === 'Salary Advance';
+    const months = isAdvance ? 1 : (record.approvedMonths || record.installmentMonths);
     const nextMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
     const defaultDeductionMonth = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' });
     setReviewFormData({
       action: 'Approve',
       approvedAmount: amt,
       approvedMonths: months,
-      monthlyDeduction: record.monthlyDeduction || Math.round(amt / months),
+      monthlyDeduction: isAdvance ? amt : (record.monthlyDeduction || Math.round(amt / months)),
       deductionStartMonth: record.deductionStartMonth || defaultDeductionMonth,
       internalHrNotes: record.internalHrNotes || '',
       employeeVisibleNotes: record.employeeVisibleNotes || '',
@@ -509,6 +527,11 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   const handleReviewSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewModalRecord) return;
+    // Approval / rejection is strictly HR & CEO only (Accounts only disburse)
+    if (!isApprovalAuthority) {
+      showFeedback('error', 'Only HR or CEO can approve or reject advance salary requests.');
+      return;
+    }
 
     reviewLoanRequest(reviewModalRecord.id, {
       action: reviewFormData.action,
@@ -540,6 +563,11 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
   const handleDisbursementSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!disbursementModalRecord) return;
+    // Money hand-over is done strictly by the Accounts team after HR/CEO approval
+    if (!isAccountsUser) {
+      showFeedback('error', 'Only the Accounts team can disburse approved advance salary amounts.');
+      return;
+    }
 
     disburseLoan(disbursementModalRecord.id, {
       disbursedDate: disbursementFormData.disbursedDate,
@@ -558,7 +586,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
     setManualRepaymentModalRecord(record);
     setManualRepaymentFormData({
       amount: Math.min(record.monthlyDeduction || 10000, record.outstandingBalance),
-      repaymentDate: '2026-09-08',
+      repaymentDate: getLocalDateStr(),
       paymentMode: 'Bank Transfer',
       referenceNumber: `TRX-${Date.now().toString().slice(-6)}`,
       notes: 'Direct repayment received.'
@@ -695,7 +723,8 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
             />
           )}
 
-          {/* Create / Request Advance Salary Button */}
+          {/* Create / Request Advance Salary Button (hidden for CEO) */}
+          {!isCEOUser && (
           <button 
             type="button" 
             className="btn btn-primary"
@@ -719,6 +748,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
             <Plus size={16} strokeWidth={2.5} />
             <span>Request Advance Salary</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -1166,7 +1196,6 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                     <option value="ALL">All Loan Types</option>
                     <option value="Advance Salary">Advance Salary</option>
                     <option value="Employee Loan">Employee Loan</option>
-                    <option value="Emergency Loan">Emergency Loan</option>
                   </select>
                 </div>
 
@@ -1355,9 +1384,9 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                                 )
                               )}
 
-                              {/* Approved Action - Disburse by HR/CEO or Accounts once Approved */}
+                              {/* Approved Action - Disburse (hand over amount) strictly by Accounts after HR/CEO approval */}
                               {record.status === 'Approved' && (
-                                (isApprovalAuthority || isAccountsUser) ? (
+                                isAccountsUser ? (
                                   <button 
                                     type="button" 
                                     className="btn btn-primary btn-sm"
@@ -1368,7 +1397,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                                   </button>
                                 ) : (
                                   <span style={{ fontSize: '0.72rem', color: '#15803D', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', background: '#DCFCE7', border: '1px solid #BBF7D0' }}>
-                                    Approved by HR/CEO
+                                    {isApprovalAuthority ? 'Sent to Accounts' : 'Approved by HR/CEO'}
                                   </span>
                                 )
                               )}
@@ -1452,16 +1481,19 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
             }}>
               <span>{selectedRowIds.length} Selected</span>
               <span style={{ opacity: 0.4 }}>|</span>
+              {isApprovalAuthority && (
               <button 
                 type="button"
                 onClick={() => {
-                  const target = loanRecords.find(r => r.id === selectedRowIds[0]);
+                  const target = loanRecords.find(r => r.id === selectedRowIds[0] && r.status === 'Pending');
                   if (target) openReviewModal(target);
+                  else showFeedback('error', 'Select a Pending request to review.');
                 }}
                 style={{ background: 'none', border: 'none', color: '#38BDF8', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                Review & Accept
+                Review &amp; Accept
               </button>
+              )}
               <button 
                 type="button"
                 onClick={() => setSelectedRowIds([])}
@@ -1480,6 +1512,9 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
       {isRequestModalOpen && (() => {
         const modalEmp = targetEmployee;
         const modalElig = calculateEmployeeLoanEligibility(modalEmp.employeeId);
+        const isAdvanceRequest = requestFormData.requestType === 'Advance Salary';
+        const nextSalaryMonthLabel = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+          .toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
         return (
           <div className="modal-overlay" style={{ zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -1488,7 +1523,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
               <div className="modal-header" style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#ffffff', flexShrink: 0 }}>
                 <div>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--color-text-primary)' }}>
-                    Request Advance Salary
+                    {isAdvanceRequest ? 'Request Advance Salary' : 'Request Employee Loan'}
                   </h3>
                   <p style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', margin: '3px 0 0' }}>
                     Calculated against your monthly salary: {formatCurrency(modalEmp.basicSalary)}
@@ -1536,24 +1571,34 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Request Type *
+                        Request Type <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <select 
                         className="form-control"
                         value={requestFormData.requestType}
-                        onChange={e => setRequestFormData({ ...requestFormData, requestType: e.target.value as any })}
+                        onChange={e => {
+                          const nextType = e.target.value as 'Advance Salary' | 'Employee Loan';
+                          const policyMin = modalElig?.policy?.minRepaymentMonths ?? 1;
+                          const policyMax = modalElig?.policy?.maxRepaymentMonths ?? 3;
+                          setRequestFormData({
+                            ...requestFormData,
+                            requestType: nextType,
+                            installmentMonths: nextType === 'Advance Salary'
+                              ? 1
+                              : Math.min(Math.max(3, policyMin), policyMax)
+                          });
+                        }}
                         style={{ height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                       >
                         <option value="Advance Salary">Advance Salary</option>
                         <option value="Employee Loan">Employee Loan</option>
-                        <option value="Emergency Loan">Emergency Loan</option>
                       </select>
                     </div>
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', margin: 0 }}>
-                          Requested Amount (₹) *
+                          Requested Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
                         </label>
                         <span style={{ fontSize: '0.72rem', color: '#0E7490', fontWeight: 600 }}>
                           Max: {formatCurrency(modalElig.maxEligibleAmount || 50000)}
@@ -1580,10 +1625,38 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
                   {/* Perfectly Balanced Row 2 */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                    {isAdvanceRequest ? (
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
+                          Recovery
+                        </label>
+                        <div
+                          id="advance-salary-recovery-info"
+                          style={{
+                            minHeight: '42px',
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            border: '1px solid #A5F3FC',
+                            backgroundColor: '#ECFEFF',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                            gap: '2px'
+                          }}
+                        >
+                          <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#0E7490' }}>
+                            Full deduction · {nextSalaryMonthLabel} salary
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                            {formatCurrency(toNum(requestFormData.requestedAmount))} auto-deducted at next salary credit
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <label htmlFor="repayment-period-months" style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', margin: 0 }}>
-                          Repayment Period (Months) *
+                          Repayment Period (Months) <span style={{ color: '#EF4444' }}>*</span>
                         </label>
                         <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
                           Allowed: {modalElig?.policy?.minRepaymentMonths ?? 1}–{modalElig?.policy?.maxRepaymentMonths ?? 3} mos
@@ -1615,10 +1688,11 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                         style={{ height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                       />
                     </div>
+                    )}
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Funds Needed By Date (Future Date Only) *
+                        Funds Needed By Date (Future Date Only) <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <input 
                         type="date"
@@ -1653,7 +1727,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                      Purpose / Reason *
+                      Purpose / Reason <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input 
                       type="text"
@@ -1965,7 +2039,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                     <div style={{ display: 'grid', gridTemplateColumns: isReviewFullScreen ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)', gap: '16px' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                          Approved Amount (₹) *
+                          Approved Amount (₹) <span style={{ color: '#EF4444' }}>*</span>
                         </label>
                         <input 
                           type="number"
@@ -1977,15 +2051,31 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                             setReviewFormData({
                               ...reviewFormData,
                               approvedAmount: amt,
-                              monthlyDeduction: Math.round(amt / (reviewFormData.approvedMonths || 1))
+                              monthlyDeduction: isAdvanceType(reviewModalRecord.requestType)
+                                ? amt
+                                : Math.round(amt / (reviewFormData.approvedMonths || 1))
                             });
                           }}
                         />
                       </div>
 
+                      {isAdvanceType(reviewModalRecord.requestType) ? (
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
+                            Recovery
+                          </label>
+                          <input
+                            type="text"
+                            readOnly
+                            className="form-control"
+                            value="Full deduction from next month salary"
+                            style={{ backgroundColor: '#ECFEFF', color: '#0E7490', fontWeight: 700, borderColor: '#A5F3FC' }}
+                          />
+                        </div>
+                      ) : (
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                          Approved Tenure (Months) *
+                          Approved Tenure (Months) <span style={{ color: '#EF4444' }}>*</span>
                         </label>
                         <input 
                           type="number"
@@ -2003,15 +2093,17 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                           }}
                         />
                       </div>
+                      )}
 
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                          Monthly Deduction (₹)
+                          {isAdvanceType(reviewModalRecord.requestType) ? 'Deduction Amount (₹)' : 'Monthly Deduction (₹)'}
                         </label>
                         <input 
                           type="number"
                           className="form-control"
                           value={reviewFormData.monthlyDeduction}
+                          readOnly={isAdvanceType(reviewModalRecord.requestType)}
                           onChange={e => setReviewFormData({ ...reviewFormData, monthlyDeduction: Number(e.target.value) })}
                         />
                       </div>
@@ -2060,7 +2152,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                   ) : (
                     <div className="form-group" style={{ marginBottom: 0 }}>
                       <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>
-                        Rejection Reason *
+                        Rejection Reason <span style={{ color: '#EF4444' }}>*</span>
                       </label>
                       <textarea 
                         rows={3}
@@ -2162,7 +2254,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
                     <div className="form-group">
-                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>Disbursement Date *</label>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>Disbursement Date <span style={{ color: '#EF4444' }}>*</span></label>
                       <input
                         type="date" required className="form-control"
                         value={disbursementFormData.disbursedDate}
@@ -2171,7 +2263,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                     </div>
 
                     <div className="form-group">
-                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>Disbursed Amount (₹) *</label>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>Disbursed Amount (₹) <span style={{ color: '#EF4444' }}>*</span></label>
                       <input
                         type="number" required className="form-control"
                         value={disbursementFormData.disbursedAmount}
@@ -2180,7 +2272,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                     </div>
 
                     <div className="form-group">
-                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>Payment Mode *</label>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>Payment Mode <span style={{ color: '#EF4444' }}>*</span></label>
                       <select
                         className="form-control"
                         value={disbursementFormData.paymentMode}
@@ -2194,7 +2286,7 @@ export const AdvanceSalaryManagement: React.FC<AdvanceSalaryManagementProps> = (
                     </div>
 
                     <div className="form-group">
-                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>Transaction Reference *</label>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px', display: 'block' }}>Transaction Reference <span style={{ color: '#EF4444' }}>*</span></label>
                       <input
                         type="text" required placeholder="e.g. NEFT-VRM-89217340"
                         className="form-control"

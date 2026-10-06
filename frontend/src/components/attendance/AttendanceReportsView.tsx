@@ -23,12 +23,13 @@ import {
   Plus
 } from 'lucide-react';
 import { toNum } from '../../utils/numbers';
-import { formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { formatDateDDMMYYYY, normalizeToYYYYMMDD } from '../../utils/dateUtils';
 import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
 import { downloadPagarBookMusterRollExcel } from '../../utils/pagarBookMusterRollExporter';
 import { ExportDropdown } from '../common/ExportDropdown';
 import { MusterRollModule } from './MusterRollModule';
 import { ManualAttendanceEntryModal } from './ManualAttendanceEntryModal';
+import { AttendanceRecord } from '../../types/hrms';
 
 export type ReportTypeKey = 
   | 'muster' 
@@ -38,7 +39,8 @@ export type ReportTypeKey =
   | 'early' 
   | 'halfday' 
   | 'overtime' 
-  | 'leave';
+  | 'leave'
+  | 'remote';
 
 interface AttendanceReportsViewProps {
   onOpenFilter?: () => void;
@@ -53,7 +55,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
   title,
   subtitle
 }) => {
-  const { employees, attendanceRecords, leaveRequests, departments, currentUser, shifts, businessSettings, companyInfo } = useHRMS();
+  const { employees, attendanceRecords, leaveRequests, departments, currentUser, shifts, holidayPolicies, businessSettings, companyInfo } = useHRMS();
 
   const isHrOrCeo =
     currentUser?.role === 'Super Admin' ||
@@ -105,27 +107,49 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
     return count;
   }, [activeFilters]);
 
-  // Date Range (default: 01-09-2026 to 03-09-2026 as shown in design)
-  const [fromDate, setFromDate] = useState<string>('2026-09-01');
-  const [toDate, setToDate] = useState<string>('2026-09-03');
+  // Date Range (default: 1st of current month to today)
+  const currentMonthInfo = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return {
+      monthStart: `${y}-${m}-01`,
+      today: `${y}-${m}-${day}`
+    };
+  }, []);
+
+  const [fromDate, setFromDate] = useState<string>(currentMonthInfo.monthStart);
+  const [toDate, setToDate] = useState<string>(currentMonthInfo.today);
   const [selectedReportType, setSelectedReportType] = useState<ReportTypeKey>('muster');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Generate array of date strings between fromDate and toDate
   const dateRangeList = useMemo(() => {
+    const normFrom = normalizeToYYYYMMDD(fromDate) || currentMonthInfo.monthStart;
+    const normTo = normalizeToYYYYMMDD(toDate) || currentMonthInfo.today;
+    const [startStr, endStr] = normFrom <= normTo ? [normFrom, normTo] : [normTo, normFrom];
+
     const dates: string[] = [];
     try {
-      const current = new Date(fromDate);
-      const end = new Date(toDate);
-      while (current <= end) {
-        dates.push(current.toISOString().split('T')[0]);
+      const [y1, m1, d1] = startStr.split('-').map(n => parseInt(n, 10));
+      const [y2, m2, d2] = endStr.split('-').map(n => parseInt(n, 10));
+      const current = new Date(y1, m1 - 1, d1, 12, 0, 0);
+      const end = new Date(y2, m2 - 1, d2, 12, 0, 0);
+      let count = 0;
+      while (current <= end && count < 366) {
+        const y = current.getFullYear();
+        const m = String(current.getMonth() + 1).padStart(2, '0');
+        const d = String(current.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${d}`);
         current.setDate(current.getDate() + 1);
+        count++;
       }
     } catch {
-      dates.push('2026-09-01', '2026-09-02', '2026-09-03');
+      dates.push(currentMonthInfo.today);
     }
-    return dates.length > 0 ? dates : ['2026-09-01', '2026-09-02', '2026-09-03'];
-  }, [fromDate, toDate]);
+    return dates.length > 0 ? dates : [currentMonthInfo.today];
+  }, [fromDate, toDate, currentMonthInfo]);
 
   // Filtered employees based on Scope Filters
   const filteredEmployees = useMemo(() => {
@@ -200,9 +224,21 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
 
   // Attendance Records inside date range & matching employees
   const filteredAttendance = useMemo(() => {
-    const validEmpIds = new Set(filteredEmployees.map(e => e.employeeId));
+    const validEmpCodes = new Set(filteredEmployees.map(e => (e.employeeId || '').toLowerCase().trim()));
+    const validEmpUids = new Set(filteredEmployees.map(e => (e.id || '').toLowerCase().trim()));
+
+    const normFrom = normalizeToYYYYMMDD(fromDate) || '1970-01-01';
+    const normTo = normalizeToYYYYMMDD(toDate) || '2099-12-31';
+    const [startStr, endStr] = normFrom <= normTo ? [normFrom, normTo] : [normTo, normFrom];
+
     return attendanceRecords.filter(r => {
-      return r.date >= fromDate && r.date <= toDate && validEmpIds.has(r.employeeId);
+      const rDate = normalizeToYYYYMMDD(r.date || r.shiftDate);
+      if (!rDate) return false;
+      const inRange = rDate >= startStr && rDate <= endStr;
+      if (!inRange) return false;
+
+      const rEmp = (r.employeeId || '').toLowerCase().trim();
+      return validEmpCodes.has(rEmp) || validEmpUids.has(rEmp);
     });
   }, [attendanceRecords, fromDate, toDate, filteredEmployees]);
 
@@ -264,7 +300,12 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
       // Date Range overlap check (leave overlaps [fromDate, toDate])
       // Only enforce date boundary if user isn't searching for a specific employee
       if (fromDate && toDate && !searchQuery.trim()) {
-        if (l.startDate > toDate || l.endDate < fromDate) {
+        const normFrom = normalizeToYYYYMMDD(fromDate);
+        const normTo = normalizeToYYYYMMDD(toDate);
+        const [startStr, endStr] = normFrom <= normTo ? [normFrom, normTo] : [normTo, normFrom];
+        const leaveStart = normalizeToYYYYMMDD(l.startDate);
+        const leaveEnd = normalizeToYYYYMMDD(l.endDate);
+        if (leaveStart > endStr || leaveEnd < startStr) {
           return false;
         }
       }
@@ -276,6 +317,65 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
   // Format date display (e.g. 01/09/2026)
   const formatDateDisplay = (isoStr: string) => {
     return formatDateDDMMYYYY(isoStr);
+  };
+
+  // Helper to parse time string like "09:00 AM", "14:30", "2:15 PM" to minutes from midnight
+  const parseTimeToMinutes = (timeStr?: string | null): number => {
+    if (!timeStr) return 0;
+    const clean = String(timeStr).trim();
+    if (!clean || clean === '--:--') return 0;
+    const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (!match) return 0;
+    let hours = parseInt(match[1], 10);
+    const mins = parseInt(match[2], 10);
+    const meridiem = match[3]?.toUpperCase();
+    if (meridiem === 'PM' && hours < 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + mins;
+  };
+
+  // Helper to calculate exact working hours and format nicely
+  const getRecordWorkingDuration = (r: AttendanceRecord): { minutes: number; text: string; decimalHours: number; isPending: boolean } => {
+    const hasOut = Boolean(r.checkOut && r.checkOut !== '--:--' && r.checkOut.trim() !== '' && !r.checkOut.toLowerCase().includes('progress'));
+    if (!hasOut) {
+      return { minutes: 0, text: 'In Progress', decimalHours: 0, isPending: true };
+    }
+    if (r.checkIn && r.checkOut) {
+      const inM = parseTimeToMinutes(r.checkIn);
+      const outM = parseTimeToMinutes(r.checkOut);
+      let diff = outM - inM;
+      if (diff < 0) diff += 24 * 60; // overnight shift
+      const dec = Math.round((diff / 60) * 10) / 10;
+      if (diff < 60) {
+        return { minutes: diff, text: `${diff} min${diff === 1 ? '' : 's'}`, decimalHours: dec, isPending: false };
+      }
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      return { minutes: diff, text: m > 0 ? `${h}h ${m}m` : `${h} hrs`, decimalHours: dec, isPending: false };
+    }
+    const wh = toNum(r.workingHours);
+    if (wh > 0) {
+      return { minutes: Math.round(wh * 60), text: `${wh.toFixed(1)} hrs`, decimalHours: wh, isPending: false };
+    }
+    return { minutes: 0, text: '0 min', decimalHours: 0, isPending: false };
+  };
+
+  // Helper to get employee shift details
+  const getEmployeeShift = (empId?: string) => {
+    const emp = employees.find(e => e.id === empId || e.employeeId === empId);
+    const shiftName = emp?.workShift || 'General';
+    const matchedShift = shifts.find(s => 
+      s.shiftName.toLowerCase() === shiftName.toLowerCase() ||
+      shiftName.toLowerCase().includes(s.shiftName.toLowerCase()) ||
+      s.shiftName.toLowerCase().includes(shiftName.toLowerCase())
+    );
+    return {
+      name: matchedShift?.shiftName || 'General Shift',
+      startTime: matchedShift?.startTime || '09:00 AM',
+      endTime: matchedShift?.endTime || '06:00 PM',
+      gracePeriodMins: matchedShift?.gracePeriodMins ?? 15,
+      totalHours: matchedShift?.workingHours || 9
+    };
   };
 
   // Report Types Metadata
@@ -317,10 +417,10 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
     },
     {
       key: 'remote' as ReportTypeKey,
-      title: 'Remote / WFH',
-      subtitle: 'Offsite employees log',
-      icon: <Home size={19} color="#8b5cf6" />,
-      iconBg: '#ede9fe'
+      title: 'Field Visit & WFO',
+      subtitle: 'Field visit & offsite logs',
+      icon: <MapPin size={19} color="#0891b2" />,
+      iconBg: '#cffafe'
     },
     {
       key: 'overtime' as ReportTypeKey,
@@ -349,42 +449,91 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
         { key: 'name', label: 'Employee Name' },
         { key: 'dept', label: 'Department' },
         ...dateRangeList.map(d => ({ key: `day_${d}`, label: formatDateDisplay(d) })),
-        { key: 'present', label: 'Present' },
-        { key: 'absent', label: 'Absent' },
+        { key: 'present', label: 'Present (P/WFO/FV)' },
+        { key: 'absent', label: 'Absent (A)' },
+        { key: 'holiday', label: 'Holidays (H)' },
         { key: 'rate', label: 'Attendance %' }
       ];
 
       filteredEmployees.forEach(emp => {
+        const empCode = (emp.employeeId || '').toLowerCase().trim();
+        const empUid = (emp.id || '').toLowerCase().trim();
         let pCount = 0;
         let aCount = 0;
+        let hCount = 0;
+        let eligibleWorkingDays = 0;
+
         const row: Record<string, any> = {
           empId: emp.employeeId,
           name: `${emp.firstName} ${emp.lastName}`,
           dept: emp.department
         };
+
         dateRangeList.forEach(d => {
-          const rec = filteredAttendance.find(r => r.employeeId === emp.employeeId && r.date === d);
-          if (!rec) {
-            aCount++;
-            row[`day_${d}`] = 'A';
-          } else if (rec.status === 'Present' || rec.status === 'Late') {
+          const isFuture = d > currentMonthInfo.today;
+          const dateObj = new Date(d + 'T12:00:00');
+          const isSunday = dateObj.getDay() === 0;
+          const isHoliday = (holidayPolicies || []).some(h => normalizeToYYYYMMDD(h.date) === d);
+
+          if (isFuture) {
+            row[`day_${d}`] = '-';
+            return;
+          }
+
+          if (isSunday || isHoliday) {
+            hCount++;
+            row[`day_${d}`] = 'H';
+            return;
+          }
+
+          eligibleWorkingDays++;
+
+          const rec = filteredAttendance.find(r => {
+            const rEmp = (r.employeeId || '').toLowerCase().trim();
+            const rDate = normalizeToYYYYMMDD(r.date || r.shiftDate);
+            return (rEmp === empCode || rEmp === empUid) && rDate === d;
+          });
+
+          const st = (rec?.status || '').toLowerCase();
+          const hasPunch = Boolean(rec?.checkIn && rec.checkIn !== '--:--');
+
+          if (st.includes('field') || st.includes('visit') || st.includes('duty') || (rec?.method || '').toLowerCase().includes('field')) {
+            pCount++;
+            row[`day_${d}`] = 'FV';
+          } else if (st.includes('wfo') || st.includes('office')) {
+            pCount++;
+            row[`day_${d}`] = 'WFO';
+          } else if (st === 'present' || st === 'late' || st.includes('home') || hasPunch) {
             pCount++;
             row[`day_${d}`] = 'P';
-          } else if (rec.status === 'Work From Home') {
-            pCount++;
-            row[`day_${d}`] = 'WFH';
-          } else if (rec.status === 'Half Day') {
+          } else if (st === 'half day') {
             pCount += 0.5;
-            row[`day_${d}`] = 'HD';
+            row[`day_${d}`] = 'P';
           } else {
-            aCount++;
-            row[`day_${d}`] = 'A';
+            // Check approved leave
+            const isApprovedLeave = filteredLeaveRequests.some(l => {
+              const lEmp = (l.employeeId || '').toLowerCase().trim();
+              if (lEmp !== empCode && lEmp !== empUid) return false;
+              if (l.status !== 'Approved') return false;
+              const s = normalizeToYYYYMMDD(l.startDate);
+              const e = normalizeToYYYYMMDD(l.endDate) || s;
+              return s <= d && e >= d;
+            });
+
+            if (isApprovedLeave) {
+              aCount++;
+              row[`day_${d}`] = 'A';
+            } else {
+              aCount++;
+              row[`day_${d}`] = 'A';
+            }
           }
         });
-        const totalDays = dateRangeList.length;
+
         row.present = pCount;
         row.absent = aCount;
-        row.rate = totalDays > 0 ? `${Math.round((pCount / totalDays) * 100)}%` : '0%';
+        row.holiday = hCount;
+        row.rate = eligibleWorkingDays > 0 ? `${Math.round((pCount / eligibleWorkingDays) * 100)}%` : '100%';
         data.push(row);
       });
     } else if (selectedReportType === 'absent') {
@@ -392,26 +541,60 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
         { key: 'empId', label: 'Employee ID' },
         { key: 'name', label: 'Employee Name' },
         { key: 'dept', label: 'Department' },
-        { key: 'date', label: 'Date' },
-        { key: 'status', label: 'Status' },
-        { key: 'phone', label: 'Phone' }
+        { key: 'date', label: 'Date of Absence' },
+        { key: 'phone', label: 'Contact Phone' },
+        { key: 'status', label: 'Status' }
       ];
+
       filteredEmployees.forEach(emp => {
+        const empCode = (emp.employeeId || '').toLowerCase().trim();
+        const empUid = (emp.id || '').toLowerCase().trim();
+
         dateRangeList.forEach(d => {
-          const rec = filteredAttendance.find(r => r.employeeId === emp.employeeId && r.date === d);
-          const isWfh = rec?.status === 'Work From Home' || filteredLeaveRequests.some(l => 
-            l.employeeId === emp.employeeId && l.status === 'Approved' && 
-            (l.leaveType === 'Work From Home' || l.leaveType.toLowerCase().includes('work from home')) &&
-            l.startDate <= d && l.endDate >= d
-          );
-          if (!isWfh && (!rec || rec.status === 'Absent')) {
+          if (d > currentMonthInfo.today) return;
+          const dateObj = new Date(d + 'T12:00:00');
+          if (dateObj.getDay() === 0) return; // Sunday Weekly Off
+          if ((holidayPolicies || []).some(h => normalizeToYYYYMMDD(h.date) === d)) return; // Official Holiday
+
+          const rec = filteredAttendance.find(r => {
+            const rEmp = (r.employeeId || '').toLowerCase().trim();
+            const rDate = normalizeToYYYYMMDD(r.date || r.shiftDate);
+            return (rEmp === empCode || rEmp === empUid) && rDate === d;
+          });
+
+          const recStatus = (rec?.status as string || '').toLowerCase();
+          const isPresentOrDuty = Boolean(rec && (
+            recStatus === 'present' ||
+            recStatus === 'late' ||
+            recStatus.includes('wfo') ||
+            recStatus.includes('office') ||
+            recStatus.includes('field') ||
+            recStatus.includes('visit') ||
+            recStatus.includes('duty') ||
+            recStatus.includes('home') ||
+            recStatus === 'half day' ||
+            (rec.checkIn && rec.checkIn !== '--:--')
+          ));
+          if (isPresentOrDuty) return;
+
+          const isLeaveOrDuty = filteredLeaveRequests.some(l => {
+            const lEmp = (l.employeeId || '').toLowerCase().trim();
+            if (lEmp !== empCode && lEmp !== empUid) return false;
+            if (l.status !== 'Approved') return false;
+            const s = normalizeToYYYYMMDD(l.startDate);
+            const e = normalizeToYYYYMMDD(l.endDate) || s;
+            return s <= d && e >= d;
+          });
+          if (isLeaveOrDuty) return;
+
+          if (!rec || rec.status === 'Absent') {
             data.push({
               empId: emp.employeeId,
               name: `${emp.firstName} ${emp.lastName}`,
               dept: emp.department,
-              date: d,
-              status: 'Absent',
-              phone: emp.phone || 'N/A'
+              date: formatDateDisplay(d),
+              phone: emp.phone || emp.email || 'N/A',
+              status: 'Absent'
             });
           }
         });
@@ -424,19 +607,187 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
         { key: 'date', label: 'Date' },
         { key: 'checkIn', label: 'Check In' },
         { key: 'checkOut', label: 'Check Out' },
-        { key: 'workingHours', label: 'Hours' },
-        { key: 'method', label: 'Method' }
+        { key: 'workingHours', label: 'Working Hours' },
+        { key: 'verification', label: 'Verification / Status' }
       ];
-      filteredAttendance.filter(r => r.status === 'Present' || r.status === 'Late' || r.status === 'Work From Home').forEach(r => {
+
+      filteredAttendance.filter(r => {
+        const st = (r.status || '').toLowerCase();
+        const hasPunch = Boolean(r.checkIn && r.checkIn !== '--:--');
+        return st === 'present' || st === 'late' || st.includes('wfo') || st.includes('office') || st.includes('field') || st.includes('visit') || st.includes('duty') || st.includes('home') || hasPunch;
+      }).forEach(r => {
+        const st = (r.status || '').toLowerCase();
+        const isField = st.includes('field') || st.includes('visit') || st.includes('duty') || (r.method || '').toLowerCase().includes('field');
+        const isWfo = st.includes('wfo') || st.includes('office') || st.includes('home');
+        const isLate = st === 'late' || (r.lateStatus || '').toLowerCase().includes('late');
+        const dur = getRecordWorkingDuration(r);
+
         data.push({
           empId: r.employeeId,
           name: r.employeeName,
           dept: r.department,
-          date: r.date,
-          checkIn: r.checkIn || '09:00 AM',
-          checkOut: r.checkOut || '06:00 PM',
-          workingHours: r.workingHours || 8,
-          method: r.status === 'Work From Home' ? 'Work From Home [WFH]' : (r.method || 'Face Recognition')
+          date: formatDateDisplay(r.date),
+          checkIn: r.checkIn || '--:--',
+          checkOut: r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? r.checkOut : 'In Progress',
+          workingHours: dur.isPending ? 'In Progress' : dur.text,
+          verification: isField ? 'Field Visit' : isWfo ? 'Work From Office (WFO)' : isLate ? 'Late Punch' : (r.method || 'Face Recognition')
+        });
+      });
+    } else if (selectedReportType === 'late') {
+      columns = [
+        { key: 'empId', label: 'Employee ID' },
+        { key: 'name', label: 'Employee Name' },
+        { key: 'dept', label: 'Department' },
+        { key: 'date', label: 'Date' },
+        { key: 'shiftTime', label: 'Shift Time' },
+        { key: 'checkIn', label: 'Actual Punch In' },
+        { key: 'delay', label: 'Delay Duration' },
+        { key: 'status', label: 'Policy Status' }
+      ];
+      filteredAttendance.filter(r => {
+        if (r.status === 'Absent') return false;
+        if (r.status === 'Late' || r.lateStatus?.toLowerCase().includes('late')) return true;
+        if (r.checkIn && r.checkIn !== '--:--') {
+          const shift = getEmployeeShift(r.employeeId);
+          const inM = parseTimeToMinutes(r.checkIn);
+          const startM = parseTimeToMinutes(shift.startTime);
+          return inM > (startM + shift.gracePeriodMins);
+        }
+        return false;
+      }).forEach(r => {
+        const shift = getEmployeeShift(r.employeeId);
+        const inM = parseTimeToMinutes(r.checkIn);
+        const startM = parseTimeToMinutes(shift.startTime);
+        const diff = Math.max(0, inM - startM);
+        const h = Math.floor(diff / 60);
+        const m = diff % 60;
+        data.push({
+          empId: r.employeeId,
+          name: r.employeeName,
+          dept: r.department,
+          date: formatDateDisplay(r.date),
+          shiftTime: shift.startTime,
+          checkIn: r.checkIn || '--:--',
+          delay: diff > 0 ? (h > 0 ? `+${h}h ${m}m` : `+${m} mins`) : 'On Time',
+          status: diff > shift.gracePeriodMins ? `Grace Exceeded (+${diff - shift.gracePeriodMins}m)` : (diff > 0 ? 'Within Grace' : 'On Time')
+        });
+      });
+    } else if (selectedReportType === 'early') {
+      columns = [
+        { key: 'empId', label: 'Employee ID' },
+        { key: 'name', label: 'Employee Name' },
+        { key: 'dept', label: 'Department' },
+        { key: 'date', label: 'Date' },
+        { key: 'shiftTiming', label: 'Shift Timing' },
+        { key: 'checkIn', label: 'Punch In' },
+        { key: 'checkOut', label: 'Punch Out' },
+        { key: 'earlyBy', label: 'Early Departure' },
+        { key: 'workingHours', label: 'Working Hours' }
+      ];
+      filteredAttendance.filter(r => {
+        if (!r.checkOut || r.checkOut === '--:--' || r.checkOut.toLowerCase().includes('progress')) return false;
+        if (r.status === 'Absent') return false;
+        const shift = getEmployeeShift(r.employeeId);
+        const outM = parseTimeToMinutes(r.checkOut);
+        const endM = parseTimeToMinutes(shift.endTime);
+        const dur = getRecordWorkingDuration(r);
+        return (outM > 0 && outM < endM) || (dur.decimalHours > 0 && dur.decimalHours < (shift.totalHours - 0.25));
+      }).forEach(r => {
+        const shift = getEmployeeShift(r.employeeId);
+        const outM = parseTimeToMinutes(r.checkOut);
+        const endM = parseTimeToMinutes(shift.endTime);
+        const diff = Math.max(0, endM - outM);
+        const h = Math.floor(diff / 60);
+        const m = diff % 60;
+        const dur = getRecordWorkingDuration(r);
+        data.push({
+          empId: r.employeeId,
+          name: r.employeeName,
+          dept: r.department,
+          date: formatDateDisplay(r.date),
+          shiftTiming: `${shift.startTime} - ${shift.endTime}`,
+          checkIn: r.checkIn || '--:--',
+          checkOut: r.checkOut,
+          earlyBy: diff > 0 ? (h > 0 ? `${h}h ${m}m early` : `${m} mins early`) : 'Under Min Hours',
+          workingHours: dur.text
+        });
+      });
+    } else if (selectedReportType === 'remote') {
+      columns = [
+        { key: 'empId', label: 'Employee ID' },
+        { key: 'name', label: 'Employee Name' },
+        { key: 'dept', label: 'Department' },
+        { key: 'date', label: 'Date' },
+        { key: 'checkIn', label: 'Check In' },
+        { key: 'checkOut', label: 'Check Out' },
+        { key: 'workingHours', label: 'Working Hours' },
+        { key: 'mode', label: 'Deployment / Type' }
+      ];
+      filteredAttendance.filter(r => {
+        const st = (r.status || '').toLowerCase();
+        const method = (r.method || '').toLowerCase();
+        const isField = st.includes('field') || st.includes('visit') || st.includes('duty') || method.includes('field');
+        const isWfo = st.includes('wfo') || st.includes('office');
+        const isWfh = st.includes('home');
+        const isLeaveMatch = filteredLeaveRequests.some(l => 
+          (l.employeeId === r.employeeId) && 
+          (l.leaveType.toLowerCase().includes('field') || l.leaveType.toLowerCase().includes('duty') || l.leaveType.toLowerCase().includes('office') || l.leaveType.toLowerCase().includes('home')) &&
+          l.status === 'Approved' &&
+          l.startDate <= r.date && l.endDate >= r.date
+        );
+        return isField || isWfo || isWfh || isLeaveMatch;
+      }).forEach(r => {
+        const st = (r.status || '').toLowerCase();
+        const method = (r.method || '').toLowerCase();
+        const isField = st.includes('field') || st.includes('visit') || st.includes('duty') || method.includes('field');
+        const isWfo = st.includes('wfo') || st.includes('office');
+        const dur = getRecordWorkingDuration(r);
+        data.push({
+          empId: r.employeeId,
+          name: r.employeeName,
+          dept: r.department,
+          date: formatDateDisplay(r.date),
+          checkIn: r.checkIn || '--:--',
+          checkOut: r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? r.checkOut : 'In Progress',
+          workingHours: dur.isPending ? 'In Progress' : dur.text,
+          mode: isField ? 'Field Visit' : isWfo ? 'Work From Office (WFO)' : 'Work From Home'
+        });
+      });
+    } else if (selectedReportType === 'overtime') {
+      columns = [
+        { key: 'empId', label: 'Employee ID' },
+        { key: 'name', label: 'Employee Name' },
+        { key: 'dept', label: 'Department' },
+        { key: 'date', label: 'Date' },
+        { key: 'standardHours', label: 'Standard Hours' },
+        { key: 'totalHours', label: 'Total Hours' },
+        { key: 'otHours', label: 'OT Logged' },
+        { key: 'rate', label: 'Multiplier' }
+      ];
+      filteredAttendance.filter(r => {
+        if (r.status === 'Absent') return false;
+        const dur = getRecordWorkingDuration(r);
+        const shift = getEmployeeShift(r.employeeId);
+        const hours = dur.decimalHours > 0 ? dur.decimalHours : toNum(r.workingHours);
+        const otExplicit = (r as any).approvedOtHours || r.otHours || 0;
+        return otExplicit > 0 || hours > (shift.totalHours || 8) + 0.25;
+      }).forEach(r => {
+        const shift = getEmployeeShift(r.employeeId);
+        const dur = getRecordWorkingDuration(r);
+        const rawHours = dur.decimalHours > 0 ? dur.decimalHours : toNum(r.workingHours);
+        const explicitOt = (r as any).approvedOtHours || r.otHours || 0;
+        const calculatedOt = Math.max(0, rawHours - (shift.totalHours || 8));
+        const otHrs = explicitOt > 0 ? explicitOt : calculatedOt;
+        const totalHours = Math.max(rawHours, (shift.totalHours || 8) + otHrs);
+        data.push({
+          empId: r.employeeId,
+          name: r.employeeName,
+          dept: r.department,
+          date: formatDateDisplay(r.date),
+          standardHours: `${(shift.totalHours || 8).toFixed(1)} hrs`,
+          totalHours: `${totalHours.toFixed(1)} hrs`,
+          otHours: `+${otHrs.toFixed(1)} hrs`,
+          rate: '1.5x Rate'
         });
       });
     } else if (selectedReportType === 'leave') {
@@ -452,15 +803,23 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
         { key: 'status', label: 'Status' }
       ];
       filteredLeaveRequests.forEach(l => {
+        const days = l.daysCount || (() => {
+          if (l.startDate && l.endDate) {
+            const s = new Date(l.startDate).getTime();
+            const e = new Date(l.endDate).getTime();
+            return Math.max(1, Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1);
+          }
+          return 1;
+        })();
         data.push({
           empId: l.employeeId,
           name: l.employeeName,
           dept: l.department,
           leaveType: l.leaveType,
-          startDate: l.startDate,
-          endDate: l.endDate,
-          daysCount: l.daysCount,
-          reason: l.reason,
+          startDate: formatDateDisplay(l.startDate),
+          endDate: formatDateDisplay(l.endDate),
+          daysCount: `${days} ${days === 1 ? 'day' : 'days'}`,
+          reason: l.reason || 'Personal Leave',
           status: l.status
         });
       });
@@ -475,14 +834,15 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
         { key: 'workingHours', label: 'Hours' }
       ];
       filteredAttendance.forEach(r => {
+        const dur = getRecordWorkingDuration(r);
         data.push({
           id: r.id,
           empId: r.employeeId,
           name: r.employeeName,
           dept: r.department,
-          date: r.date,
+          date: formatDateDisplay(r.date),
           status: r.status,
-          workingHours: r.workingHours
+          workingHours: dur.text
         });
       });
     }
@@ -492,28 +852,34 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
 
   const handleExportCSV = () => {
     const { columns, data } = getStructuredReportData();
-    downloadCSV(data, `Attendance_${selectedReportType.toUpperCase()}_Report_${fromDate}_to_${toDate}`, columns);
+    const fStr = normalizeToYYYYMMDD(fromDate);
+    const tStr = normalizeToYYYYMMDD(toDate);
+    downloadCSV(data, `Attendance_${selectedReportType.toUpperCase()}_Report_${fStr}_to_${tStr}`, columns);
   };
 
   const handleExportExcel = () => {
+    const fStr = normalizeToYYYYMMDD(fromDate);
+    const tStr = normalizeToYYYYMMDD(toDate);
     if (selectedReportType === 'muster') {
       downloadPagarBookMusterRollExcel(
         filteredEmployees,
         attendanceRecords,
         leaveRequests,
-        fromDate,
-        toDate,
+        fStr,
+        tStr,
         businessSettings?.businessName || companyInfo?.companyName || 'BUSINZ'
       );
       return;
     }
     const { columns, data } = getStructuredReportData();
-    downloadExcel(data, `Attendance_${selectedReportType.toUpperCase()}_Report_${fromDate}_to_${toDate}`, columns);
+    downloadExcel(data, `Attendance_${selectedReportType.toUpperCase()}_Report_${fStr}_to_${tStr}`, columns);
   };
 
   const handleExportPDF = () => {
     const { columns, data } = getStructuredReportData();
-    downloadPDF(data, `Attendance ${selectedReportType.toUpperCase()} Report (${fromDate} to ${toDate})`, `Attendance_${selectedReportType.toUpperCase()}_Report_${fromDate}_to_${toDate}`, columns);
+    const fStr = normalizeToYYYYMMDD(fromDate);
+    const tStr = normalizeToYYYYMMDD(toDate);
+    downloadPDF(data, `Attendance ${selectedReportType.toUpperCase()} Report (${formatDateDisplay(fromDate)} to ${formatDateDisplay(toDate)})`, `Attendance_${selectedReportType.toUpperCase()}_Report_${fStr}_to_${tStr}`, columns);
   };
 
   return (
@@ -576,7 +942,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
             <input 
               type="date"
               className="form-control"
-              value={fromDate}
+              value={normalizeToYYYYMMDD(fromDate) || fromDate}
               onChange={(e) => setFromDate(e.target.value)}
               style={{
                 width: '100%',
@@ -601,7 +967,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
             <input 
               type="date"
               className="form-control"
-              value={toDate}
+              value={normalizeToYYYYMMDD(toDate) || toDate}
               onChange={(e) => setToDate(e.target.value)}
               style={{
                 width: '100%',
@@ -839,14 +1205,55 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                 {(() => {
                   const absentRows: Array<{ emp: any; date: string }> = [];
                   filteredEmployees.forEach(emp => {
+                    const empCode = (emp.employeeId || '').toLowerCase().trim();
+                    const empUid = (emp.id || '').toLowerCase().trim();
+
                     dateRangeList.forEach(d => {
-                      const rec = filteredAttendance.find(r => r.employeeId === emp.employeeId && r.date === d);
-                      const isWfh = rec?.status === 'Work From Home' || filteredLeaveRequests.some(l => 
-                        l.employeeId === emp.employeeId && l.status === 'Approved' && 
-                        (l.leaveType === 'Work From Home' || l.leaveType.toLowerCase().includes('work from home')) &&
-                        l.startDate <= d && l.endDate >= d
-                      );
-                      if (!isWfh && (!rec || rec.status === 'Absent')) {
+                      // 1. Exclude future dates
+                      if (d > currentMonthInfo.today) return;
+
+                      // 2. Exclude Sundays (Weekly Off) and Official Company Holidays
+                      const dateObj = new Date(d + 'T12:00:00');
+                      const isSunday = dateObj.getDay() === 0;
+                      const isHoliday = (holidayPolicies || []).some(h => normalizeToYYYYMMDD(h.date) === d);
+                      if (isSunday || isHoliday) return;
+
+                      // 3. Find any attendance record for this employee and date
+                      const rec = filteredAttendance.find(r => {
+                        const rEmp = (r.employeeId || '').toLowerCase().trim();
+                        const rDate = normalizeToYYYYMMDD(r.date || r.shiftDate);
+                        return (rEmp === empCode || rEmp === empUid) && rDate === d;
+                      });
+
+                      // 4. Check if employee is present, late, WFO, Field Visit, or has a valid punch
+                      const recStatus = (rec?.status as string || '').toLowerCase();
+                      const isPresentOrDuty = Boolean(rec && (
+                        recStatus === 'present' ||
+                        recStatus === 'late' ||
+                        recStatus.includes('wfo') ||
+                        recStatus.includes('office') ||
+                        recStatus.includes('field') ||
+                        recStatus.includes('visit') ||
+                        recStatus.includes('duty') ||
+                        recStatus.includes('home') ||
+                        recStatus === 'half day' ||
+                        (rec.checkIn && rec.checkIn !== '--:--')
+                      ));
+                      if (isPresentOrDuty) return;
+
+                      // 5. Check if employee is on approved leave or WFO/Field Visit
+                      const isLeaveOrDuty = filteredLeaveRequests.some(l => {
+                        const lEmp = (l.employeeId || '').toLowerCase().trim();
+                        if (lEmp !== empCode && lEmp !== empUid) return false;
+                        if (l.status !== 'Approved') return false;
+                        const s = normalizeToYYYYMMDD(l.startDate);
+                        const e = normalizeToYYYYMMDD(l.endDate) || s;
+                        return s <= d && e >= d;
+                      });
+                      if (isLeaveOrDuty) return;
+
+                      // If no punch or marked Absent on a past working day -> Absent!
+                      if (!rec || rec.status === 'Absent') {
                         absentRows.push({ emp, date: d });
                       }
                     });
@@ -855,8 +1262,8 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                   if (absentRows.length === 0) {
                     return (
                       <tr>
-                        <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>
-                          No absentees logged for the selected dates!
+                        <td colSpan={5} style={{ padding: '36px', textAlign: 'center', color: '#16a34a', fontWeight: 700 }}>
+                          ✅ No absentees logged for the selected working dates!
                         </td>
                       </tr>
                     );
@@ -870,9 +1277,9 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                       </td>
                       <td style={{ padding: '10px 14px', color: '#475569' }}>{item.emp.department}</td>
                       <td style={{ padding: '10px 14px', color: '#0f172a', fontWeight: 600 }}>{formatDateDisplay(item.date)}</td>
-                      <td style={{ padding: '10px 14px', color: '#64748b' }}>{item.emp.phone || item.emp.email}</td>
+                      <td style={{ padding: '10px 14px', color: '#64748b' }}>{item.emp.phone || item.emp.email || 'N/A'}</td>
                       <td style={{ padding: '10px 14px' }}>
-                        <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '3px 10px', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem' }}>
+                        <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', padding: '3px 10px', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem' }}>
                           Absent
                         </span>
                       </td>
@@ -897,15 +1304,30 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {filteredAttendance.filter(r => r.status === 'Present' || r.status === 'Late' || r.status === 'Work From Home').length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
-                      No present records found for this date range.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAttendance.filter(r => r.status === 'Present' || r.status === 'Late' || r.status === 'Work From Home').map(r => {
-                    const isWfh = r.status === 'Work From Home';
+                {(() => {
+                  const presentList = filteredAttendance.filter(r => {
+                    const st = (r.status || '').toLowerCase();
+                    const hasPunch = Boolean(r.checkIn && r.checkIn !== '--:--');
+                    return st === 'present' || st === 'late' || st.includes('wfo') || st.includes('office') || st.includes('field') || st.includes('visit') || st.includes('duty') || st.includes('home') || hasPunch;
+                  });
+
+                  if (presentList.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>
+                          No present records found for this date range.
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return presentList.map(r => {
+                    const st = (r.status || '').toLowerCase();
+                    const isWfo = st.includes('wfo') || st.includes('office') || st.includes('home');
+                    const isField = st.includes('field') || st.includes('visit') || st.includes('duty') || (r.method || '').toLowerCase().includes('field');
+                    const isLate = st === 'late' || (r.lateStatus || '').toLowerCase().includes('late');
+                    const dur = getRecordWorkingDuration(r);
+
                     return (
                       <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '10px 14px' }}>
@@ -913,13 +1335,27 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                           <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{r.employeeId} • {r.department}</div>
                         </td>
                         <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
-                        <td style={{ padding: '10px 14px', color: isWfh ? '#4338CA' : '#15803d', fontWeight: 700 }}>{r.checkIn || '09:00 AM'}</td>
-                        <td style={{ padding: '10px 14px', color: '#475569' }}>{r.checkOut || '06:00 PM'}</td>
-                        <td style={{ padding: '10px 14px', fontWeight: 700 }}>{toNum(r.workingHours) || 8} hrs</td>
+                        <td style={{ padding: '10px 14px', color: isField ? '#0E7490' : isWfo ? '#4338CA' : isLate ? '#D97706' : '#15803d', fontWeight: 700 }}>
+                          {r.checkIn || '--:--'}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#475569' }}>
+                          {r.checkOut && r.checkOut !== '--:--' ? r.checkOut : 'In Progress'}
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: dur.isPending ? '#0284c7' : '#0f172a' }}>
+                          {dur.isPending ? 'In Progress' : dur.text}
+                        </td>
                         <td style={{ padding: '10px 14px' }}>
-                          {isWfh ? (
-                            <span style={{ backgroundColor: '#E0E7FF', color: '#4338CA', border: '1px solid #C7D2FE', padding: '3px 9px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
-                              🏠 [WFH] Remote Work
+                          {isField ? (
+                            <span style={{ backgroundColor: '#CFFAFE', color: '#0E7490', border: '1px solid #67E8F9', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                              🚗 Field Visit
+                            </span>
+                          ) : isWfo ? (
+                            <span style={{ backgroundColor: '#E0E7FF', color: '#4338CA', border: '1px solid #A5B4FC', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                              🏢 Work From Office (WFO)
+                            </span>
+                          ) : isLate ? (
+                            <span style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                              ⏱️ Late Punch
                             </span>
                           ) : (
                             <span style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600 }}>
@@ -929,8 +1365,8 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                         </td>
                       </tr>
                     );
-                  })
-                )}
+                  });
+                })()}
               </tbody>
             </table>
           )}
@@ -949,75 +1385,224 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {filteredAttendance.filter(r => r.status === 'Late' || r.lateStatus?.includes('Late')).length === 0 ? (
+                {filteredAttendance.filter(r => {
+                  if (r.status === 'Late' || r.lateStatus?.toLowerCase().includes('late')) return true;
+                  if (r.checkIn && r.checkIn !== '--:--') {
+                    const shift = getEmployeeShift(r.employeeId);
+                    const inM = parseTimeToMinutes(r.checkIn);
+                    const startM = parseTimeToMinutes(shift.startTime);
+                    return inM > (startM + shift.gracePeriodMins);
+                  }
+                  return false;
+                }).length === 0 ? (
                   <tr>
                     <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>
                       No latecomers recorded in this timeframe!
                     </td>
                   </tr>
                 ) : (
-                  filteredAttendance.filter(r => r.status === 'Late' || r.lateStatus?.includes('Late')).map(r => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px 14px' }}>
-                        <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.employeeName}</div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{r.employeeId} • {r.department}</div>
-                      </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
-                      <td style={{ padding: '10px 14px', color: '#64748b' }}>09:30 AM</td>
-                      <td style={{ padding: '10px 14px', color: '#d97706', fontWeight: 700 }}>{r.checkIn || '09:54 AM'}</td>
-                      <td style={{ padding: '10px 14px', color: '#b45309', fontWeight: 700 }}>+24 mins</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
-                          Grace Exceeded
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  filteredAttendance.filter(r => {
+                    if (r.status === 'Late' || r.lateStatus?.toLowerCase().includes('late')) return true;
+                    if (r.checkIn && r.checkIn !== '--:--') {
+                      const shift = getEmployeeShift(r.employeeId);
+                      const inM = parseTimeToMinutes(r.checkIn);
+                      const startM = parseTimeToMinutes(shift.startTime);
+                      return inM > (startM + shift.gracePeriodMins);
+                    }
+                    return false;
+                  }).map(r => {
+                    const shift = getEmployeeShift(r.employeeId);
+                    const inM = parseTimeToMinutes(r.checkIn);
+                    const startM = parseTimeToMinutes(shift.startTime);
+                    const diff = Math.max(0, inM - startM);
+                    const h = Math.floor(diff / 60);
+                    const m = diff % 60;
+                    const isExceeded = diff > shift.gracePeriodMins;
+                    return (
+                      <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.employeeName}</div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{r.employeeId} • {r.department}</div>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
+                        <td style={{ padding: '10px 14px', color: '#64748b' }}>{shift.startTime}</td>
+                        <td style={{ padding: '10px 14px', color: '#d97706', fontWeight: 700 }}>{r.checkIn || '--:--'}</td>
+                        <td style={{ padding: '10px 14px', color: '#b45309', fontWeight: 700 }}>
+                          {diff > 0 ? (h > 0 ? `+${h}h ${m}m` : `+${m} mins`) : 'On Time'}
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{ 
+                            backgroundColor: isExceeded ? '#fef3c7' : '#ecfdf5', 
+                            color: isExceeded ? '#92400e' : '#047857', 
+                            padding: '3px 8px', 
+                            borderRadius: '6px', 
+                            fontSize: '0.75rem', 
+                            fontWeight: 700 
+                          }}>
+                            {isExceeded ? `Grace Exceeded (+${diff - shift.gracePeriodMins}m)` : (diff > 0 ? 'Within Grace' : 'On Time')}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           )}
 
-          {/* E. EARLY LEAVING REPORT VIEW */}
+          {/* E. EARLY DEPARTURES REPORT VIEW */}
           {selectedReportType === 'early' && (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
                   <th style={{ padding: '10px 14px', fontWeight: 700 }}>Employee</th>
                   <th style={{ padding: '10px 14px', fontWeight: 700 }}>Date</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Shift End</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Shift Timing</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Punch In</th>
                   <th style={{ padding: '10px 14px', fontWeight: 700 }}>Punch Out</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Early By</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Early Departure</th>
                   <th style={{ padding: '10px 14px', fontWeight: 700 }}>Working Hours</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredAttendance.filter(r => r.workingHours < 7.5 && r.workingHours > 0).length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#06b6d4', fontWeight: 600 }}>
-                      No early leaving instances recorded!
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAttendance.filter(r => r.workingHours < 7.5 && r.workingHours > 0).map(r => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px 14px' }}>
-                        <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.employeeName}</div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{r.employeeId} • {r.department}</div>
-                      </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
-                      <td style={{ padding: '10px 14px', color: '#64748b' }}>06:30 PM</td>
-                      <td style={{ padding: '10px 14px', color: '#0e7490', fontWeight: 700 }}>{r.checkOut || '04:15 PM'}</td>
-                      <td style={{ padding: '10px 14px', color: '#0891b2', fontWeight: 700 }}>2h 15m early</td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700 }}>{toNum(r.workingHours)} hrs</td>
-                    </tr>
-                  ))
-                )}
+                {(() => {
+                  const earlyList = filteredAttendance.filter(r => {
+                    if (!r.checkOut || r.checkOut === '--:--' || r.checkOut.toLowerCase().includes('progress')) return false;
+                    if (r.status === 'Absent') return false;
+                    const shift = getEmployeeShift(r.employeeId);
+                    const outM = parseTimeToMinutes(r.checkOut);
+                    const endM = parseTimeToMinutes(shift.endTime);
+                    const dur = getRecordWorkingDuration(r);
+                    return (outM > 0 && outM < endM) || (dur.decimalHours > 0 && dur.decimalHours < (shift.totalHours - 0.25));
+                  });
+
+                  if (earlyList.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: '#0891b2', fontWeight: 600 }}>
+                          No early departures recorded for this date range!
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return earlyList.map(r => {
+                    const shift = getEmployeeShift(r.employeeId);
+                    const outM = parseTimeToMinutes(r.checkOut);
+                    const endM = parseTimeToMinutes(shift.endTime);
+                    const diff = Math.max(0, endM - outM);
+                    const h = Math.floor(diff / 60);
+                    const m = diff % 60;
+                    const dur = getRecordWorkingDuration(r);
+                    return (
+                      <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.employeeName}</div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{r.employeeId} • {r.department}</div>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
+                        <td style={{ padding: '10px 14px', color: '#64748b' }}>{shift.startTime} - {shift.endTime}</td>
+                        <td style={{ padding: '10px 14px', color: '#0f172a', fontWeight: 600 }}>{r.checkIn || '--:--'}</td>
+                        <td style={{ padding: '10px 14px', color: '#0e7490', fontWeight: 700 }}>{r.checkOut}</td>
+                        <td style={{ padding: '10px 14px', color: '#0891b2', fontWeight: 700 }}>
+                          {diff > 0 ? (h > 0 ? `${h}h ${m}m early` : `${m} mins early`) : 'Under Min Hours'}
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700 }}>{dur.text}</td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           )}
 
-          {/* F. HALF-DAY VIEW */}
+          {/* F. FIELD VISIT & WFO REPORT VIEW */}
+          {selectedReportType === 'remote' && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', textAlign: 'left' }}>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Employee</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Date</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Check In</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Check Out</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Working Hours</th>
+                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Log Type / Deployment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const fieldAndWfoList = filteredAttendance.filter(r => {
+                    const st = (r.status || '').toLowerCase();
+                    const method = (r.method || '').toLowerCase();
+                    const isField = st.includes('field') || st.includes('visit') || st.includes('duty') || method.includes('field');
+                    const isWfo = st.includes('wfo') || st.includes('office');
+                    const isWfh = st.includes('home');
+                    const isLeaveMatch = filteredLeaveRequests.some(l => 
+                      (l.employeeId === r.employeeId) && 
+                      (l.leaveType.toLowerCase().includes('field') || l.leaveType.toLowerCase().includes('duty') || l.leaveType.toLowerCase().includes('office') || l.leaveType.toLowerCase().includes('home')) &&
+                      l.status === 'Approved' &&
+                      l.startDate <= r.date && l.endDate >= r.date
+                    );
+                    return isField || isWfo || isWfh || isLeaveMatch;
+                  });
+
+                  if (fieldAndWfoList.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#0e7490', fontWeight: 600 }}>
+                          No Field Visit or WFO records logged for this date range.
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return fieldAndWfoList.map(r => {
+                    const st = (r.status || '').toLowerCase();
+                    const method = (r.method || '').toLowerCase();
+                    const isField = st.includes('field') || st.includes('visit') || st.includes('duty') || method.includes('field');
+                    const isWfo = st.includes('wfo') || st.includes('office');
+                    const dur = getRecordWorkingDuration(r);
+
+                    return (
+                      <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.employeeName}</div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{r.employeeId} • {r.department}</div>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
+                        <td style={{ padding: '10px 14px', color: isField ? '#0E7490' : isWfo ? '#4338CA' : '#6D28D9', fontWeight: 700 }}>
+                          {r.checkIn || '--:--'}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#475569' }}>
+                          {r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? r.checkOut : 'In Progress'}
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: dur.isPending ? '#0284c7' : '#0f172a' }}>
+                          {dur.isPending ? 'In Progress' : dur.text}
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          {isField ? (
+                            <span style={{ backgroundColor: '#CFFAFE', color: '#0E7490', border: '1px solid #67E8F9', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                              🚗 Field Visit
+                            </span>
+                          ) : isWfo ? (
+                            <span style={{ backgroundColor: '#E0E7FF', color: '#4338CA', border: '1px solid #A5B4FC', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                              🏢 Work From Office (WFO)
+                            </span>
+                          ) : (
+                            <span style={{ backgroundColor: '#EDE9FE', color: '#6D28D9', border: '1px solid #DDD6FE', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                              🏠 Work From Home
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          )}
+
+          {/* G. HALF-DAY VIEW (IF ACCESSED DIRECTLY) */}
           {selectedReportType === 'halfday' && (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
@@ -1058,7 +1643,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
             </table>
           )}
 
-          {/* G. OVERTIME VIEW */}
+          {/* H. OVERTIME VIEW */}
           {selectedReportType === 'overtime' && (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
@@ -1072,36 +1657,59 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {filteredAttendance.filter(r => r.workingHours > 8.5).length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
-                      No overtime logged for this timeframe.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAttendance.filter(r => r.workingHours > 8.5).map(r => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px 14px' }}>
-                        <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.employeeName}</div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{r.employeeId} • {r.department}</div>
-                      </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
-                      <td style={{ padding: '10px 14px', color: '#64748b' }}>8.0 hrs</td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700 }}>{toNum(r.workingHours)} hrs</td>
-                      <td style={{ padding: '10px 14px', color: '#0E7490', fontWeight: 800 }}>+{(toNum(r.workingHours) - 8).toFixed(1)} hrs</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
-                          1.5x Rate
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                {(() => {
+                  const otList = filteredAttendance.filter(r => {
+                    if (r.status === 'Absent') return false;
+                    const dur = getRecordWorkingDuration(r);
+                    const shift = getEmployeeShift(r.employeeId);
+                    const hours = dur.decimalHours > 0 ? dur.decimalHours : toNum(r.workingHours);
+                    const otExplicit = (r as any).approvedOtHours || r.otHours || 0;
+                    return otExplicit > 0 || hours > (shift.totalHours || 8) + 0.25;
+                  });
+
+                  if (otList.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
+                          No overtime logged for this timeframe.
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return otList.map(r => {
+                    const shift = getEmployeeShift(r.employeeId);
+                    const dur = getRecordWorkingDuration(r);
+                    const rawHours = dur.decimalHours > 0 ? dur.decimalHours : toNum(r.workingHours);
+                    const explicitOt = (r as any).approvedOtHours || r.otHours || 0;
+                    const calculatedOt = Math.max(0, rawHours - (shift.totalHours || 8));
+                    const otHrs = explicitOt > 0 ? explicitOt : calculatedOt;
+                    const totalHours = Math.max(rawHours, (shift.totalHours || 8) + otHrs);
+
+                    return (
+                      <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{r.employeeName}</div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{r.employeeId} • {r.department}</div>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
+                        <td style={{ padding: '10px 14px', color: '#64748b' }}>{(shift.totalHours || 8).toFixed(1)} hrs</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700 }}>{totalHours.toFixed(1)} hrs</td>
+                        <td style={{ padding: '10px 14px', color: '#0E7490', fontWeight: 800 }}>+{otHrs.toFixed(1)} hrs</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{ backgroundColor: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                            1.5x Rate
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           )}
 
-          {/* H. LEAVE REPORT VIEW */}
+          {/* I. LEAVE REPORT VIEW */}
           {selectedReportType === 'leave' && (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
@@ -1127,35 +1735,46 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredLeaveRequests.map(l => (
-                    <tr key={l.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px 14px' }}>
-                        <div style={{ fontWeight: 700, color: '#0f172a' }}>{l.employeeName}</div>
-                        <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{l.employeeId} • {l.department}</div>
-                      </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0f172a' }}>{l.leaveType}</td>
-                      <td style={{ padding: '10px 14px', color: '#475569' }}>{formatDateDisplay(l.startDate)}</td>
-                      <td style={{ padding: '10px 14px', color: '#475569' }}>{formatDateDisplay(l.endDate)}</td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700 }}>{l.daysCount} days</td>
-                      <td style={{ padding: '10px 14px', color: '#64748b' }}>{l.reason}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <span style={{ 
-                          backgroundColor: l.status === 'Approved' ? '#dcfce7' : l.status === 'Pending' ? '#fef3c7' : '#fee2e2', 
-                          color: l.status === 'Approved' ? '#15803d' : l.status === 'Pending' ? '#b45309' : '#b91c1c', 
-                          padding: '3px 8px', 
-                          borderRadius: '6px', 
-                          fontSize: '0.75rem', 
-                          fontWeight: 700 
-                        }}>
-                          {l.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  filteredLeaveRequests.map(l => {
+                    const days = l.daysCount || (() => {
+                      if (l.startDate && l.endDate) {
+                        const s = new Date(l.startDate).getTime();
+                        const e = new Date(l.endDate).getTime();
+                        return Math.max(1, Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1);
+                      }
+                      return 1;
+                    })();
+
+                    return (
+                      <tr key={l.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{l.employeeName}</div>
+                          <div style={{ fontSize: '0.74rem', color: '#64748b' }}>{l.employeeId} • {l.department}</div>
+                        </td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0f172a' }}>{l.leaveType}</td>
+                        <td style={{ padding: '10px 14px', color: '#475569' }}>{formatDateDisplay(l.startDate)}</td>
+                        <td style={{ padding: '10px 14px', color: '#475569' }}>{formatDateDisplay(l.endDate)}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700 }}>{days} {days === 1 ? 'day' : 'days'}</td>
+                        <td style={{ padding: '10px 14px', color: '#64748b' }}>{l.reason || 'Personal Leave'}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{ 
+                            backgroundColor: l.status === 'Approved' ? '#dcfce7' : l.status === 'Pending' ? '#fef3c7' : '#fee2e2', 
+                            color: l.status === 'Approved' ? '#15803d' : l.status === 'Pending' ? '#b45309' : '#b91c1c', 
+                            padding: '3px 8px', 
+                            borderRadius: '6px', 
+                            fontSize: '0.75rem', 
+                            fontWeight: 700 
+                          }}>
+                            {l.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
-            )}
+          )}
           </div>
         )}
 

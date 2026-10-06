@@ -19,8 +19,12 @@ const getLocalTimestampString = (d = new Date()) => {
 
 const formatAttendanceTime = (ts: string) => {
   if (!ts) return '--:--';
-  if (ts.includes(' ') || ts.includes('T')) {
-    const parts = ts.split(/[\sT]/);
+  const trimmed = ts.trim();
+  if (/^\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)$/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.includes(' ') || trimmed.includes('T')) {
+    const parts = trimmed.split(/[\sT]/);
     const timePart = parts[1]?.substring(0, 8);
     if (timePart) {
       const [hStr, mStr, sStr] = timePart.split(':');
@@ -34,6 +38,28 @@ const formatAttendanceTime = (ts: string) => {
     }
   }
   return ts;
+};
+
+const normalizeToFullTimestamp = (timeOrTimestamp: string, dateStr: string): string => {
+  if (!timeOrTimestamp) return `${dateStr} 00:00:00`;
+  const raw = String(timeOrTimestamp).trim();
+  if (raw.includes('-') && (raw.includes(' ') || raw.includes('T'))) {
+    return raw.replace('T', ' ').slice(0, 19);
+  }
+  const upper = raw.toUpperCase();
+  const isPM = upper.includes('PM');
+  const isAM = upper.includes('AM');
+  const clean = upper.replace(/AM|PM/g, '').trim();
+  const parts = clean.split(':');
+  let h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  const s = parseInt(parts[2], 10) || 0;
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  const hh = String(h).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return `${dateStr} ${hh}:${mm}:${ss}`;
 };
 
 export const FaceAttendance: React.FC = () => {
@@ -470,29 +496,122 @@ export const FaceAttendance: React.FC = () => {
 
   const isEmployee = currentUser.role === 'Employee' || currentUser.role === 'Assignee';
 
+  const currentUserEmp = useMemo(() => {
+    return employees.find(e => 
+      (currentUser.employeeId && (e.employeeId === currentUser.employeeId || e.id === currentUser.employeeId)) ||
+      (currentUser.id && (e.id === currentUser.id || e.employeeId === currentUser.id)) ||
+      (currentUser.email && e.email?.toLowerCase() === currentUser.email?.toLowerCase())
+    );
+  }, [employees, currentUser]);
+
+  const validUserEmpIds = useMemo(() => {
+    return new Set(
+      [currentUser.employeeId, currentUser.id, currentUserEmp?.employeeId, currentUserEmp?.id]
+        .filter(Boolean)
+        .map(s => String(s).trim().toLowerCase())
+    );
+  }, [currentUser, currentUserEmp]);
+
+  const validUserNames = useMemo(() => {
+    const list = [currentUser.name];
+    if (currentUserEmp) {
+      list.push(`${currentUserEmp.firstName} ${currentUserEmp.lastName}`.trim());
+      list.push(currentUserEmp.firstName);
+    }
+    return list.filter(Boolean).map(s => String(s).trim().toLowerCase());
+  }, [currentUser, currentUserEmp]);
+
   // Strict Scoping: Employee role strictly sees only their own punch & face scan activity
   const isLogForCurrentUser = (log: any): boolean => {
-    const userEmpId = (currentUser.employeeId || currentUser.id || '').trim().toLowerCase();
-    const userName = (currentUser.name || '').trim().toLowerCase();
     const logEmpId = (log.employeeId || '').trim().toLowerCase();
     const logEmpName = (log.employeeName || '').trim().toLowerCase();
 
     // Direct Employee ID match
-    if (userEmpId && logEmpId && userEmpId === logEmpId) return true;
+    if (logEmpId && validUserEmpIds.has(logEmpId)) return true;
 
     // Direct Name match
-    if (userName && logEmpName) {
-      if (logEmpName === userName) return true;
-      if (logEmpName.includes(userName) || userName.includes(logEmpName)) return true;
+    if (logEmpName && validUserNames.some(name => logEmpName === name || logEmpName.includes(name) || name.includes(logEmpName))) {
+      return true;
     }
 
     return false;
   };
 
-  const allTodayLogs = faceLogs.filter(log => log.timestamp.startsWith(todayStr));
-  const todayLogs = isEmployee 
-    ? allTodayLogs.filter(isLogForCurrentUser)
-    : allTodayLogs;
+  // Construct today's activity logs combining faceLogs and authoritative attendanceRecords
+  const todayLogs = useMemo(() => {
+    // 1. Logs already in faceLogs for today
+    const rawTodayFaceLogs = faceLogs.filter(log => log.timestamp && String(log.timestamp).startsWith(todayStr));
+
+    // 2. Also incorporate authoritative attendanceRecords for today (persisted in DB so check in & check out records NEVER disappear on refresh)
+    const isTodayRecord = (a: any) => {
+      const d = a.date ? String(a.date).slice(0, 10) : '';
+      const sd = a.shiftDate ? String(a.shiftDate).slice(0, 10) : '';
+      return d === todayStr || sd === todayStr;
+    };
+    const todayAtts = attendanceRecords.filter(isTodayRecord);
+
+    const synthesized: typeof faceLogs = [];
+    todayAtts.forEach(att => {
+      const emp = employees.find(e => e.employeeId === att.employeeId || e.id === att.employeeId);
+      const empName = att.employeeName || (emp ? `${emp.firstName} ${emp.lastName}`.trim() : 'Employee');
+      const avatar = emp?.avatar || '';
+
+      const attEmpIds = new Set([att.employeeId, emp?.employeeId, emp?.id].filter(Boolean).map(s => String(s).toLowerCase()));
+      const matchesThisAtt = (logEmpId?: string, logEmpName?: string) => {
+        if (logEmpId && attEmpIds.has(logEmpId.toLowerCase())) return true;
+        if (logEmpName && empName && (logEmpName.toLowerCase() === empName.toLowerCase() || logEmpName.toLowerCase().includes(empName.toLowerCase()))) return true;
+        return false;
+      };
+
+      // Check-In record
+      if (att.checkIn && String(att.checkIn).trim() !== '' && att.checkIn !== '--:--') {
+        const hasCheckInLog = rawTodayFaceLogs.some(l => 
+          matchesThisAtt(l.employeeId, l.employeeName) && 
+          l.type === 'Check-In'
+        );
+        if (!hasCheckInLog) {
+          const fullTs = normalizeToFullTimestamp(att.checkIn, todayStr);
+          synthesized.push({
+            id: `att-in-${att.id || att.employeeId}`,
+            employeeId: att.employeeId,
+            employeeName: empName,
+            timestamp: fullTs,
+            type: 'Check-In',
+            status: 'Success',
+            confidenceScore: att.faceVerified ? 99 : 100,
+            photoUrl: avatar
+          });
+        }
+      }
+
+      // Check-Out record
+      if (att.checkOut && String(att.checkOut).trim() !== '' && att.checkOut !== '--:--') {
+        const hasCheckOutLog = rawTodayFaceLogs.some(l => 
+          matchesThisAtt(l.employeeId, l.employeeName) && 
+          l.type === 'Check-Out'
+        );
+        if (!hasCheckOutLog) {
+          const fullTs = normalizeToFullTimestamp(att.checkOut, todayStr);
+          synthesized.push({
+            id: `att-out-${att.id || att.employeeId}`,
+            employeeId: att.employeeId,
+            employeeName: empName,
+            timestamp: fullTs,
+            type: 'Check-Out',
+            status: 'Success',
+            confidenceScore: 100,
+            photoUrl: avatar
+          });
+        }
+      }
+    });
+
+    const combined = [...rawTodayFaceLogs, ...synthesized].sort((a, b) => 
+      String(b.timestamp).localeCompare(String(a.timestamp))
+    );
+
+    return isEmployee ? combined.filter(isLogForCurrentUser) : combined;
+  }, [faceLogs, attendanceRecords, todayStr, employees, isEmployee, currentUser, validUserEmpIds, validUserNames]);
 
   if (isCEO) {
     return (

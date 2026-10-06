@@ -30,7 +30,21 @@ interface OvertimeReviewItem {
 export const ReviewOvertimeView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   const { addNotification } = useHRMS();
 
-  const [selectedDateStr, setSelectedDateStr] = useState<string>('08 Sep 2026');
+  const formatOvertimeDisplayDate = (d: Date): string => {
+    return formatDateDDMMYYYY(d);
+  };
+
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
+  const selectedDateStr = formatOvertimeDisplayDate(currentDate);
+
+  const handlePrevDay = () => {
+    setCurrentDate(prev => new Date(prev.getTime() - 86400000));
+  };
+
+  const handleNextDay = () => {
+    setCurrentDate(prev => new Date(prev.getTime() + 86400000));
+  };
+
   const [globalMultiplier, setGlobalMultiplier] = useState<string>('Fixed Amount');
   const [globalAmount, setGlobalAmount] = useState<number>(0);
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
@@ -251,7 +265,8 @@ export const ReviewOvertimeView: React.FC<{ onBack?: () => void }> = ({ onBack }
           >
             <button
               type="button"
-              onClick={() => setSelectedDateStr('07 Sep 2026')}
+              onClick={handlePrevDay}
+              title="Previous Day"
               style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center' }}
             >
               <ChevronLeft size={16} />
@@ -261,7 +276,8 @@ export const ReviewOvertimeView: React.FC<{ onBack?: () => void }> = ({ onBack }
             </span>
             <button
               type="button"
-              onClick={() => setSelectedDateStr('08 Sep 2026')}
+              onClick={handleNextDay}
+              title="Next Day"
               style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center' }}
             >
               <ChevronRight size={16} />

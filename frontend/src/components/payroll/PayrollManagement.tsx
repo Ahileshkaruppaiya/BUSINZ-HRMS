@@ -5,9 +5,11 @@ import { PayrollRecord, Employee } from '../../types/hrms';
 import { SalaryComponentConfig } from '../../types/settings';
 import { toNum, formatCurrency } from '../../utils/numbers';
 import { downloadElementAsPDF, downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
+import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { ExportDropdown } from '../common/ExportDropdown';
 import { StandardFloatingActionBar } from '../common/StandardFloatingActionBar';
 import { StandardTablePagination } from '../common/StandardTablePagination';
+import { getMonthInfo } from '../../utils/monthUtils';
 import {
   AuthorizedSignatory,
   CompanyFooter,
@@ -26,6 +28,7 @@ export const PayrollManagement: React.FC = () => {
     payrollRecords, 
     processPayrollBatch, 
     updatePayrollRecordAdvanceDeduction,
+    markPayrollRecordsPaid,
     employees, 
     currentUser, 
     hasPermission, 
@@ -73,12 +76,40 @@ export const PayrollManagement: React.FC = () => {
   const isPrivilegedViewer = isAccountsUser || isApprovalAuthority;
   const canProcessPayroll = isApprovalAuthority;
 
-  // If user is a Finance employee or admin, show all employees' payroll details
-  const visibleRecords = isEmployeeRole
-    ? payrollRecords.filter(p => p.employeeId === (currentUser.employeeId || 'EMP-001'))
-    : payrollRecords;
+  // CEO / Managing Director (CEO login uses 'Super Admin')
+  const isCEOUser =
+    currentUser.role === 'CEO' ||
+    currentUser.role === 'Super Admin' ||
+    (currentUser as any).designation?.toLowerCase().includes('ceo') ||
+    (currentUser as any).designation?.toLowerCase().includes('managing director');
+
+  // Full payroll register: Accounts (they hand over salaries) + CEO. Everyone else (incl. HR) sees only own payslip.
+  const canViewAllPayroll = isAccountsUser || isCEOUser;
+  // Only Accounts marks salaries as paid (amount handed over)
+  const canMarkPaid = isAccountsUser;
+
+  const myEmployeeId = (currentUser.employeeId || '').trim().toLowerCase();
+  const visibleRecords = canViewAllPayroll
+    ? payrollRecords
+    : payrollRecords.filter(p => {
+        const recEmpId = (p.employeeId || '').trim().toLowerCase();
+        if (myEmployeeId) return recEmpId === myEmployeeId;
+        return (p.employeeName || '').trim().toLowerCase() === (currentUser.name || '').trim().toLowerCase();
+      });
+
+  const unpaidVisibleIds = visibleRecords.filter(p => p.status !== 'Paid').map(p => p.id);
+  const selectedUnpaidIds = selectedPayslipIds.filter(id => unpaidVisibleIds.includes(id));
+
+  const handleMarkPaid = (ids: string[]) => {
+    if (!canMarkPaid || ids.length === 0) return;
+    markPayrollRecordsPaid(ids);
+    setSelectedPayslipIds(prev => prev.filter(id => !ids.includes(id)));
+  };
 
   const totalEntries = visibleRecords.length;
+  const currentMonthInfo = useMemo(() => getMonthInfo(), []);
+  const activeMonthName = visibleRecords[0]?.month || currentMonthInfo.monthLong;
+  const activeYear = visibleRecords[0]?.year || currentMonthInfo.year;
   const startIndex = (currentPage - 1) * pageSize;
   const paginatedRecords = visibleRecords.slice(startIndex, startIndex + pageSize);
 
@@ -356,44 +387,79 @@ export const PayrollManagement: React.FC = () => {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 className="page-title">
-            {isEmployeeRole ? 'My Payroll & Payslips' : 'Payroll Management'}
+            {!canViewAllPayroll ? 'My Payroll & Payslips' : 'Payroll Management'}
           </h1>
           <p className="page-subtitle">
-            {isEmployeeRole 
+            {!canViewAllPayroll 
               ? 'View official monthly salary slips, itemized allowances, statutory deductions, and download signed records.'
-              : 'Automated calculation engine based on configured payroll components, statutory compliance, and batch disbursement.'}
+              : isAccountsUser && !isApprovalAuthority
+                ? 'All employee payroll details for salary disbursement. Hand over the net salary and mark each record as paid.'
+                : 'Automated calculation engine based on configured payroll components, statutory compliance, and batch disbursement.'}
           </p>
         </div>
 
-        <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {canProcessPayroll ? (
+        <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {canProcessPayroll && (
             <button className="btn btn-primary" onClick={processPayrollBatch}>
-              <CreditCard size={16} /> Process August Payroll Batch
+              <CreditCard size={16} /> Process {currentMonthInfo.monthLong} Payroll Batch
             </button>
-          ) : isAccountsUser ? (
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 14px',
-              borderRadius: '10px',
-              backgroundColor: '#ECFEFF',
-              border: '1px solid #A5F3FC',
-              color: '#0E7490',
-              fontSize: '0.82rem',
-              fontWeight: 700
-            }}>
-              <ShieldCheck size={16} /> Accounts Disbursal Access • Approved by HR / CEO
-            </div>
-          ) : null}
+          )}
+          {canMarkPaid && (
+            <>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 14px',
+                borderRadius: '10px',
+                backgroundColor: '#ECFEFF',
+                border: '1px solid #A5F3FC',
+                color: '#0E7490',
+                fontSize: '0.82rem',
+                fontWeight: 700
+              }}>
+                <ShieldCheck size={16} /> Accounts Payout Access • All Employees
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={unpaidVisibleIds.length === 0}
+                onClick={() => handleMarkPaid(unpaidVisibleIds)}
+                style={{ backgroundColor: '#0E7490', borderColor: '#0E7490', opacity: unpaidVisibleIds.length === 0 ? 0.6 : 1 }}
+                title="Mark all unpaid salary records as paid"
+              >
+                <IndianRupee size={16} /> Mark All as Paid ({unpaidVisibleIds.length})
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {canProcessPayroll && !canViewAllPayroll && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          backgroundColor: '#ECFEFF',
+          border: '1px solid #A5F3FC',
+          color: '#155E75',
+          fontSize: '0.85rem',
+          fontWeight: 500
+        }}>
+          <ShieldAlert size={18} color="#0E7490" />
+          <span>
+            You can process the payroll batch. The full employee payroll register is visible only to the Accounts team and CEO — below are your own payslips.
+          </span>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="kpi-grid">
         <div className="kpi-card">
           <div className="kpi-card-header">
-            <span>Total August Net Payout</span>
+            <span>{canViewAllPayroll ? `Total ${activeMonthName} Net Payout` : 'My Total Net Pay'}</span>
             <div className="kpi-icon-wrapper emerald"><IndianRupee size={20} /></div>
           </div>
           <div className="kpi-card-body">
@@ -403,11 +469,11 @@ export const PayrollManagement: React.FC = () => {
 
         <div className="kpi-card">
           <div className="kpi-card-header">
-            <span>Total Staff Included</span>
+            <span>{canViewAllPayroll ? 'Total Staff Included' : 'Payslips Available'}</span>
             <div className="kpi-icon-wrapper blue"><CreditCard size={20} /></div>
           </div>
           <div className="kpi-card-body">
-            <div className="kpi-value">{totalStaffIncluded}</div>
+            <div className="kpi-value">{canViewAllPayroll ? totalStaffIncluded : visibleRecords.length}</div>
           </div>
         </div>
 
@@ -427,17 +493,19 @@ export const PayrollManagement: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h3 className="card-title" style={{ margin: 0 }}>
-              {isEmployeeRole ? 'My Payslips History' : 'August 2026 Processed Salary Batch'}
+              {!canViewAllPayroll ? 'My Payslips History' : `${activeMonthName} ${activeYear} Processed Salary Batch`}
             </h3>
             <span style={{ fontSize: '0.8rem', color: '#64748B' }}>
               {salaryFormulaText}
             </span>
           </div>
-          <ExportDropdown 
-            onExportExcel={handleExportExcel}
-            onExportPDF={handleExportPDF}
-            onExportCSV={handleExportCSV}
-          />
+          {canViewAllPayroll && (
+            <ExportDropdown 
+              onExportExcel={handleExportExcel}
+              onExportPDF={handleExportPDF}
+              onExportCSV={handleExportCSV}
+            />
+          )}
         </div>
 
         <div className="table-responsive">
@@ -573,24 +641,48 @@ export const PayrollManagement: React.FC = () => {
                     </td>
                     <td>{p.presentDays} / {p.workingDays} days</td>
                     <td><strong style={{ color: 'var(--accent-emerald)', fontSize: '0.95rem' }}>{formatCurrency(p.netSalary)}</strong></td>
-                    <td><span className="status-pill approved">{p.status}</span></td>
+                    <td><span className={`status-pill ${p.status === 'Paid' ? 'approved' : 'cyan'}`}>{p.status}</span></td>
                     <td>
-                      <button 
-                        className="btn btn-secondary btn-sm" 
-                        onClick={() => setSelectedPayslip(p)}
-                        title="View Payslip"
-                        aria-label="View Payslip"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '6px 10px',
-                          borderRadius: '8px',
-                          color: '#0E7490'
-                        }}
-                      >
-                        <FileText size={16} />
-                      </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <button 
+                          className="btn btn-secondary btn-sm" 
+                          onClick={() => setSelectedPayslip(p)}
+                          title="View Payslip"
+                          aria-label="View Payslip"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            color: '#0E7490'
+                          }}
+                        >
+                          <FileText size={16} />
+                        </button>
+                        {canMarkPaid && p.status !== 'Paid' && (
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleMarkPaid([p.id])}
+                            title={`Hand over ${formatCurrency(p.netSalary)} to ${p.employeeName} and mark as paid`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              whiteSpace: 'nowrap',
+                              backgroundColor: '#0E7490',
+                              borderColor: '#0E7490'
+                            }}
+                          >
+                            <IndianRupee size={13} /> Mark Paid
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -618,6 +710,16 @@ export const PayrollManagement: React.FC = () => {
           const rec = visibleRecords.find(p => p.id === selectedPayslipIds[0]);
           if (rec) setSelectedPayslip(rec);
         } : undefined}
+        customActions={canMarkPaid && selectedUnpaidIds.length > 0 ? (
+          <button
+            className="action-bar-btn"
+            onClick={() => handleMarkPaid(selectedUnpaidIds)}
+            title="Mark selected salaries as paid"
+          >
+            <IndianRupee size={14} />
+            <span>Mark Paid ({selectedUnpaidIds.length})</span>
+          </button>
+        ) : undefined}
       />
 
       {/* Modal: Edit Advance / Loan Recovery ("Others") */}
@@ -737,7 +839,7 @@ export const PayrollManagement: React.FC = () => {
                       { label: 'Employee ID', value: selectedPayslip.employeeId },
                       { label: 'Department', value: selectedPayslip.department },
                       { label: 'Designation', value: selectedPayslip.designation },
-                      { label: 'Date of Joining', value: emp?.joiningDate || emp?.dateOfJoining },
+                      { label: 'Date of Joining', value: formatDateDDMMYYYY(emp?.joiningDate || emp?.dateOfJoining) || '—' },
                       { label: 'Bank Account', value: emp?.bankDetails?.accountNumber },
                       { label: 'PAN', value: emp?.salaryDetails?.panNumber },
                       { label: 'UAN', value: emp?.salaryDetails?.uanNumber },

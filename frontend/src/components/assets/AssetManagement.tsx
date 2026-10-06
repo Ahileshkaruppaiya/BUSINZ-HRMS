@@ -796,7 +796,7 @@ export const AssetManagement: React.FC = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label">Asset Tag / ID *</label>
+                    <label className="form-label">Asset Tag / ID <span style={{ color: '#EF4444' }}>*</span></label>
                     <input 
                       className="form-control" 
                       value={addForm.assetTag} 
@@ -807,7 +807,7 @@ export const AssetManagement: React.FC = () => {
                   </div>
 
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label">Category *</label>
+                    <label className="form-label">Category <span style={{ color: '#EF4444' }}>*</span></label>
                     <select 
                       className="form-control" 
                       value={addForm.category} 
@@ -823,7 +823,7 @@ export const AssetManagement: React.FC = () => {
                 </div>
 
                 <div className="form-group" style={{ marginBottom: '12px' }}>
-                  <label className="form-label">Hardware Device Name *</label>
+                  <label className="form-label">Hardware Device Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     className="form-control" 
                     value={addForm.name} 
@@ -944,7 +944,7 @@ export const AssetManagement: React.FC = () => {
             <form onSubmit={handleAssignSubmit}>
               <div className="modal-body" style={{ padding: '10px 0' }}>
                 <div className="form-group">
-                  <label className="form-label">Select Employee Assignee *</label>
+                  <label className="form-label">Select Employee Assignee <span style={{ color: '#EF4444' }}>*</span></label>
                   <select 
                     className="form-control" 
                     value={assignEmployeeId}

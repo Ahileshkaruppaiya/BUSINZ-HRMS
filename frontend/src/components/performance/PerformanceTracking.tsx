@@ -6,12 +6,14 @@ import {
 } from './performanceEngine';
 import { PerformanceDashboardView } from './PerformanceDashboardView';
 import { EmployeeDetailPerformanceView } from './EmployeeDetailPerformanceView';
+import { getMonthInfo } from '../../utils/monthUtils';
 
 export const PerformanceTracking: React.FC = () => {
   const { currentUser, employees, attendanceRecords, enhancedTasks, orgStructure } = useHRMS();
 
   // Filters State
-  const [selectedMonth, setSelectedMonth] = useState<string>('September 2026');
+  const currentMonthInfo = useMemo(() => getMonthInfo(), []);
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => currentMonthInfo.fullLabel);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('ALL');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('ALL');
 

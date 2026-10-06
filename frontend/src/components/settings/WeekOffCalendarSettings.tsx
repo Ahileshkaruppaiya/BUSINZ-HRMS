@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { HolidayItem } from '../../types/hrms';
 import { DAYS_OF_WEEK, isDateWeeklyOffBySchedule, parseWeeklyOffDays } from '../../utils/weeklyScheduleUtils';
+import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -823,7 +824,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
                   canManageHolidays
                     ? isHoliday
                       ? `Click to Edit/Remove Holiday: ${day.label}`
-                      : `Click to Manage / Declare Holiday for ${day.dateStr}`
+                      : `Click to Manage / Declare Holiday for ${formatDateDDMMYYYY(day.dateStr)}`
                     : `${day.label}`
                 }
                 style={{
@@ -1216,7 +1217,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.76rem', color: '#64748B', marginTop: '3px' }}>
-                        <span>{weekday}, {h.date}</span>
+                        <span>{weekday}, {formatDateDDMMYYYY(h.date)}</span>
                         <span>•</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                           <MapPin size={12} color="#0E7490" />
@@ -1711,7 +1712,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
               <div>
                 <div style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 600 }}>MANAGE DATE</div>
                 <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>
-                  {dayActionModalData.dayName}, {dayActionModalData.dateStr}
+                  {dayActionModalData.dayName}, {formatDateDDMMYYYY(dayActionModalData.dateStr)}
                 </h4>
               </div>
               <button
@@ -1884,7 +1885,7 @@ export const WeekOffCalendarSettings: React.FC = () => {
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem' }}>
               <div>
                 <span style={{ color: '#64748B', fontSize: '0.76rem', fontWeight: 600 }}>DATE:</span>
-                <div style={{ fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>{viewOnlyHoliday.date} ({viewOnlyHoliday.daysCount || 1} Day)</div>
+                <div style={{ fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>{formatDateDDMMYYYY(viewOnlyHoliday.date)} ({viewOnlyHoliday.daysCount || 1} Day)</div>
               </div>
 
               <div>

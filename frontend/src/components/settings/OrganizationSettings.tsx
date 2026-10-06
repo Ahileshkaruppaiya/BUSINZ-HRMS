@@ -795,7 +795,7 @@ export const OrganizationSettings: React.FC = () => {
             {modalType === 'dept' && (
               <form onSubmit={handleSaveDept} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Department Name *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Department Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -806,7 +806,7 @@ export const OrganizationSettings: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Department Code *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Department Code <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -837,7 +837,7 @@ export const OrganizationSettings: React.FC = () => {
             {modalType === 'desig' && (
               <form onSubmit={handleSaveDesig} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Designation Title *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Designation Title <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -887,7 +887,7 @@ export const OrganizationSettings: React.FC = () => {
             {modalType === 'branch' && (
               <form onSubmit={handleSaveBranch} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Branch / Location Name *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Branch / Location Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -898,7 +898,7 @@ export const OrganizationSettings: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Branch Code *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Branch Code <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -909,7 +909,7 @@ export const OrganizationSettings: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>City, State *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>City, State <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -930,7 +930,7 @@ export const OrganizationSettings: React.FC = () => {
             {modalType === 'grade' && (
               <form onSubmit={handleSaveGrade} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Grade Code *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Grade Code <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -941,7 +941,7 @@ export const OrganizationSettings: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Grade Title *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Grade Title <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -972,7 +972,7 @@ export const OrganizationSettings: React.FC = () => {
             {modalType === 'type' && (
               <form onSubmit={handleSaveType} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Employment Type Name *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Employment Type Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -983,7 +983,7 @@ export const OrganizationSettings: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Code *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Code <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -1004,7 +1004,7 @@ export const OrganizationSettings: React.FC = () => {
             {modalType === 'cat' && (
               <form onSubmit={handleSaveCat} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Category Name *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Category Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required
@@ -1015,7 +1015,7 @@ export const OrganizationSettings: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Category Code *</label>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Category Code <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="text"
                     required

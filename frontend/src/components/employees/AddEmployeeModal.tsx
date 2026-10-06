@@ -38,7 +38,7 @@ import {
   Check
 } from 'lucide-react';
 import { dispatchCredentialEmail } from '../../services/emailDispatchService';
-import { evaluateFormula, evaluateStatutoryContributions, calculateSalaryBreakdown } from '../../services/policyEngine';
+import { buildPayrollFormulaContext, calculateConfiguredDeductionLines, calculateSalaryBreakdown } from '../../services/policyEngine';
 import { generateNextEmployeeId } from '../../utils/employeeIdUtils';
 import { formatCurrency } from '../../utils/numbers';
 import { CountryCodeDropdown } from '../common/CountryCodeDropdown';
@@ -1193,61 +1193,43 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         )), 0)
       : ctc;
 
-    const customContext: Record<string, number> = {
-      ...(formData.customComponents || {})
-    };
-
-    const res = evaluateStatutoryContributions(
+    const formulaContext = buildPayrollFormulaContext({
       basic,
-      gross,
-      payrollSettingsConfig,
-      formData.salaryScheme === 'WITH_PF',
       da,
-      conv,
+      conveyance: conv,
       hra,
-      0,
-      0,
-      customContext
-    );
-
-    // Custom Deductions configured in Settings (e.g. PT, TDS, Welfare Fund)
-    const configuredDeductions = activeDeductions.map(comp => {
-      let amt = 0;
-      let desc = '';
-      if (comp.calculationMethod === 'FIXED_AMOUNT') {
-        amt = comp.defaultValue || 0;
-        desc = `Fixed ${formatCurrency(amt)}`;
-      } else if (comp.calculationMethod === 'PERCENTAGE') {
-        const base = comp.percentageBase === 'BASIC' ? basic : gross;
-        amt = Math.round((base * (comp.defaultValue || 0)) / 100);
-        desc = `${comp.defaultValue}% of ${comp.percentageBase || 'Gross'}`;
-      } else if (comp.calculationMethod === 'FORMULA' && comp.formula) {
-        amt = Math.round(evaluateFormula(comp.formula, {
-          BASIC: basic,
-          DA: da,
-          CONV: conv,
-          HRA: hra,
-          GROSS: gross,
-          CTC: ctc,
-          ...customContext
-        }));
-        desc = comp.formula;
-      }
-      return {
-        id: comp.id,
-        name: comp.name,
-        code: comp.code,
-        amount: amt,
-        description: desc
-      };
+      gross,
+      ctc,
+      customContext: formData.customComponents || {}
+    });
+    const deductionLines = calculateConfiguredDeductionLines(activeDeductions, formulaContext, {
+      withPf: formData.salaryScheme === 'WITH_PF',
+      esicSalaryLimit: payrollSettingsConfig?.esicPolicy?.grossSalaryLimit || 21000
     });
 
+    const epfDeduction = deductionLines.find(d => d.statutoryKind === 'PF')?.amount || 0;
+    const esiDeduction = deductionLines.find(d => d.statutoryKind === 'ESIC')?.amount || 0;
+    const professionalTax = deductionLines.find(d => d.statutoryKind === 'PT')?.amount || 0;
+    const configuredDeductions = deductionLines
+      .filter(d => !d.statutoryKind)
+      .map(({ statutoryKind, isConfidential, ...deduction }) => deduction);
+
+    const statutoryDeductions = epfDeduction + esiDeduction + professionalTax;
     const customDeductionsSum = configuredDeductions.reduce((sum, d) => sum + d.amount, 0);
-    const totalDeductions = res.totalStatutory + customDeductionsSum;
+    const totalDeductions = statutoryDeductions + customDeductionsSum;
     const netTakeHome = Math.max(0, gross - totalDeductions);
 
     return {
-      ...res,
+      epfDeduction,
+      esiDeduction,
+      professionalTax,
+      totalStatutory: statutoryDeductions,
+      epfRule: deductionLines.find(d => d.statutoryKind === 'PF')?.description || '',
+      esiRule: deductionLines.find(d => d.statutoryKind === 'ESIC')?.description || '',
+      pfActive: deductionLines.some(d => d.statutoryKind === 'PF'),
+      esicActive: deductionLines.some(d => d.statutoryKind === 'ESIC'),
+      ptActive: deductionLines.some(d => d.statutoryKind === 'PT'),
+      isEsicExempt: deductionLines.some(d => d.statutoryKind === 'ESIC' && d.amount === 0),
       gross,
       configuredDeductions,
       totalDeductions,
@@ -1969,7 +1951,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             <div className="form-row" style={{ marginBottom: '18px' }}>
               <div className="form-group">
                 <label className="form-label">
-                  Employee ID <span className="required-star">*</span>
+                  Employee ID <span className="required-star" style={{ color: '#EF4444' }}>*</span>
                 </label>
 
                 <input 
@@ -2285,7 +2267,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Date of Joining *</label>
+                <label className="form-label">Date of Joining <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="date" 
                   className="form-control" 
@@ -2295,7 +2277,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Department *</label>
+                <label className="form-label">Department <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   className="form-control" 
                   value={formData.department} 
@@ -2311,7 +2293,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Designation *</label>
+                <label className="form-label">Designation <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   className="form-control" 
                   value={isCustomDesignation ? 'CUSTOM_INPUT' : formData.designation} 
@@ -2360,7 +2342,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 )}
               </div>
               <div className="form-group">
-                <label className="form-label">Employment Type *</label>
+                <label className="form-label">Employment Type <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   className="form-control" 
                   value={formData.employmentType} 
@@ -2375,7 +2357,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Reporting Manager *</label>
+                <label className="form-label">Reporting Manager <span style={{ color: '#EF4444' }}>*</span></label>
                 {isCEO ? (
                   <input 
                     type="text" 
@@ -2396,7 +2378,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 )}
               </div>
               <div className="form-group">
-                <label className="form-label">Work Location / Branch *</label>
+                <label className="form-label">Work Location / Branch <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   className="form-control" 
                   value={formData.workLocation} 
@@ -2427,7 +2409,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Address Line 1 *</label>
+                  <label className="form-label">Address Line 1 <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     className="form-control" 
                     value={formData.currentLine1} 
@@ -2450,7 +2432,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               </div>
               <div className="form-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                 <div className="form-group">
-                  <label className="form-label">City *</label>
+                  <label className="form-label">City <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     type="text"
                     autoComplete="off"
@@ -2463,7 +2445,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">State *</label>
+                  <label className="form-label">State <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     type="text"
                     autoComplete="off"
@@ -2476,7 +2458,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Country *</label>
+                  <label className="form-label">Country <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     type="text"
                     autoComplete="off"
@@ -2489,7 +2471,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Pincode *</label>
+                  <label className="form-label">Pincode <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     type="text"
                     inputMode="numeric"
@@ -2525,7 +2507,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Permanent Line 1 *</label>
+                      <label className="form-label">Permanent Line 1 <span style={{ color: '#EF4444' }}>*</span></label>
                       <input 
                         className="form-control" 
                         value={formData.permanentLine1} 
@@ -2548,7 +2530,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   </div>
                   <div className="form-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                     <div className="form-group">
-                      <label className="form-label">City *</label>
+                      <label className="form-label">City <span style={{ color: '#EF4444' }}>*</span></label>
                       <input 
                         type="text"
                         name="hrms_add_perm_city"
@@ -2562,7 +2544,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">State *</label>
+                      <label className="form-label">State <span style={{ color: '#EF4444' }}>*</span></label>
                       <input 
                         type="text"
                         name="hrms_add_perm_state"
@@ -2576,7 +2558,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Country *</label>
+                      <label className="form-label">Country <span style={{ color: '#EF4444' }}>*</span></label>
                       <input 
                         type="text"
                         name="hrms_add_perm_country"
@@ -2590,7 +2572,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Pincode *</label>
+                      <label className="form-label">Pincode <span style={{ color: '#EF4444' }}>*</span></label>
                       <input 
                         type="text"
                         name="hrms_add_perm_pincode"
@@ -2616,7 +2598,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               </div>
               <div className="form-row" style={{ marginBottom: '14px' }}>
                 <div className="form-group">
-                  <label className="form-label">Emergency Contact Name *</label>
+                  <label className="form-label">Emergency Contact Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     type="text"
                     name="hrms_add_emergency_contact_person"
@@ -2633,7 +2615,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Relationship *</label>
+                  <label className="form-label">Relationship <span style={{ color: '#EF4444' }}>*</span></label>
                   <select 
                     className="form-control" 
                     value={formData.emergencyRelationship} 
@@ -2651,7 +2633,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Emergency Contact Number *</label>
+                  <label className="form-label">Emergency Contact Number <span style={{ color: '#EF4444' }}>*</span></label>
                   <div style={{ display: 'flex', alignItems: 'stretch', position: 'relative' }}>
                     <CountryCodeDropdown
                       value={emergencyCountryCode}
@@ -2744,7 +2726,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Highest Qualification *</label>
+                <label className="form-label">Highest Qualification <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   className="form-control" 
                   value={formData.qualification} 
@@ -2759,7 +2741,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               </div>
               <div className="form-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label className="form-label" style={{ margin: 0 }}>Degree / Course Name *</label>
+                  <label className="form-label" style={{ margin: 0 }}>Degree / Course Name <span style={{ color: '#EF4444' }}>*</span></label>
                   {isCustomDegree ? (
                     <button
                       type="button"
@@ -2843,7 +2825,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">University / Institution *</label>
+                <label className="form-label">University / Institution <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="text"
                   name="hrms_add_university"
@@ -2860,7 +2842,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Year of Passing *</label>
+                <label className="form-label">Year of Passing <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   className="form-control" 
                   value={formData.yearOfPassing} 
@@ -2962,7 +2944,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               <>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Total Experience (Years) *</label>
+                    <label className="form-label">Total Experience (Years) <span style={{ color: '#EF4444' }}>*</span></label>
                     <input 
                       type="text"
                       inputMode="decimal"
@@ -2978,7 +2960,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Previous Company Name *</label>
+                    <label className="form-label">Previous Company Name <span style={{ color: '#EF4444' }}>*</span></label>
                     <input 
                       type="text"
                       name="hrms_add_prev_company"
@@ -2995,7 +2977,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Previous Designation *</label>
+                    <label className="form-label">Previous Designation <span style={{ color: '#EF4444' }}>*</span></label>
                     <input 
                       type="text"
                       name="hrms_add_prev_designation"
@@ -3092,7 +3074,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
               <div className="form-group">
-                <label className="form-label">Salary Scheme (PF / ESIC Policy) *</label>
+                <label className="form-label">Salary Scheme (PF / ESIC Policy) <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   className="form-control" 
                   value={formData.salaryScheme} 
@@ -3112,7 +3094,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               </div>
 
               <div className="form-group">
-                <label className="form-label">Total Monthly CTC (₹) *</label>
+                <label className="form-label">Total Monthly CTC (₹) <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="number" 
                   className="form-control" 
@@ -3152,7 +3134,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   return (
                     <div className="form-group" key={comp.id}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <label className="form-label" style={{ margin: 0 }}>{comp.name} (₹) {comp.code === 'BASIC' ? '*' : ''}</label>
+                        <label className="form-label" style={{ margin: 0 }}>{comp.name} (₹) {comp.code === 'BASIC' ? <span style={{ color: '#EF4444' }}> *</span> : ''}</label>
                         <span style={{ fontSize: '0.72rem', color: '#0E7490', fontWeight: 800 }}>{badgeText}</span>
                       </div>
                       <input 
@@ -3184,7 +3166,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   You can configure custom components with formulas and percentages under <strong>Settings → Payroll Settings</strong>. For now, enter standard Basic Salary below:
                 </p>
                 <div className="form-group" style={{ maxWidth: '280px', margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 700 }}>Basic Salary (₹) *</label>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Basic Salary (₹) <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     type="number"
                     className="form-control"
@@ -3221,26 +3203,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   gap: '10px',
                   marginBottom: '10px'
                 }}>
-                  {/* PF Wage Base Card */}
-                  {statutoryCalc.pfActive !== false && (
-                    <div style={{ backgroundColor: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontSize: '0.68rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
-                          PF WAGE BASE
-                        </div>
-                        <span style={{ fontSize: '0.68rem', color: '#0E7490', fontWeight: 700 }}>
-                          {statutoryCalc.pfBaseLabel ? 'Formula' : 'Wage Base'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
-                        {formatCurrency(statutoryCalc.pfBaseAmount)}
-                      </div>
-                      <div style={{ fontSize: '0.65rem', color: '#64748B', marginTop: '2px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={statutoryCalc.pfBaseLabel}>
-                        Formula: {statutoryCalc.pfBaseLabel || 'Basic'}
-                      </div>
-                    </div>
-                  )}
-
                   {/* EPF Contribution Card */}
                   {statutoryCalc.pfActive !== false && (
                     <div style={{ backgroundColor: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
@@ -3349,7 +3311,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Bank Name *</label>
+                <label className="form-label">Bank Name <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="text"
                   name="hrms_add_bank_name"
@@ -3363,7 +3325,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Account Number *</label>
+                <label className="form-label">Account Number <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="text"
                   inputMode="numeric"
@@ -3382,7 +3344,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
               <div className="form-group">
-                <label className="form-label">IFSC Code *</label>
+                <label className="form-label">IFSC Code <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="text"
                   maxLength={11}
@@ -3398,7 +3360,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">PAN Card Number *</label>
+                <label className="form-label">PAN Card Number <span style={{ color: '#EF4444' }}>*</span></label>
                 <input 
                   type="text"
                   maxLength={10}
@@ -3447,7 +3409,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Primary Attendance Verification Method *</label>
+                <label className="form-label">Primary Attendance Verification Method <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   className="form-control" 
                   value={formData.attendanceMethod} 

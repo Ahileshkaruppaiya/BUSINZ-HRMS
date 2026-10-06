@@ -4,6 +4,7 @@ import { OfferLetterTemplate } from '../../types/offerLetter';
 import { INITIAL_OFFER_LETTER_TEMPLATES } from '../../data/offerLetterTemplates';
 import { useHRMS } from '../../context/HRMSContext';
 import { downloadElementAsPDF } from '../../utils/exportUtils';
+import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { formatCurrency, toNum } from '../../utils/numbers';
 import {
   AuthorizedSignatory,
@@ -124,11 +125,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
   const replacePlaceholders = (text: string) => {
     if (!currentEmployee) return text;
 
-    const todayStr = new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
+    const todayStr = formatDateDDMMYYYY(new Date());
 
     const values: { [key: string]: string } = {
       '{{candidate_name}}': `${currentEmployee.firstName} ${currentEmployee.lastName}`,
@@ -136,7 +133,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
       '{{employee_id}}': currentEmployee.employeeId,
       '{{designation}}': currentEmployee.designation,
       '{{department}}': currentEmployee.department,
-      '{{joining_date}}': currentEmployee.joiningDate || todayStr,
+      '{{joining_date}}': (currentEmployee.joiningDate ? formatDateDDMMYYYY(currentEmployee.joiningDate) : '') || todayStr,
       '{{employment_type}}': currentEmployee.employmentType || 'Full-Time',
       '{{reporting_manager}}': currentEmployee.reportingManagerName || 'Executive Leadership',
       '{{basic_salary}}': formatCurrency(basicPay),
@@ -430,7 +427,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
                 subtitle="Official Appointment"
                 rightMeta={[
                   { label: 'Ref No', value: `OL-${new Date().getFullYear()}-${currentEmployee?.employeeId || 'EMP'}` },
-                  { label: 'Date', value: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) }
+                  { label: 'Date', value: formatDateDDMMYYYY(new Date()) }
                 ]}
               />
 
@@ -440,7 +437,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
                   { label: 'Employee ID', value: currentEmployee?.employeeId },
                   { label: 'Department', value: currentEmployee?.department },
                   { label: 'Designation', value: currentEmployee?.designation },
-                  { label: 'Joining Date', value: currentEmployee?.joiningDate || currentEmployee?.dateOfJoining },
+                  { label: 'Joining Date', value: formatDateDDMMYYYY(currentEmployee?.joiningDate || currentEmployee?.dateOfJoining) || '—' },
                   { label: 'Employment Type', value: currentEmployee?.employmentType },
                   { label: 'Work Location', value: currentEmployee?.workLocation || currentEmployee?.bankDetails?.branch },
                   { label: 'Email', value: currentEmployee?.email },
@@ -571,7 +568,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '6px', display: 'block' }}>
-                      Template Name *
+                      Template Name <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -585,7 +582,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
 
                   <div>
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '6px', display: 'block' }}>
-                      Category / Department *
+                      Category / Department <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <select
                       className="form-control"
@@ -603,7 +600,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
 
                 <div>
                   <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '6px', display: 'block' }}>
-                    Letter Subject Line *
+                    Letter Subject Line <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -617,7 +614,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
 
                 <div>
                   <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '6px', display: 'block' }}>
-                    Template Body Content *
+                    Template Body Content <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <textarea
                     rows={12}

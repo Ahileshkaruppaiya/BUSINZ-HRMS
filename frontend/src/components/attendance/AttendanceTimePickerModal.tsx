@@ -103,12 +103,15 @@ const AttendanceTimePickerModalInner: React.FC<AttendanceTimePickerModalProps> =
     }
   }, [activePickerField]);
 
-  // Format date display: e.g. "08 Sep 2026"
+  // Format date display: e.g. "08 Oct 2026"
   const formattedDate = (() => {
-    if (!date) return '08 Sep 2026';
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    if (!date) {
+      const now = new Date();
+      return `${String(now.getDate()).padStart(2, '0')} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+    }
     if (date.includes('-')) {
       const [y, m, d] = date.split('-');
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const monthIdx = parseInt(m, 10) - 1;
       return `${d} ${monthNames[monthIdx] || m} ${y}`;
     }

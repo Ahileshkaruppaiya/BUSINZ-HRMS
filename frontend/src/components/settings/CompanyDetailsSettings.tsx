@@ -953,7 +953,7 @@ export const CompanyDetailsSettings: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
                 <div>
                   <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>
-                    Company Name (Brand) *
+                    Company Name (Brand) <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -987,7 +987,7 @@ export const CompanyDetailsSettings: React.FC = () => {
 
                 <div>
                   <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0E7490' }}>
-                    Company Code / Short Form (e.g. HDFC, SBI, KVB) *
+                    Company Code / Short Form (e.g. HDFC, SBI, KVB) <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="text"

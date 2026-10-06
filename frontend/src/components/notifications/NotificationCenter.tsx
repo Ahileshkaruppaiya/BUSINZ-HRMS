@@ -103,7 +103,7 @@ export const NotificationCenter: React.FC = () => {
             <form onSubmit={handlePostAnnouncement}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Title *</label>
+                  <label className="form-label">Title <span style={{ color: '#EF4444' }}>*</span></label>
                   <input className="form-control" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Office Holiday Notice" required />
                 </div>
                 <div className="form-group">

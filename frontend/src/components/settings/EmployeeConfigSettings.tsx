@@ -249,7 +249,7 @@ export const EmployeeConfigSettings: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
               <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>ID Prefix *</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>ID Prefix <span style={{ color: '#EF4444' }}>*</span></label>
                 <input
                   type="text"
                   required
@@ -444,7 +444,7 @@ export const EmployeeConfigSettings: React.FC = () => {
                     <td style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#64748B' }}>{f.category}</td>
                     <td style={{ padding: '14px 16px', fontSize: '0.85rem' }}>
                       {f.required ? (
-                        <span style={{ color: '#DC2626', fontWeight: 700 }}>Required *</span>
+                        <span style={{ color: '#EF4444', fontWeight: 700 }}>Required *</span>
                       ) : (
                         <span style={{ color: '#94A3B8' }}>Optional</span>
                       )}
@@ -567,7 +567,7 @@ export const EmployeeConfigSettings: React.FC = () => {
             </div>
             <form onSubmit={handleSaveCustomField} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Field Display Label *</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Field Display Label <span style={{ color: '#EF4444' }}>*</span></label>
                 <input
                   type="text"
                   required
@@ -648,7 +648,7 @@ export const EmployeeConfigSettings: React.FC = () => {
             </div>
             <form onSubmit={handleSaveDocType} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Document Name *</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Document Name <span style={{ color: '#EF4444' }}>*</span></label>
                 <input
                   type="text"
                   required
@@ -659,7 +659,7 @@ export const EmployeeConfigSettings: React.FC = () => {
                 />
               </div>
               <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Document Code *</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Document Code <span style={{ color: '#EF4444' }}>*</span></label>
                 <input
                   type="text"
                   required

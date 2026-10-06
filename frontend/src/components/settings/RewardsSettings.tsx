@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { RewardPolicy, RewardType, RewardValueType, EmployeeRewardRecord } from '../../types/settings';
 import { formatCurrency } from '../../utils/numbers';
+import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { 
   Gift, 
   Award, 
@@ -568,7 +569,7 @@ export const RewardsSettings: React.FC = () => {
                         {formatCurrency(rec.amount)}
                       </strong>
                     </td>
-                    <td>{rec.grantedDate}</td>
+                    <td>{formatDateDDMMYYYY(rec.grantedDate)}</td>
                     <td>{rec.grantedBy}</td>
                     <td>
                       {rec.addToPayroll ? (

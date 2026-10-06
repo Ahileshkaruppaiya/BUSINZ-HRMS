@@ -815,7 +815,7 @@ export const RecruitmentPipeline: React.FC = () => {
             <form onSubmit={handleCreateJob}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Job Title *</label>
+                  <label className="form-label">Job Title <span style={{ color: '#EF4444' }}>*</span></label>
                   <input className="form-control" value={jobForm.title} onChange={e => setJobForm({ ...jobForm, title: e.target.value })} required />
                 </div>
                 <div className="form-row">
@@ -894,7 +894,7 @@ export const RecruitmentPipeline: React.FC = () => {
                 </div>
 
                 <div className="form-group" style={{ marginBottom: '12px' }}>
-                  <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Candidate Full Name *</label>
+                  <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Candidate Full Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     className="form-control" 
                     placeholder="e.g. Anandha Kumar" 
@@ -911,7 +911,7 @@ export const RecruitmentPipeline: React.FC = () => {
 
                 <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
                   <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Email Address *</label>
+                    <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Email Address <span style={{ color: '#EF4444' }}>*</span></label>
                     <input 
                       className="form-control" 
                       type="email" 
@@ -940,7 +940,7 @@ export const RecruitmentPipeline: React.FC = () => {
                 </div>
 
                 <div className="form-group" style={{ marginBottom: '12px' }}>
-                  <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Target Job Opening *</label>
+                  <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Target Job Opening <span style={{ color: '#EF4444' }}>*</span></label>
                   <select 
                     className="form-control" 
                     value={referralForm.jobId} 

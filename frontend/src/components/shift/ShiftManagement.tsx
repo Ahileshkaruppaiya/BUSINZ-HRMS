@@ -244,7 +244,7 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
   const handleRequestSwap = (e: React.FormEvent) => {
     e.preventDefault();
     requestShiftChange({
-      employeeId: userEmpId || currentUser.employeeId || 'EMP-008',
+      employeeId: currentUser.employeeId || currentEmp?.employeeId || currentEmp?.id || userEmpId || 'EMP-008',
       employeeName: currentUser.name || (currentEmp ? `${currentEmp.firstName} ${currentEmp.lastName}`.trim() : 'Staff Member'),
       currentShift: swapForm.currentShift || myAssignedShiftName,
       requestedShift: swapForm.requestedShift,
@@ -665,7 +665,7 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
             <form onSubmit={handleAddShift}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Shift Title / Name *</label>
+                  <label className="form-label">Shift Title / Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     className="form-control" 
                     value={shiftForm.shiftName} 
@@ -727,7 +727,7 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
             <form onSubmit={handleSaveEditShift}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Shift Title / Name *</label>
+                  <label className="form-label">Shift Title / Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input 
                     className="form-control" 
                     value={editShiftForm.shiftName} 
@@ -794,17 +794,17 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
                   <input className="form-control" value={swapForm.currentShift} readOnly style={{ backgroundColor: '#F8FAFC' }} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Target Shift Requested *</label>
+                  <label className="form-label">Target Shift Requested <span style={{ color: '#EF4444' }}>*</span></label>
                   <select className="form-control" value={swapForm.requestedShift} onChange={e => setSwapForm({ ...swapForm, requestedShift: e.target.value })} required>
                     {shifts.map(s => <option key={s.id} value={s.shiftName}>{s.shiftName} ({s.startTime} - {s.endTime})</option>)}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Effective Date *</label>
+                  <label className="form-label">Effective Date <span style={{ color: '#EF4444' }}>*</span></label>
                   <input className="form-control" type="date" value={swapForm.requestedDate} onChange={e => setSwapForm({ ...swapForm, requestedDate: e.target.value })} required />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Reason for Request *</label>
+                  <label className="form-label">Reason for Request <span style={{ color: '#EF4444' }}>*</span></label>
                   <textarea className="form-control" rows={3} value={swapForm.reason} onChange={e => setSwapForm({ ...swapForm, reason: e.target.value })} placeholder="State the reason for this shift change (e.g. personal commute, family necessity, exam)..." required />
                 </div>
               </div>

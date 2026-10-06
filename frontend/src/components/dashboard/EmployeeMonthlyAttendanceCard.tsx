@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
+import { getMonthInfo, isDateInMonth, countLeaveDaysInMonth } from '../../utils/monthUtils';
 
 interface EmployeeMonthlyAttendanceCardProps {
   onOpenAttendance?: () => void;
@@ -13,13 +14,15 @@ export const EmployeeMonthlyAttendanceCard: React.FC<EmployeeMonthlyAttendanceCa
   const { currentUser, attendanceRecords, leaveRequests } = useHRMS();
   const [hoveredSegment, setHoveredSegment] = useState<string | null>(null);
 
-  // Compute monthly stats for current employee for September 2026
+  // Compute monthly stats for current employee for the real current month (month-to-date)
   const stats = useMemo(() => {
+    const month = getMonthInfo();
     const userEmpId = (currentUser.employeeId || currentUser.id || '').trim().toLowerCase();
     const userName = (currentUser.name || '').trim().toLowerCase();
 
-    // Filter attendance records for current user
+    // Filter attendance records for current user in the current month
     const userRecords = attendanceRecords.filter(a => {
+      if (!isDateInMonth(a.shiftDate || a.date, month)) return false;
       const recId = (a.employeeId || '').trim().toLowerCase();
       const recName = (a.employeeName || '').trim().toLowerCase();
       if (userEmpId && recId && userEmpId === recId) return true;
@@ -36,24 +39,23 @@ export const EmployeeMonthlyAttendanceCard: React.FC<EmployeeMonthlyAttendanceCa
       return matchesUser && l.status === 'Approved';
     });
 
-    // September 2026 working days calculation
-    // Total calendar days: 30 | Sundays (Weekly Off): 4 | Total Working Days: 26
-    const totalWorkingDays = 26;
+    // Month-to-date working days (Sundays = weekly off)
+    const totalWorkingDays = month.elapsedWorkingDays;
     
-    // Dynamic calibrated count based on user records + realistic month-to-date schedule
     const userPresentCount = userRecords.filter(r => r.status === 'Present' || r.status === 'Work From Home').length;
     const userLateCount = userRecords.filter(r => r.status === 'Late' || r.status === 'Half Day').length;
-    const userLeaveCount = userLeaves.reduce((acc, l) => acc + (l.daysCount || 1), 0);
+    const userLeaveCount = userLeaves.reduce((acc, l) => acc + countLeaveDaysInMonth(l.startDate, l.endDate, month), 0);
 
     const realPresent = userPresentCount;
     const realLeave = userLeaveCount;
     const realLate = userLateCount;
     const realAbsent = Math.max(0, totalWorkingDays - realPresent - realLeave - realLate);
 
-    const attendanceRate = totalWorkingDays > 0 ? Math.round(((realPresent + (realLate * 0.5)) / totalWorkingDays) * 100) : 0;
+    const attendanceRate = totalWorkingDays > 0 ? Math.min(100, Math.round(((realPresent + (realLate * 0.5)) / totalWorkingDays) * 100)) : 0;
 
     return {
-      monthName: 'September 2026',
+      monthName: month.fullLabel,
+      monthLabel: month.labelUpper,
       totalWorkingDays,
       present: realPresent,
       leave: realLeave,
@@ -97,8 +99,8 @@ export const EmployeeMonthlyAttendanceCard: React.FC<EmployeeMonthlyAttendanceCa
         <h3 className="dashboard-widget-title">
           MY MONTHLY ATTENDANCE
         </h3>
-        <span className="dashboard-widget-badge">
-          SEP 2026
+        <span className="dashboard-widget-badge" title={stats.monthName}>
+          {stats.monthLabel}
         </span>
       </div>
 

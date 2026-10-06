@@ -347,6 +347,8 @@ export interface ShiftRequest {
   approvedBy?: string;
   rejectedBy?: string;
   rejectionReason?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface TaskItem {
@@ -425,6 +427,9 @@ export interface Expense {
   receiptUrl?: string;
   status: 'Pending Manager' | 'Pending Finance' | 'Approved' | 'Rejected' | 'Reimbursed';
   approvedBy?: string;
+  /** Accounts employee who handed over the amount (after HR/CEO approval) */
+  reimbursedBy?: string;
+  reimbursedDate?: string;
 }
 
 export interface NotificationItem {
@@ -436,6 +441,16 @@ export interface NotificationItem {
   category: 'Leave' | 'Shift' | 'Task' | 'Payroll' | 'Recruitment' | 'Announcement' | 'Attendance';
   read: boolean;
   link?: string;
+  /** Cross-user delivery: audience groups ('ALL' | 'CEO' | 'HR' | 'ACCOUNTS') */
+  targetRoles?: string[];
+  /** Cross-user delivery: specific employee IDs / user IDs */
+  targetEmployeeIds?: string[];
+  /** Sender identity key (excluded from own bell) */
+  senderKey?: string;
+  /** ISO time the shared notification was created */
+  createdAt?: string;
+  /** User keys who have read this shared notification */
+  readBy?: string[];
 }
 
 export interface PayrollRecord {

@@ -1,4 +1,5 @@
 import { Employee, AttendanceRecord, TaskItemEnhanced } from '../../types/hrms';
+import { getMonthInfo } from '../../utils/monthUtils';
 
 // ========================================================
 // 1. CONFIGURABLE PERFORMANCE SCORING WEIGHTS
@@ -470,8 +471,9 @@ export const calculateCompanyPerformance = (
     { month: 'Dec', fullName: 'December 2026', key: '2026-12' },
   ];
 
+  const currentMonthKey = getMonthInfo().monthKey;
   const monthlyTrend = monthConfigs.map(m => {
-    if (m.key === '2026-09') {
+    if (m.key === currentMonthKey) {
       return {
         month: m.month,
         fullName: m.fullName,

@@ -11,6 +11,7 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatDateDDMMYYYY } from './dateUtils';
 
 export interface ExportColumn {
   key: string;
@@ -150,11 +151,7 @@ export function downloadPDF(
   // 3. Metadata Subtitle
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139); // Slate 500
-  const dateStr = new Date().toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  });
+  const dateStr = formatDateDDMMYYYY(new Date());
   doc.text(`Generated: ${dateStr} • Total Records: ${data.length}`, 40, 70);
 
   // 4. Build Structured Table

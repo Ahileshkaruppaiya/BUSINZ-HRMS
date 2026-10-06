@@ -350,7 +350,7 @@ export const MOMIntegrationView: React.FC<MOMIntegrationViewProps> = ({ onOpenTa
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Responsible Person (Lead Reviewer) *</label>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Responsible Person (Lead Reviewer) <span style={{ color: '#EF4444' }}>*</span></label>
                 <select 
                   value={responsiblePersonId}
                   onChange={e => {

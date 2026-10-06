@@ -3,6 +3,7 @@ import {
   ComputedEmployeePerformance, 
   CompanyPerformanceSummary 
 } from './performanceEngine';
+import { getMonthInfo } from '../../utils/monthUtils';
 import { PerformancePillarBarChart } from './charts/PerformancePillarBarChart';
 import { PerformanceSpeedometerGauge } from './charts/PerformanceSpeedometerGauge';
 import { DEPARTMENT_TEMPLATES } from '../../data/performanceInitialData';
@@ -52,6 +53,22 @@ export const PerformanceDashboardView: React.FC<Props> = ({
 }) => {
   // Sub-tabs: 1. Employee KPI, 2. Attendance, 3. KRI / KRA, 4. Team Leaderboard
   const [activeSubTab, setActiveSubTab] = useState<'kpi' | 'attendance' | 'kri' | 'leaderboard'>('kpi');
+
+  const monthOptions = useMemo(() => {
+    const cur = getMonthInfo();
+    const opts: { label: string; value: string }[] = [];
+    opts.push({ label: `This Month (${cur.label})`, value: cur.fullLabel });
+
+    for (let i = 1; i <= 3; i++) {
+      const prevDate = new Date(cur.year, cur.monthIndex - i, 1);
+      const prevInfo = getMonthInfo(prevDate);
+      opts.push({ label: prevInfo.fullLabel, value: prevInfo.fullLabel });
+    }
+
+    const quarter = Math.floor(cur.monthIndex / 3) + 1;
+    opts.push({ label: `Q${quarter} ${cur.year}`, value: `Q${quarter} ${cur.year}` });
+    return opts;
+  }, []);
   
   // Table search & pagination state (strict [5, 10] per design system)
   const [tableSearch, setTableSearch] = useState('');
@@ -187,10 +204,9 @@ export const PerformanceDashboardView: React.FC<Props> = ({
                 boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
               }}
             >
-              <option value="September 2026">This Month (Sep 2026)</option>
-              <option value="August 2026">August 2026</option>
-              <option value="July 2026">July 2026</option>
-              <option value="Q3 2026">Q3 2026</option>
+              {monthOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
             <ChevronDown
               size={14}

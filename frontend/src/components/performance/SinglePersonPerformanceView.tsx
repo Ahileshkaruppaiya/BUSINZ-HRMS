@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getMonthInfo } from '../../utils/monthUtils';
 import {
   EmployeePerformanceDetail,
   PipRecord,
@@ -137,7 +138,7 @@ export const SinglePersonPerformanceView: React.FC<SinglePersonPerformanceViewPr
           weightage: t.weightage,
           score: Math.min(100, realAchievement),
           unit: t.unit,
-          period: 'September 2026'
+          period: currentMonthInfo.fullLabel
         };
       });
 
@@ -183,9 +184,10 @@ export const SinglePersonPerformanceView: React.FC<SinglePersonPerformanceViewPr
     return [];
   };
 
-  // Generate 30-Day Attendance Grid for September 2026
+  // Generate Dynamic Attendance Grid for Current Month
+  const currentMonthInfo = useMemo(() => getMonthInfo(), []);
   const getAttendanceDays = () => {
-    const totalDays = 30;
+    const totalDays = currentMonthInfo.daysInMonth;
     const lateCount = currentEmp?.attendanceImpact?.lateDays || 0;
     const leaveCount = currentEmp?.attendanceImpact?.leaveDays || 1;
     const absentCount = currentEmp?.attendanceImpact?.absentDays || 0;
@@ -631,7 +633,7 @@ export const SinglePersonPerformanceView: React.FC<SinglePersonPerformanceViewPr
                           <span style={{ fontSize: '11px', color: '#64748B' }}>Weight: {kpi.weightage}% • Score: {kpi.score} pts</span>
                         </td>
                         <td style={{ padding: '14px 14px', fontSize: '12px', color: '#64748B', whiteSpace: 'nowrap' }}>
-                          {kpi.period || 'September 2026'}
+                          {kpi.period || currentMonthInfo.fullLabel}
                         </td>
                         <td style={{ padding: '14px 14px', fontSize: '13px', fontWeight: 600, color: '#475569', textAlign: 'right' }}>
                           {kpi.target}
@@ -1022,7 +1024,7 @@ export const SinglePersonPerformanceView: React.FC<SinglePersonPerformanceViewPr
               <div>
                 <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Calendar size={18} color="#0E7490" />
-                  Monthly Attendance & Punctuality Calendar (September 2026)
+                  Monthly Attendance & Punctuality Calendar ({currentMonthInfo.fullLabel})
                 </h3>
                 <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748B' }}>
                   Biometric punch log, shift adherence, and punctuality scoring

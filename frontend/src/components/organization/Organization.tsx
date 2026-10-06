@@ -1291,7 +1291,7 @@ export const Organization: React.FC = () => {
             <form onSubmit={handleAddDept}>
               <div className="modal-body" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#334155', marginBottom: '6px', display: 'block' }}>Department Name *</label>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#334155', marginBottom: '6px', display: 'block' }}>Department Name <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     className="form-control"
                     value={deptForm.name}
@@ -1368,7 +1368,7 @@ export const Organization: React.FC = () => {
             <form onSubmit={handleAddDesignation}>
               <div className="modal-body" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#334155', marginBottom: '6px', display: 'block' }}>Job Title / Designation *</label>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', color: '#334155', marginBottom: '6px', display: 'block' }}>Job Title / Designation <span style={{ color: '#EF4444' }}>*</span></label>
                   <input
                     className="form-control"
                     value={desigForm.title}
@@ -1580,7 +1580,7 @@ export const Organization: React.FC = () => {
                 {/* Branch Name */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', marginBottom: '6px', display: 'block' }}>
-                    Branch Name *
+                    Branch Name <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -1604,7 +1604,7 @@ export const Organization: React.FC = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '14px' }}>
                   <div>
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', marginBottom: '6px', display: 'block' }}>
-                      Branch Code *
+                      Branch Code <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -1619,7 +1619,7 @@ export const Organization: React.FC = () => {
 
                   <div>
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', marginBottom: '6px', display: 'block' }}>
-                      City / Location Address *
+                      City / Location Address <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -1636,7 +1636,7 @@ export const Organization: React.FC = () => {
                 {/* Department Selection */}
                 <div>
                   <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', marginBottom: '6px', display: 'block' }}>
-                    Assign Operational Departments ({branchForm.selectedDepartments.length} Selected) *
+                    Assign Operational Departments ({branchForm.selectedDepartments.length} Selected) <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '180px', overflowY: 'auto', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#f8fafc' }}>

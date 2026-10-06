@@ -7,6 +7,7 @@ import { TodayAttendanceCard } from './TodayAttendanceCard';
 import { EmployeeMonthlyAttendanceCard } from './EmployeeMonthlyAttendanceCard';
 import { Employee, LeaveRequest, TaskItem, HolidayItem } from '../../types/hrms';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { getMonthInfo, getLocalDateStr, isDateInMonth, countLeaveDaysInMonth } from '../../utils/monthUtils';
 import { isAttendanceExemptEmployee } from '../../data/hrmsInitialData';
 import { 
   Users, 
@@ -58,16 +59,18 @@ export const Dashboard: React.FC = () => {
 
   // Current user's individual attendance metrics for Employee Dashboard
   const employeeAttendanceStats = useMemo(() => {
+    const month = getMonthInfo();
+    const todayStr = getLocalDateStr();
     const userEmpId = (currentUser.employeeId || currentUser.id || '').trim().toLowerCase();
     const userName = (currentUser.name || '').trim().toLowerCase();
 
-    // Match today's attendance record
+    // Match today's attendance record (local today date or shiftDate)
     const todayRecord = attendanceRecords.find(a => {
       const recId = (a.employeeId || '').trim().toLowerCase();
       const recName = (a.employeeName || '').trim().toLowerCase();
       const matchesUser = (userEmpId && recId && userEmpId === recId) ||
         (userName && recName && (recName === userName || recName.includes(userName) || userName.includes(recName)));
-      return matchesUser && (a.date === '2026-09-16' || a.date === new Date().toISOString().split('T')[0]);
+      return matchesUser && (a.date === todayStr || a.shiftDate === todayStr);
     });
 
     // Match today's biometric face scan
@@ -76,7 +79,7 @@ export const Dashboard: React.FC = () => {
       const fName = (f.employeeName || '').trim().toLowerCase();
       const matchesUser = (userEmpId && fId && userEmpId === fId) ||
         (userName && fName && (fName === userName || fName.includes(userName) || userName.includes(fName)));
-      return matchesUser && f.timestamp.startsWith('2026-09-16');
+      return matchesUser && f.timestamp.startsWith(todayStr);
     });
 
     // Match leaves
@@ -88,7 +91,9 @@ export const Dashboard: React.FC = () => {
       return matchesUser && l.status === 'Approved';
     });
 
+    // Current month attendance records only
     const userRecords = attendanceRecords.filter(a => {
+      if (!isDateInMonth(a.shiftDate || a.date, month)) return false;
       const recId = (a.employeeId || '').trim().toLowerCase();
       const recName = (a.employeeName || '').trim().toLowerCase();
       if (userEmpId && recId && userEmpId === recId) return true;
@@ -96,15 +101,15 @@ export const Dashboard: React.FC = () => {
       return false;
     });
 
-    const totalWorkingDays = 26;
+    const totalWorkingDays = month.elapsedWorkingDays;
     const userPresentCount = userRecords.filter(r => r.status === 'Present' || r.status === 'Work From Home').length;
     const userLateCount = userRecords.filter(r => r.status === 'Late' || r.status === 'Half Day').length;
-    const userLeaveCount = userLeaves.reduce((acc, l) => acc + (l.daysCount || 1), 0);
+    const userLeaveCount = userLeaves.reduce((acc, l) => acc + countLeaveDaysInMonth(l.startDate, l.endDate, month), 0);
 
     const realPresent = userPresentCount;
     const realLeave = userLeaveCount;
     const realLate = userLateCount;
-    const attendanceRate = totalWorkingDays > 0 ? Math.round(((realPresent + (realLate * 0.5)) / totalWorkingDays) * 100) : 0;
+    const attendanceRate = totalWorkingDays > 0 ? Math.min(100, Math.round(((realPresent + (realLate * 0.5)) / totalWorkingDays) * 100)) : 0;
 
     // Current shift
     const userShift = (shifts || []).find(s => 
@@ -127,25 +132,25 @@ export const Dashboard: React.FC = () => {
       adjLeave: realLeave,
       remainingLeaves: Math.max(0, 14 - realLeave),
       shiftName: cleanShiftName,
-      shiftTimes: userShift ? `${userShift.startTime} - ${userShift.endTime}` : '--:--'
+      shiftTimes: userShift ? `${userShift.startTime} - ${userShift.endTime}` : '--:--',
+      monthLabel: month.label
     };
   }, [currentUser, attendanceRecords, leaveRequests, faceLogs, shifts]);
 
-  // Dynamically calculate upcoming holidays from holiday policies
-
+  // Dynamically calculate upcoming holidays from holiday policies (from today onwards)
   const upcomingHolidaysList = useMemo(() => {
     if (!holidayPolicies || holidayPolicies.length === 0) return [];
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateStr();
 
-    // Priority 1: Holidays from today onwards (or current active month onwards, e.g. 2026-09-01)
+    // Priority 1: Holidays from today onwards
     const futureHolidays = [...holidayPolicies]
-      .filter(h => h.date >= todayStr || h.date >= '2026-09-01')
+      .filter(h => h.date >= todayStr)
       .sort((a, b) => a.date.localeCompare(b.date));
 
     if (futureHolidays.length > 0) return futureHolidays.slice(0, 5);
 
-    // Fallback: All holidays sorted chronologically
-    return [...holidayPolicies].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+    // Fallback: Latest upcoming/future holidays
+    return [...holidayPolicies].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   }, [holidayPolicies]);
 
   const formatHolidayInfo = (holiday: HolidayItem) => {
@@ -664,7 +669,7 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="kpi-caption" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <span className="kpi-trend-badge green" style={{ border: 'none' }}>↗ Consistent</span>
-                  <span>Sep 2026</span>
+                  <span>{employeeAttendanceStats.monthLabel}</span>
                 </div>
               </div>
             </div>

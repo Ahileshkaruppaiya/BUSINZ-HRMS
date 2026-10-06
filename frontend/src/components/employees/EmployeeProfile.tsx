@@ -35,7 +35,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { OfferLetterModal } from './OfferLetterModal';
-import { evaluateFormula, evaluateStatutoryContributions, calculateSalaryBreakdown } from '../../services/policyEngine';
+import { buildPayrollFormulaContext, calculateConfiguredDeductionLines, calculateSalaryBreakdown } from '../../services/policyEngine';
 import { formatCurrency } from '../../utils/numbers';
 import { rbacService } from '../../services/rbacService';
 import { getInitialRBACState } from '../../services/rbacService';
@@ -614,60 +614,43 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
         )), 0)
       : ctc;
 
-    const customContext: Record<string, number> = {
-      ...(formData.customComponents || {})
-    };
-
-    const res = evaluateStatutoryContributions(
+    const formulaContext = buildPayrollFormulaContext({
       basic,
-      gross,
-      payrollSettingsConfig,
-      formData.salaryScheme === 'WITH_PF',
       da,
-      conv,
+      conveyance: conv,
       hra,
-      0,
-      0,
-      customContext
-    );
-
-    const configuredDeductions = activeDeductions.map(comp => {
-      let amt = 0;
-      let desc = '';
-      if (comp.calculationMethod === 'FIXED_AMOUNT') {
-        amt = comp.defaultValue || 0;
-        desc = `Fixed ${formatCurrency(amt)}`;
-      } else if (comp.calculationMethod === 'PERCENTAGE') {
-        const base = comp.percentageBase === 'BASIC' ? basic : gross;
-        amt = Math.round((base * (comp.defaultValue || 0)) / 100);
-        desc = `${comp.defaultValue}% of ${comp.percentageBase || 'Gross'}`;
-      } else if (comp.calculationMethod === 'FORMULA' && comp.formula) {
-        amt = Math.round(evaluateFormula(comp.formula, {
-          BASIC: basic,
-          DA: da,
-          CONV: conv,
-          HRA: hra,
-          GROSS: gross,
-          CTC: ctc,
-          ...customContext
-        }));
-        desc = comp.formula;
-      }
-      return {
-        id: comp.id,
-        name: comp.name,
-        code: comp.code,
-        amount: amt,
-        description: desc
-      };
+      gross,
+      ctc,
+      customContext: formData.customComponents || {}
+    });
+    const deductionLines = calculateConfiguredDeductionLines(activeDeductions, formulaContext, {
+      withPf: formData.salaryScheme === 'WITH_PF',
+      esicSalaryLimit: payrollSettingsConfig?.esicPolicy?.grossSalaryLimit || 21000
     });
 
+    const epfDeduction = deductionLines.find(d => d.statutoryKind === 'PF')?.amount || 0;
+    const esiDeduction = deductionLines.find(d => d.statutoryKind === 'ESIC')?.amount || 0;
+    const professionalTax = deductionLines.find(d => d.statutoryKind === 'PT')?.amount || 0;
+    const configuredDeductions = deductionLines
+      .filter(d => !d.statutoryKind)
+      .map(({ statutoryKind, isConfidential, ...deduction }) => deduction);
+
+    const statutoryDeductions = epfDeduction + esiDeduction + professionalTax;
     const customDeductionsSum = configuredDeductions.reduce((sum, d) => sum + d.amount, 0);
-    const totalDeductions = res.totalStatutory + customDeductionsSum;
+    const totalDeductions = statutoryDeductions + customDeductionsSum;
     const netTakeHome = Math.max(0, gross - totalDeductions);
 
     return {
-      ...res,
+      epfDeduction,
+      esiDeduction,
+      professionalTax,
+      totalStatutory: statutoryDeductions,
+      epfRule: deductionLines.find(d => d.statutoryKind === 'PF')?.description || '',
+      esiRule: deductionLines.find(d => d.statutoryKind === 'ESIC')?.description || '',
+      pfActive: deductionLines.some(d => d.statutoryKind === 'PF'),
+      esicActive: deductionLines.some(d => d.statutoryKind === 'ESIC'),
+      ptActive: deductionLines.some(d => d.statutoryKind === 'PT'),
+      isEsicExempt: deductionLines.some(d => d.statutoryKind === 'ESIC' && d.amount === 0),
       gross,
       configuredDeductions,
       totalDeductions,
@@ -2762,26 +2745,6 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
               gap: '12px',
               marginBottom: '12px'
             }}>
-              {/* PF Wage Base Card */}
-              {statutoryCalc.pfActive !== false && (
-                <div style={{ backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.68rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
-                      PF WAGE BASE
-                    </span>
-                    <span style={{ fontSize: '0.68rem', color: '#0E7490', fontWeight: 700 }}>
-                      {statutoryCalc.pfBaseLabel ? 'Formula' : 'Wage Base'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
-                    {formatCurrency(statutoryCalc.pfBaseAmount)}
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: '#64748B', marginTop: '2px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={statutoryCalc.pfBaseLabel}>
-                    Formula: {statutoryCalc.pfBaseLabel || 'Basic'}
-                  </div>
-                </div>
-              )}
-
               {/* EPF Contribution */}
               {statutoryCalc.pfActive !== false && (
                 <div style={{ backgroundColor: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
@@ -3263,7 +3226,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                     {doc.type}
                   </span>
                   <span>•</span>
-                  <span>Uploaded: {doc.uploadDate || '2026-09-04'}</span>
+                  <span>Uploaded: {formatDateDDMMYYYY(doc.uploadDate || '2026-09-04')}</span>
                 </div>
               </div>
             </div>
@@ -3631,7 +3594,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
               {/* Role: [Select Role] */}
               <div>
-                <label style={labelStyle}>Role *</label>
+                <label style={labelStyle}>Role <span style={{ color: '#EF4444' }}>*</span></label>
                 {isEditing ? (
                   <select 
                     value={formData.role} 
@@ -3671,7 +3634,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
 
               {/* Department: [Select Department] */}
               <div>
-                <label style={labelStyle}>Department *</label>
+                <label style={labelStyle}>Department <span style={{ color: '#EF4444' }}>*</span></label>
                 {isEditing ? (
                   <select 
                     value={formData.department} 
@@ -3689,7 +3652,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
 
               {/* Reporting Manager: [Select Manager] */}
               <div>
-                <label style={labelStyle}>Reporting Manager *</label>
+                <label style={labelStyle}>Reporting Manager <span style={{ color: '#EF4444' }}>*</span></label>
                 {isEditing ? (
                   <select 
                     value={formData.reportingManagerId} 

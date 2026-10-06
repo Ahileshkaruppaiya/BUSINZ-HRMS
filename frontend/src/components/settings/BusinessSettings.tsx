@@ -29,6 +29,7 @@ import {
   Edit3,
   Building
 } from 'lucide-react';
+import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
 export const BusinessSettings: React.FC = () => {
   const { 
@@ -904,7 +905,7 @@ export const BusinessSettings: React.FC = () => {
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
                         <div>
-                          <label style={modalLabelStyle}>Policy Document Title *</label>
+                          <label style={modalLabelStyle}>Policy Document Title <span style={{ color: '#EF4444' }}>*</span></label>
                           <input
                             type="text"
                             placeholder="e.g. Remote Work & Anti-Harassment Guidelines"
@@ -914,7 +915,7 @@ export const BusinessSettings: React.FC = () => {
                           />
                         </div>
                         <div>
-                          <label style={modalLabelStyle}>Version *</label>
+                          <label style={modalLabelStyle}>Version <span style={{ color: '#EF4444' }}>*</span></label>
                           <input
                             type="text"
                             placeholder="v1.0"
@@ -982,7 +983,7 @@ export const BusinessSettings: React.FC = () => {
                           type="button"
                           onClick={() => {
                             if (!docFormData.title) return;
-                            const today = new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                            const today = formatDateDDMMYYYY(new Date());
                             if (editingDocId) {
                               updatePolicyDocument(editingDocId, {
                                 title: docFormData.title,

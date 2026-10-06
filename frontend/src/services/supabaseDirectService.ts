@@ -742,9 +742,16 @@ export const supabaseDirect = {
   // --------------------------------------------------------------------------
   async getLeaveRequests(): Promise<any[]> {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/leave_requests?select=*,employee:employees(employee_id,first_name,last_name,department_id)&order=created_at.desc`, {
+      // Using explicit foreign key constraint to avoid PostgREST HTTP 300 (PGRST201)
+      let res = await fetch(`${SUPABASE_URL}/rest/v1/leave_requests?select=*,employee:employees!leave_requests_employee_id_fkey(employee_id,first_name,last_name,department_id)&order=created_at.desc`, {
         headers: getHeaders(),
       });
+      if (!res.ok) {
+        // Fallback without embed to guarantee records are retrieved
+        res = await fetch(`${SUPABASE_URL}/rest/v1/leave_requests?select=*&order=created_at.desc`, {
+          headers: getHeaders(),
+        });
+      }
       if (!res.ok) return [];
       return await res.json();
     } catch (err) {
@@ -840,9 +847,14 @@ export const supabaseDirect = {
   // --------------------------------------------------------------------------
   async getAttendanceRecords(): Promise<any[]> {
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance_records?select=*,employee:employees(employee_id,first_name,last_name)&order=date.desc`, {
+      let res = await fetch(`${SUPABASE_URL}/rest/v1/attendance_records?select=*,employee:employees(employee_id,first_name,last_name)&order=date.desc`, {
         headers: getHeaders(),
       });
+      if (!res.ok) {
+        res = await fetch(`${SUPABASE_URL}/rest/v1/attendance_records?select=*&order=date.desc`, {
+          headers: getHeaders(),
+        });
+      }
       if (!res.ok) return [];
       return await res.json();
     } catch (err) {

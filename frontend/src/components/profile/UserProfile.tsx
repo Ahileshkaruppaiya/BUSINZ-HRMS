@@ -480,7 +480,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                 {/* Row 1: Full Name * | Official Corporate Email * */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div>
-                    <label style={labelStyle}>Full Name *</label>
+                    <label style={labelStyle}>Full Name <span style={{ color: '#EF4444' }}>*</span></label>
                     <input
                       type="text"
                       required
@@ -503,7 +503,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ onLogout, isEmbedded =
                     </span>
                   </div>
                   <div>
-                    <label style={labelStyle}>Official Corporate Email *</label>
+                    <label style={labelStyle}>Official Corporate Email <span style={{ color: '#EF4444' }}>*</span></label>
                     <input
                       type="email"
                       required

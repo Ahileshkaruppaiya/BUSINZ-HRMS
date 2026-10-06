@@ -682,7 +682,7 @@ export const AttendanceSettings: React.FC = () => {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                       <div>
-                        <label style={modalLabelStyle}>Policy Name *</label>
+                        <label style={modalLabelStyle}>Policy Name <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="text"
                           required
@@ -693,7 +693,7 @@ export const AttendanceSettings: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label style={modalLabelStyle}>Capture Mode *</label>
+                        <label style={modalLabelStyle}>Capture Mode <span style={{ color: '#EF4444' }}>*</span></label>
                         <select
                           value={attendancePolicyForm.mode}
                           onChange={e => setAttendancePolicyForm({ ...attendancePolicyForm, mode: e.target.value as any })}
@@ -801,7 +801,7 @@ export const AttendanceSettings: React.FC = () => {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                       <div>
-                        <label style={modalLabelStyle}>Shift Name *</label>
+                        <label style={modalLabelStyle}>Shift Name <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="text"
                           required
@@ -812,7 +812,7 @@ export const AttendanceSettings: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label style={modalLabelStyle}>Start Time *</label>
+                        <label style={modalLabelStyle}>Start Time <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="time"
                           required
@@ -822,7 +822,7 @@ export const AttendanceSettings: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label style={modalLabelStyle}>End Time *</label>
+                        <label style={modalLabelStyle}>End Time <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="time"
                           required
@@ -937,7 +937,7 @@ export const AttendanceSettings: React.FC = () => {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px', marginBottom: '10px' }}>
                       <div>
-                        <label style={modalLabelStyle}>Holiday Name *</label>
+                        <label style={modalLabelStyle}>Holiday Name <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="text"
                           required
@@ -948,7 +948,7 @@ export const AttendanceSettings: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label style={modalLabelStyle}>Date *</label>
+                        <label style={modalLabelStyle}>Date <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="date"
                           required
@@ -1060,7 +1060,7 @@ export const AttendanceSettings: React.FC = () => {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                       <div>
-                        <label style={modalLabelStyle}>Policy Name *</label>
+                        <label style={modalLabelStyle}>Policy Name <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="text"
                           required
@@ -1071,7 +1071,7 @@ export const AttendanceSettings: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label style={modalLabelStyle}>Short Code *</label>
+                        <label style={modalLabelStyle}>Short Code <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="text"
                           required
@@ -1082,7 +1082,7 @@ export const AttendanceSettings: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label style={modalLabelStyle}>Quota (Days/Year) *</label>
+                        <label style={modalLabelStyle}>Quota (Days/Year) <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="number"
                           required
@@ -1187,7 +1187,7 @@ export const AttendanceSettings: React.FC = () => {
                       {editingId ? 'Edit Weekly Schedule' : 'Create Weekly Schedule'}
                     </div>
                     <div style={{ marginBottom: '10px' }}>
-                      <label style={modalLabelStyle}>Schedule Name *</label>
+                      <label style={modalLabelStyle}>Schedule Name <span style={{ color: '#EF4444' }}>*</span></label>
                       <input
                         type="text"
                         required
@@ -1199,7 +1199,7 @@ export const AttendanceSettings: React.FC = () => {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                       <div>
-                        <label style={modalLabelStyle}>Working Days *</label>
+                        <label style={modalLabelStyle}>Working Days <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="text"
                           required
@@ -1210,7 +1210,7 @@ export const AttendanceSettings: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label style={modalLabelStyle}>Off Days *</label>
+                        <label style={modalLabelStyle}>Off Days <span style={{ color: '#EF4444' }}>*</span></label>
                         <input
                           type="text"
                           required

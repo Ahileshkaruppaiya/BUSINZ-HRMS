@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { Employee, AttendanceRecord } from '../../types/hrms';
-import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { 
   Calendar as CalendarIcon, 
   Search, 
@@ -32,9 +31,25 @@ import {
 } from 'lucide-react';
 import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
 import { downloadPagarBookMusterRollExcel } from '../../utils/pagarBookMusterRollExporter';
+import { normalizeToYYYYMMDD, formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { toNum } from '../../utils/numbers';
+
+const parseTimeToMinutes = (timeStr?: string | null): number => {
+  if (!timeStr) return 0;
+  const clean = String(timeStr).trim();
+  if (!clean || clean === '--:--') return 0;
+  const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (!match) return 0;
+  let hours = parseInt(match[1], 10);
+  const mins = parseInt(match[2], 10);
+  const meridiem = match[3]?.toUpperCase();
+  if (meridiem === 'PM' && hours < 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
+  return hours * 60 + mins;
+};
 
 // Attendance Short Code System
-export type AttendanceStatusCode = 'P' | 'A' | 'L' | 'WO' | 'H' | 'HD' | 'OD' | 'WFH' | 'ML';
+export type AttendanceStatusCode = 'P' | 'A' | 'H' | 'WFO' | 'FV' | 'FD' | 'L' | 'WO' | 'HD' | 'OD' | 'WFH' | 'ML';
 
 export interface StatusConfig {
   code: AttendanceStatusCode;
@@ -45,17 +60,30 @@ export interface StatusConfig {
   weight: number; // Contribution to attendance calculation
 }
 
-export const ATTENDANCE_STATUS_CONFIG: Record<AttendanceStatusCode, StatusConfig> = {
+export const ATTENDANCE_STATUS_CONFIG: Record<string, StatusConfig> = {
   P: { code: 'P', label: 'Present', badgeBg: '#DCFCE7', badgeColor: '#15803D', borderColor: '#86EFAC', weight: 1.0 },
   A: { code: 'A', label: 'Absent', badgeBg: '#FEE2E2', badgeColor: '#B91C1C', borderColor: '#FCA5A5', weight: 0.0 },
-  L: { code: 'L', label: 'Leave', badgeBg: '#F3E8FF', badgeColor: '#7E22CE', borderColor: '#D8B4FE', weight: 0.0 },
-  WO: { code: 'WO', label: 'Weekly Off', badgeBg: '#F1F5F9', badgeColor: '#475569', borderColor: '#CBD5E1', weight: 0.0 },
   H: { code: 'H', label: 'Holiday', badgeBg: '#DBEAFE', badgeColor: '#1E40AF', borderColor: '#93C5FD', weight: 0.0 },
-  HD: { code: 'HD', label: 'Half Day', badgeBg: '#FFEDD5', badgeColor: '#C2410C', borderColor: '#FDBA74', weight: 0.5 },
-  OD: { code: 'OD', label: 'On Duty', badgeBg: '#CFFAFE', badgeColor: '#0E7490', borderColor: '#67E8F9', weight: 1.0 },
-  WFH: { code: 'WFH', label: 'Work From Home', badgeBg: '#E0E7FF', badgeColor: '#4338CA', borderColor: '#A5B4FC', weight: 1.0 },
-  ML: { code: 'ML', label: 'Missing / Unmarked', badgeBg: '#FEF3C7', badgeColor: '#B45309', borderColor: '#FDE68A', weight: 0.0 }
+  WFO: { code: 'WFO', label: 'Work From Office', badgeBg: '#E0E7FF', badgeColor: '#4338CA', borderColor: '#A5B4FC', weight: 1.0 },
+  FV: { code: 'FV', label: 'Field Visit', badgeBg: '#CFFAFE', badgeColor: '#0E7490', borderColor: '#67E8F9', weight: 1.0 },
+  // Backward-compatible aliases mapped strictly to the core 5 statuses
+  FD: { code: 'FV', label: 'Field Visit', badgeBg: '#CFFAFE', badgeColor: '#0E7490', borderColor: '#67E8F9', weight: 1.0 },
+  OD: { code: 'FV', label: 'Field Visit', badgeBg: '#CFFAFE', badgeColor: '#0E7490', borderColor: '#67E8F9', weight: 1.0 },
+  WFH: { code: 'WFO', label: 'Work From Office', badgeBg: '#E0E7FF', badgeColor: '#4338CA', borderColor: '#A5B4FC', weight: 1.0 },
+  L: { code: 'A', label: 'Absent', badgeBg: '#FEE2E2', badgeColor: '#B91C1C', borderColor: '#FCA5A5', weight: 0.0 },
+  WO: { code: 'H', label: 'Holiday', badgeBg: '#DBEAFE', badgeColor: '#1E40AF', borderColor: '#93C5FD', weight: 0.0 },
+  HD: { code: 'P', label: 'Present', badgeBg: '#DCFCE7', badgeColor: '#15803D', borderColor: '#86EFAC', weight: 0.5 },
+  ML: { code: 'A', label: 'Absent', badgeBg: '#FEE2E2', badgeColor: '#B91C1C', borderColor: '#FCA5A5', weight: 0.0 }
 };
+
+// Exact 5 status items strictly requested by user: Present, Absent, Holiday, WFO, Field Visit
+export const DISPLAYED_STATUS_CONFIGS: StatusConfig[] = [
+  { code: 'P', label: 'Present', badgeBg: '#DCFCE7', badgeColor: '#15803D', borderColor: '#86EFAC', weight: 1.0 },
+  { code: 'A', label: 'Absent', badgeBg: '#FEE2E2', badgeColor: '#B91C1C', borderColor: '#FCA5A5', weight: 0.0 },
+  { code: 'H', label: 'Holiday', badgeBg: '#DBEAFE', badgeColor: '#1E40AF', borderColor: '#93C5FD', weight: 0.0 },
+  { code: 'WFO', label: 'Work From Office', badgeBg: '#E0E7FF', badgeColor: '#4338CA', borderColor: '#A5B4FC', weight: 1.0 },
+  { code: 'FV', label: 'Field Visit', badgeBg: '#CFFAFE', badgeColor: '#0E7490', borderColor: '#67E8F9', weight: 1.0 },
+];
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -98,7 +126,8 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
   // Synchronize fromDateProp to selectedMonth and selectedYear if passed
   useEffect(() => {
     if (fromDateProp) {
-      const parts = fromDateProp.split('-');
+      const normFrom = normalizeToYYYYMMDD(fromDateProp);
+      const parts = normFrom.split('-');
       if (parts.length === 3) {
         const yr = parseInt(parts[0], 10);
         const mo = parseInt(parts[1], 10) - 1;
@@ -106,7 +135,7 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
         if (!isNaN(mo) && mo >= 0 && mo <= 11) setSelectedMonth(mo);
       }
     }
-  }, [fromDateProp]);
+  }, [fromDateProp, toDateProp]);
 
   // Combine external searchQueryProp and internal searchQuery
   const activeSearchQuery = (searchQueryProp !== undefined ? searchQueryProp : searchQuery).trim().toLowerCase();
@@ -161,11 +190,50 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
   // 2. DYNAMIC CALENDAR GENERATION (Handles Leap Years & Short Months)
   // ---------------------------------------------------------------------------
   const calendarDays = useMemo(() => {
+    // If fromDateProp and toDateProp are passed, strictly generate calendar columns for that exact date range!
+    if (fromDateProp && toDateProp) {
+      const normFrom = normalizeToYYYYMMDD(fromDateProp);
+      const normTo = normalizeToYYYYMMDD(toDateProp);
+      if (normFrom && normTo) {
+        const [startStr, endStr] = normFrom <= normTo ? [normFrom, normTo] : [normTo, normFrom];
+        const [y1, m1, d1] = startStr.split('-').map(n => parseInt(n, 10));
+        const [y2, m2, d2] = endStr.split('-').map(n => parseInt(n, 10));
+        const current = new Date(y1, m1 - 1, d1, 12, 0, 0);
+        const end = new Date(y2, m2 - 1, d2, 12, 0, 0);
+        const result = [];
+        let count = 0;
+        while (current <= end && count < 62) {
+          const y = current.getFullYear();
+          const m = String(current.getMonth() + 1).padStart(2, '0');
+          const d = String(current.getDate()).padStart(2, '0');
+          const dateStr = `${y}-${m}-${d}`;
+          const dayOfWeek = current.getDay(); // 0 = Sun, 6 = Sat
+          const dayName = current.toLocaleDateString('en-US', { weekday: 'short' });
+          const isSunday = dayOfWeek === 0;
+          const isSaturday = dayOfWeek === 6;
+          const isHoliday = (holidayPolicies || []).some(h => h.date === dateStr);
+
+          result.push({
+            dayNum: current.getDate(),
+            dateStr,
+            dayName,
+            isSunday,
+            isSaturday,
+            isWeekend: isSunday,
+            isHoliday
+          });
+          current.setDate(current.getDate() + 1);
+          count++;
+        }
+        if (result.length > 0) return result;
+      }
+    }
+
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
     const result = [];
     
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateObj = new Date(selectedYear, selectedMonth, day);
+      const dateObj = new Date(selectedYear, selectedMonth, day, 12, 0, 0);
       const dayOfWeek = dateObj.getDay(); // 0 = Sun, 6 = Sat
       const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       
@@ -186,7 +254,7 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
       });
     }
     return result;
-  }, [selectedMonth, selectedYear, holidayPolicies]);
+  }, [selectedMonth, selectedYear, holidayPolicies, fromDateProp, toDateProp]);
 
   // Extract unique departments & locations for filter dropdowns
   const availableDepartments = useMemo(() => {
@@ -227,20 +295,31 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
       dayItem.dateStr <= l.endDate
     );
     if (leaveRec) {
-      const isWfh = leaveRec.leaveType.toLowerCase().includes('work from home') || leaveRec.leaveType.toLowerCase() === 'wfh';
-      if (isWfh) {
+      const lType = (leaveRec.leaveType || '').toLowerCase();
+      if (lType.includes('wfo') || lType.includes('office') || lType.includes('wfh') || lType.includes('home')) {
         return {
-          status: 'WFH' as AttendanceStatusCode,
+          status: 'WFO' as AttendanceStatusCode,
           checkIn: '09:00 AM',
           checkOut: '06:00 PM',
           workingHours: '08:30',
           shift: employee.workShift || shifts[0]?.shiftName || 'Shift 1 (09:00 AM - 06:00 PM)',
-          location: 'Work From Home (Approved)',
-          remarks: `WFH: ${leaveRec.reason || 'Approved Work From Home'}`
+          location: 'Work From Office (Approved)',
+          remarks: `WFO: ${leaveRec.reason || 'Approved WFO'}`
+        };
+      }
+      if (lType.includes('field') || lType.includes('visit') || lType.includes('duty')) {
+        return {
+          status: 'FV' as AttendanceStatusCode,
+          checkIn: '09:30 AM',
+          checkOut: '06:00 PM',
+          workingHours: '08:30',
+          shift: employee.workShift || shifts[0]?.shiftName || 'Shift 1 (09:00 AM - 06:00 PM)',
+          location: 'Field Visit',
+          remarks: `Field Visit: ${leaveRec.reason || 'Client/Site Visit'}`
         };
       }
       return {
-        status: 'L' as AttendanceStatusCode,
+        status: 'A' as AttendanceStatusCode,
         checkIn: '-',
         checkOut: '-',
         workingHours: '00:00',
@@ -263,47 +342,68 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
       };
     }
 
-    // Check Sunday / Weekly Off
+    // Check Sunday / Weekly Off -> Mapped to Holiday
     if (dayItem.isSunday) {
       return {
-        status: 'WO' as AttendanceStatusCode,
+        status: 'H' as AttendanceStatusCode,
         checkIn: '-',
         checkOut: '-',
         workingHours: '00:00',
-        shift: 'Weekly Off',
+        shift: 'Holiday',
         location: 'Offsite',
-        remarks: 'Scheduled Weekly Off'
+        remarks: 'Weekly Holiday'
       };
     }
 
-    // Check Attendance Records
-    const attRec = attendanceRecords.find(a => 
-      a.employeeId === employee.employeeId && 
-      a.date === dayItem.dateStr
-    );
+    // Check Attendance Records with ID fallback and date normalization
+    const empCode = (employee.employeeId || '').toLowerCase().trim();
+    const empUid = (employee.id || '').toLowerCase().trim();
+    const targetDateNorm = normalizeToYYYYMMDD(dayItem.dateStr);
+
+    const attRec = attendanceRecords.find(a => {
+      const aEmp = (a.employeeId || '').toLowerCase().trim();
+      const aDate = normalizeToYYYYMMDD(a.date || a.shiftDate);
+      return (aEmp === empCode || aEmp === empUid) && aDate === targetDateNorm;
+    });
 
     if (attRec) {
       let code: AttendanceStatusCode = 'P';
-      if (attRec.status === 'Absent') code = 'A';
-      else if (attRec.status === 'Half Day') code = 'HD';
-      else if (attRec.status === 'Work From Home') code = 'WFH';
-      else if (attRec.status === 'On Leave') code = 'L';
+      const st = String(attRec.status || '').toLowerCase();
+      if (st === 'absent') code = 'A';
+      else if (st === 'holiday') code = 'H';
+      else if (st.includes('wfo') || st.includes('office') || st.includes('wfh') || st.includes('home')) code = 'WFO';
+      else if (st.includes('duty') || st.includes('field') || st.includes('visit') || st.includes('on duty') || attRec.method?.toLowerCase().includes('field')) code = 'FV';
       else code = 'P';
+
+      let whDisplay = '--:--';
+      if (attRec.checkIn && attRec.checkOut && attRec.checkOut !== '--:--') {
+        const inM = parseTimeToMinutes ? parseTimeToMinutes(attRec.checkIn) : 0;
+        const outM = parseTimeToMinutes ? parseTimeToMinutes(attRec.checkOut) : 0;
+        let diff = outM - inM;
+        if (diff < 0) diff += 24 * 60;
+        const h = Math.floor(diff / 60);
+        const m = diff % 60;
+        whDisplay = `${h}h ${m}m`;
+      } else if (toNum(attRec.workingHours) > 0) {
+        whDisplay = `${toNum(attRec.workingHours).toFixed(1)} hrs`;
+      } else if (attRec.checkIn) {
+        whDisplay = 'In Progress';
+      }
 
       return {
         status: code,
-        checkIn: attRec.checkIn || '09:05 AM',
-        checkOut: attRec.checkOut || '06:10 PM',
-        workingHours: attRec.workingHours ? `${Math.floor(attRec.workingHours)}h ${Math.round((attRec.workingHours % 1) * 60)}m` : '08:30',
+        checkIn: attRec.checkIn || '--:--',
+        checkOut: attRec.checkOut && attRec.checkOut !== '--:--' ? attRec.checkOut : (attRec.checkIn ? 'In Progress' : '--:--'),
+        workingHours: whDisplay,
         shift: employee.workShift || shifts[0]?.shiftName || 'Shift 1 (09:00 AM - 06:00 PM)',
         location: attRec.location?.address || employee.address || 'Main Campus',
-        remarks: attRec.status === 'Late' ? 'Late Check-in logged' : 'Regular Attendance'
+        remarks: attRec.status === 'Late' ? 'Late Check-in logged' : (code === 'FV' ? 'Field Visit active' : 'Regular Attendance')
       };
     }
 
-    // Unmarked / No attendance record found in database
+    // Unmarked / No attendance record found in database -> Mark as Absent (A)
     return {
-      status: 'ML' as AttendanceStatusCode,
+      status: 'A' as AttendanceStatusCode,
       checkIn: '-',
       checkOut: '-',
       workingHours: '00:00',
@@ -453,19 +553,18 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
       { key: 'dept', label: 'Department' },
       { key: 'desig', label: 'Designation' },
       ...calendarDays.map(d => ({ key: `day_${d.dayNum}`, label: `${String(d.dayNum).padStart(2, '0')} (${d.dayName})` })),
-      { key: 'totalP', label: 'Total Present (P)' },
-      { key: 'totalA', label: 'Total Absent (A)' },
-      { key: 'totalL', label: 'Total Leave (L)' },
-      { key: 'totalWO', label: 'Total Weekly Off (WO)' },
-      { key: 'totalH', label: 'Total Holidays (H)' },
-      { key: 'totalHD', label: 'Total Half Day (HD)' },
+      { key: 'totalP', label: 'Present (P)' },
+      { key: 'totalA', label: 'Absent (A)' },
+      { key: 'totalH', label: 'Holiday (H)' },
+      { key: 'totalWFO', label: 'Work From Office (WFO)' },
+      { key: 'totalFV', label: 'Field Visit (FV)' },
       { key: 'totalRate', label: 'Attendance Rate (%)' }
     ];
 
     const data: Record<string, any>[] = [];
 
     filteredEmployees.forEach(emp => {
-      let p = 0, a = 0, l = 0, wo = 0, h = 0, hd = 0, od = 0, wfh = 0;
+      let p = 0, a = 0, h = 0, wfo = 0, fv = 0;
       const row: Record<string, any> = {
         empId: emp.employeeId,
         empName: `${emp.firstName} ${emp.lastName}`,
@@ -479,25 +578,30 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
         switch (att.status) {
           case 'P': p++; break;
           case 'A': a++; break;
-          case 'L': l++; break;
-          case 'WO': wo++; break;
           case 'H': h++; break;
-          case 'HD': hd++; break;
-          case 'OD': od++; break;
-          case 'WFH': wfh++; break;
+          case 'WFO': wfo++; break;
+          case 'FV':
+          case 'FD':
+          case 'OD': fv++; break;
+          default:
+            if (att.status === 'WFH') wfo++;
+            else if (att.status === 'L' || att.status === 'ML') a++;
+            else if (att.status === 'WO') h++;
+            else if (att.status === 'HD') { p += 0.5; a += 0.5; }
+            else p++;
+            break;
         }
       });
 
-      const workingDays = calendarDays.length - wo - h;
-      const effectivePresent = p + od + wfh + (hd * 0.5);
-      const rate = workingDays > 0 ? Math.round((effectivePresent / workingDays) * 100) : 100;
+      const workingDays = Math.max(1, calendarDays.length - h);
+      const effectivePresent = p + wfo + fv;
+      const rate = Math.min(100, Math.round((effectivePresent / workingDays) * 100));
 
       row.totalP = p;
       row.totalA = a;
-      row.totalL = l;
-      row.totalWO = wo;
       row.totalH = h;
-      row.totalHD = hd;
+      row.totalWFO = wfo;
+      row.totalFV = fv;
       row.totalRate = `${rate}%`;
 
       data.push(row);
@@ -508,14 +612,16 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
 
   const handleExportCSV = () => {
     const { columns, data } = prepareExportData();
-    downloadCSV(data, `Muster_Roll_${MONTH_NAMES[selectedMonth]}_${selectedYear}`, columns);
+    const fStr = fromDateProp ? normalizeToYYYYMMDD(fromDateProp) : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
+    const tStr = toDateProp ? normalizeToYYYYMMDD(toDateProp) : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(calendarDays.length).padStart(2, '0')}`;
+    downloadCSV(data, `Muster_Roll_${fStr}_to_${tStr}`, columns);
     setExportDropdownOpen(false);
   };
 
   const handleExportExcel = () => {
-    const fromDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
+    const fromDate = fromDateProp ? normalizeToYYYYMMDD(fromDateProp) : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
     const lastDay = calendarDays.length;
-    const toDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const toDate = toDateProp ? normalizeToYYYYMMDD(toDateProp) : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
     downloadPagarBookMusterRollExcel(
       filteredEmployees,
@@ -530,10 +636,12 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
 
   const handleExportPDF = () => {
     const { columns, data } = prepareExportData();
+    const fStr = fromDateProp ? normalizeToYYYYMMDD(fromDateProp) : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
+    const tStr = toDateProp ? normalizeToYYYYMMDD(toDateProp) : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(calendarDays.length).padStart(2, '0')}`;
     downloadPDF(
       data, 
-      `Muster Roll Register - ${MONTH_NAMES[selectedMonth]} ${selectedYear}`, 
-      `Muster_Roll_${MONTH_NAMES[selectedMonth]}_${selectedYear}`, 
+      `Muster Roll Register (${fStr} to ${tStr})`, 
+      `Muster_Roll_${fStr}_to_${tStr}`, 
       columns
     );
     setExportDropdownOpen(false);
@@ -591,7 +699,7 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
             backgroundColor: '#FFFFFF',
             borderBottom: '1px solid #E2E8F0'
           }}>
-            {Object.values(ATTENDANCE_STATUS_CONFIG).map(cfg => (
+            {DISPLAYED_STATUS_CONFIGS.map(cfg => (
               <span
                 key={cfg.code}
                 style={{
@@ -711,15 +819,12 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
                     </th>
                   ))}
 
-                  {/* Dynamic Total Summary Columns */}
+                  {/* Dynamic Total Summary Columns: strictly 5 requested statuses + % Rate */}
                   <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#15803D', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>P</th>
                   <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#B91C1C', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>A</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#7E22CE', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>L</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#475569', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>WO</th>
                   <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#1E40AF', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>H</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#C2410C', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>HD</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#0E7490', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>OD</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#4338CA', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>WFH</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#4338CA', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>WFO</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#0E7490', borderBottom: '2px solid #CBD5E1', borderRight: '1px solid #E2E8F0', textAlign: 'center', minWidth: '44px' }}>FV</th>
                   <th style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F8FAFC', padding: '10px 8px', fontWeight: 800, color: '#0F172A', borderBottom: '2px solid #CBD5E1', textAlign: 'center', minWidth: '55px' }}>% Rate</th>
 
                 </tr>
@@ -730,7 +835,7 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
                   // Skeleton Loader Rows
                   Array.from({ length: 6 }).map((_, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td colSpan={calendarDays.length + 13} style={{ padding: '16px', textAlign: 'center' }}>
+                      <td colSpan={calendarDays.length + 10} style={{ padding: '16px', textAlign: 'center' }}>
                         <div style={{ height: '20px', backgroundColor: '#E2E8F0', borderRadius: '4px', animation: 'pulse 1.5s infinite' }} />
                       </td>
                     </tr>
@@ -738,7 +843,7 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
                 ) : paginatedEmployees.length === 0 ? (
                   // Empty State
                   <tr>
-                    <td colSpan={calendarDays.length + 13} style={{ padding: '48px 24px', textAlign: 'center' }}>
+                    <td colSpan={calendarDays.length + 10} style={{ padding: '48px 24px', textAlign: 'center' }}>
                       <CalendarDays size={42} color="#94A3B8" style={{ margin: '0 auto 12px' }} />
                       <div style={{ fontWeight: 800, fontSize: '1rem', color: '#475569' }}>No attendance records found</div>
                       <div style={{ fontSize: '0.84rem', color: '#94A3B8', marginTop: '4px' }}>
@@ -765,26 +870,32 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
                   </tr>
                 ) : (
                   paginatedEmployees.map(employee => {
-                    let p = 0, a = 0, l = 0, wo = 0, h = 0, hd = 0, od = 0, wfh = 0;
+                    let p = 0, a = 0, h = 0, wfo = 0, fv = 0;
 
                     const dayCells = calendarDays.map(dayItem => {
                       const att = getCellAttendance(employee, dayItem);
                       switch (att.status) {
                         case 'P': p++; break;
                         case 'A': a++; break;
-                        case 'L': l++; break;
-                        case 'WO': wo++; break;
                         case 'H': h++; break;
-                        case 'HD': hd++; break;
-                        case 'OD': od++; break;
-                        case 'WFH': wfh++; break;
+                        case 'WFO': wfo++; break;
+                        case 'FV':
+                        case 'FD':
+                        case 'OD': fv++; break;
+                        default:
+                          if (att.status === 'WFH') wfo++;
+                          else if (att.status === 'L' || att.status === 'ML') a++;
+                          else if (att.status === 'WO') h++;
+                          else if (att.status === 'HD') { p += 0.5; a += 0.5; }
+                          else p++;
+                          break;
                       }
                       return { dayItem, att };
                     });
 
-                    const totalWorkingDays = calendarDays.length - wo - h;
-                    const effectivePresent = p + od + wfh + (hd * 0.5);
-                    const attendanceRate = totalWorkingDays > 0 ? Math.round((effectivePresent / totalWorkingDays) * 100) : 100;
+                    const totalWorkingDays = Math.max(1, calendarDays.length - h);
+                    const effectivePresent = p + wfo + fv;
+                    const attendanceRate = Math.min(100, Math.round((effectivePresent / totalWorkingDays) * 100));
 
                     return (
                       <tr
@@ -882,15 +993,12 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
                           );
                         })}
 
-                        {/* Summary Columns */}
+                        {/* Summary Columns: strictly P, A, H, WFO, FV and % Rate */}
                         <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#15803D', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9', backgroundColor: '#F0FDF4' }}>{p}</td>
                         <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#B91C1C', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9', backgroundColor: '#FEF2F2' }}>{a}</td>
-                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#7E22CE', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9' }}>{l}</td>
-                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#475569', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9' }}>{wo}</td>
-                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#1E40AF', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9' }}>{h}</td>
-                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#C2410C', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9' }}>{hd}</td>
-                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#0E7490', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9' }}>{od}</td>
-                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#4338CA', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9' }}>{wfh}</td>
+                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#1E40AF', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9', backgroundColor: '#EFF6FF' }}>{h}</td>
+                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#4338CA', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9', backgroundColor: '#EEF2FF' }}>{wfo}</td>
+                        <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#0E7490', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9', backgroundColor: '#ECFEFF' }}>{fv}</td>
                         <td style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', backgroundColor: '#ECFEFF' }}>{attendanceRate}%</td>
 
                       </tr>
@@ -1096,7 +1204,7 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
                   onChange={e => setEditForm({ ...editForm, status: e.target.value as AttendanceStatusCode })}
                   style={{ width: '100%', padding: '10px 12px', fontSize: '0.88rem', fontWeight: 700, borderRadius: '10px', border: '1px solid #CBD5E1' }}
                 >
-                  {Object.values(ATTENDANCE_STATUS_CONFIG).map(cfg => (
+                  {DISPLAYED_STATUS_CONFIGS.map(cfg => (
                     <option key={cfg.code} value={cfg.code}>{cfg.code} - {cfg.label}</option>
                   ))}
                 </select>

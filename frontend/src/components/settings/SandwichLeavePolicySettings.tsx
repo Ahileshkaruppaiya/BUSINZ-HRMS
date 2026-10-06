@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { StandardFloatingActionBar } from '../common/StandardFloatingActionBar';
 import { StandardTablePagination } from '../common/StandardTablePagination';
+import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
 export const SandwichLeavePolicySettings: React.FC = () => {
   const { 
@@ -607,9 +608,9 @@ export const SandwichLeavePolicySettings: React.FC = () => {
                       </td>
 
                       <td style={{ padding: '14px 16px', fontSize: '0.78rem', color: '#64748B' }}>
-                        <div>From: <strong style={{ color: '#1E293B' }}>{policy.effectiveFrom}</strong></div>
+                        <div>From: <strong style={{ color: '#1E293B' }}>{formatDateDDMMYYYY(policy.effectiveFrom)}</strong></div>
                         {policy.effectiveTo ? (
-                          <div>To: <strong style={{ color: '#1E293B' }}>{policy.effectiveTo}</strong></div>
+                          <div>To: <strong style={{ color: '#1E293B' }}>{formatDateDDMMYYYY(policy.effectiveTo)}</strong></div>
                         ) : (
                           <div style={{ color: '#0E7490', fontWeight: 600 }}>No Expiry</div>
                         )}

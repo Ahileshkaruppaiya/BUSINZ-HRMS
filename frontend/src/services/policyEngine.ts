@@ -531,6 +531,166 @@ export const resolveEmployeeWithPf = (employee?: Pick<Employee, 'withPf' | 'sala
   return true;
 };
 
+export type StatutoryDeductionKind = 'PF' | 'ESIC' | 'PT';
+
+export const getStatutoryDeductionKind = (component: Pick<SalaryComponentConfig, 'code' | 'name'>): StatutoryDeductionKind | null => {
+  const code = (component.code || '').trim().toUpperCase();
+  const name = (component.name || '').trim().toLowerCase();
+  const combined = `${code} ${name}`;
+
+  if (
+    ['PF', 'EPF', 'ERF', 'PF_EMPLOYEE', 'EMPLOYEE_PF'].includes(code) ||
+    combined.includes('provident fund') ||
+    combined.includes('employee pf') ||
+    combined.includes(' epf ')
+  ) {
+    return 'PF';
+  }
+
+  if (
+    ['ESIC', 'ESI'].includes(code) ||
+    combined.includes('state insurance') ||
+    combined.includes('esic') ||
+    combined.includes('esi contribution')
+  ) {
+    return 'ESIC';
+  }
+
+  if (['PT', 'PROFESSIONAL_TAX'].includes(code) || combined.includes('professional tax')) {
+    return 'PT';
+  }
+
+  return null;
+};
+
+export interface PayrollFormulaContextInput {
+  basic: number;
+  da?: number;
+  conveyance?: number;
+  hra?: number;
+  gross: number;
+  ctc: number;
+  attendanceBonus?: number;
+  overtime?: number;
+  customContext?: Record<string, number>;
+}
+
+export const buildPayrollFormulaContext = ({
+  basic,
+  da = 0,
+  conveyance = 0,
+  hra = 0,
+  gross,
+  ctc,
+  attendanceBonus = 0,
+  overtime = 0,
+  customContext = {}
+}: PayrollFormulaContextInput): FormulaContext => {
+  const context: FormulaContext = {
+    BASIC: toNum(basic),
+    DA: toNum(da),
+    CONV: toNum(conveyance),
+    CONVEYANCE: toNum(conveyance),
+    HRA: toNum(hra),
+    GROSS: toNum(gross),
+    CTC: toNum(ctc),
+    ATTENDANCE_BONUS: toNum(attendanceBonus),
+    OVERTIME: toNum(overtime)
+  };
+
+  Object.entries(customContext || {}).forEach(([key, value]) => {
+    const amount = toNum(value);
+    context[key] = amount;
+    context[key.toUpperCase()] = amount;
+  });
+
+  return context;
+};
+
+export const getComponentCalculationDescription = (
+  component: Pick<SalaryComponentConfig, 'calculationMethod' | 'defaultValue' | 'percentageBase' | 'formula'>
+): string => {
+  if (component.calculationMethod === 'FIXED_AMOUNT') {
+    return `Fixed ${formatCurrency(component.defaultValue || 0)}`;
+  }
+  if (component.calculationMethod === 'PERCENTAGE') {
+    return `${component.defaultValue || 0}% of ${component.percentageBase || 'GROSS'}`;
+  }
+  if (component.calculationMethod === 'FORMULA') {
+    return component.formula ? `Formula: ${component.formula}` : 'Formula not configured';
+  }
+  return '';
+};
+
+export const calculateConfiguredComponentAmount = (
+  component: SalaryComponentConfig,
+  context: FormulaContext
+): number => {
+  if (!component.active) return 0;
+
+  if (component.calculationMethod === 'FIXED_AMOUNT') {
+    return Math.max(0, Math.round(toNum(component.defaultValue)));
+  }
+
+  if (component.calculationMethod === 'PERCENTAGE') {
+    const baseKey = component.percentageBase || 'GROSS';
+    const base = toNum(context[baseKey], baseKey === 'CTC' ? context.CTC : context.GROSS);
+    return Math.max(0, Math.round((base * toNum(component.defaultValue)) / 100));
+  }
+
+  if (component.calculationMethod === 'FORMULA' && component.formula) {
+    return Math.max(0, Math.round(evaluateFormula(component.formula, context)));
+  }
+
+  return 0;
+};
+
+export interface ConfiguredDeductionLine {
+  id: string;
+  name: string;
+  code: string;
+  amount: number;
+  description: string;
+  statutoryKind: StatutoryDeductionKind | null;
+  isConfidential: boolean;
+}
+
+export const calculateConfiguredDeductionLines = (
+  components: SalaryComponentConfig[] | undefined,
+  context: FormulaContext,
+  options: { withPf?: boolean; esicSalaryLimit?: number } = {}
+): ConfiguredDeductionLine[] => {
+  const withPf = options.withPf !== false;
+  const gross = toNum(context.GROSS);
+  const esicLimit = toNum(options.esicSalaryLimit);
+
+  return (components || [])
+    .filter(component => component.active && component.type === 'DEDUCTION')
+    .map(component => {
+      const statutoryKind = getStatutoryDeductionKind(component);
+      let amount = calculateConfiguredComponentAmount(component, context);
+      let description = getComponentCalculationDescription(component);
+
+      if ((statutoryKind === 'PF' || statutoryKind === 'ESIC') && !withPf) {
+        amount = 0;
+        description = 'Exempt Scheme';
+      } else if (statutoryKind === 'ESIC' && esicLimit > 0 && gross > esicLimit) {
+        amount = 0;
+        description = `Exempt: Gross ${formatCurrency(gross)} exceeds ${formatCurrency(esicLimit)}`;
+      }
+
+      return {
+        id: component.id,
+        name: component.name,
+        code: component.code,
+        amount,
+        description,
+        statutoryKind,
+        isConfidential: component.isConfidential
+      };
+    });
+};
+
 export const evaluateStatutoryContributions = (
   basicSalary: number,
   grossSalary: number,
@@ -903,80 +1063,73 @@ export const calculateEmployeePayroll = (
   month: string = 'August',
   year: number = 2026
 ): FullPayrollCalculationResult => {
-  const basic = toNum(employee.basicSalary);
-  
-  // Dynamic CTC resolution based on configured Basic percentage
-  const basicComp = payrollConfig?.components?.find(c => c.active && (c.code === 'BASIC' || c.name.toLowerCase().includes('basic')));
+  const configuredComponents = payrollConfig?.components || [];
+  const configuredEarnings = configuredComponents.filter(c => c.active && c.type === 'EARNING');
+  const configuredDeductions = configuredComponents.filter(c => c.active && c.type === 'DEDUCTION');
+  const savedComponentValues: Record<string, number> = {
+    ...((employee.allowances as any) || {}),
+    ...((employee.salaryDetails as any) || {})
+  };
+
+  let basic = toNum(employee.salaryDetails?.basicSalary ?? employee.basicSalary);
+
+  // Dynamic CTC resolution based on configured Basic percentage.
+  const basicComp = configuredEarnings.find(c => c.code === 'BASIC' || c.name.toLowerCase().includes('basic'));
   const basicPercentage = (basicComp && basicComp.calculationMethod === 'PERCENTAGE' && basicComp.percentageBase === 'CTC' && basicComp.defaultValue > 0)
     ? basicComp.defaultValue
     : 40;
   const totalCtc = employee.salaryDetails?.monthlyCtc || (basic > 0 ? Math.round(basic / (basicPercentage / 100)) : 15000);
+  const configuredBreakdown = calculateSalaryBreakdown(totalCtc, configuredEarnings);
+  const getSavedComponentAmount = (code: string): number | undefined => {
+    const lower = code.toLowerCase();
+    const raw = savedComponentValues[code] ?? savedComponentValues[lower];
+    return raw !== undefined && raw !== null ? toNum(raw) : undefined;
+  };
+
   const earningsBreakdown: { name: string; category: 'EARNING'; amount: number; description?: string }[] = [];
-  if (basic > 0) {
-    earningsBreakdown.push({
-      name: basicComp?.name || 'Basic Salary',
-      category: 'EARNING',
-      amount: basic,
-      description: basicComp?.calculationMethod === 'PERCENTAGE' ? `${basicComp.defaultValue}% ${basicComp.percentageBase || 'CTC'}` : undefined
-    });
-  }
 
-  // Dynamic component earnings calculation
   let calculatedAllowances = 0;
-  let dynamicDa = toNum(employee.allowances?.da ?? employee.salaryDetails?.da);
-  let dynamicConveyance = toNum(employee.allowances?.conveyance ?? employee.salaryDetails?.conveyance);
-  let dynamicHra = toNum(employee.allowances?.hra ?? employee.salaryDetails?.hra);
+  let dynamicDa = 0;
+  let dynamicConveyance = 0;
+  let dynamicHra = 0;
 
-  if (payrollConfig?.components && payrollConfig.components.length > 0) {
-    const activeEarnings = payrollConfig.components.filter(c => c.active && c.type === 'EARNING' && c.code !== 'BASIC');
-    let foundDa = 0;
-    let foundConv = 0;
-    let foundHra = 0;
+  if (configuredEarnings.length > 0) {
+    configuredEarnings.forEach(comp => {
+      const configuredAmount = configuredBreakdown.customComponents[comp.code] || 0;
+      const savedAmount = getSavedComponentAmount(comp.code);
+      const actualVal = savedAmount !== undefined ? savedAmount : configuredAmount;
 
-    activeEarnings.forEach(comp => {
-      let compAmount = 0;
-      if (comp.calculationMethod === 'PERCENTAGE') {
-        const base = comp.percentageBase === 'BASIC' ? basic : totalCtc;
-        compAmount = Math.round((base * (comp.defaultValue || 0)) / 100);
-      } else if (comp.calculationMethod === 'FIXED_AMOUNT') {
-        compAmount = Math.round(comp.defaultValue || 0);
-      } else if (comp.calculationMethod === 'FORMULA' && comp.formula) {
-        compAmount = Math.round(evaluateFormula(comp.formula, { BASIC: basic, CTC: totalCtc }));
-      }
-
-      const employeeCustom = (employee.allowances as any)?.[comp.code.toLowerCase()] ?? (employee.allowances as any)?.[comp.code];
-      const actualVal = (employeeCustom !== undefined && employeeCustom !== null && toNum(employeeCustom) > 0) ? toNum(employeeCustom) : compAmount;
       if (actualVal > 0) {
         earningsBreakdown.push({
           name: comp.name,
           category: 'EARNING',
           amount: actualVal,
-          description: comp.calculationMethod === 'PERCENTAGE' ? `${comp.defaultValue}% ${comp.percentageBase || 'CTC'}` : undefined
+          description: getComponentCalculationDescription(comp)
         });
       }
 
-      if (comp.code === 'DA') {
-        foundDa = actualVal;
-        calculatedAllowances += foundDa;
-      } else if (comp.code === 'CONV' || comp.code === 'CONVEYANCE') {
-        foundConv = actualVal;
-        calculatedAllowances += foundConv;
-      } else if (comp.code === 'HRA') {
-        foundHra = actualVal;
-        calculatedAllowances += foundHra;
+      const code = comp.code.toUpperCase();
+      if (code === 'BASIC' || comp.name.toLowerCase().includes('basic')) {
+        basic = actualVal;
+      } else if (code === 'DA') {
+        dynamicDa = actualVal;
+        calculatedAllowances += actualVal;
+      } else if (code === 'CONV' || code === 'CONVEYANCE') {
+        dynamicConveyance = actualVal;
+        calculatedAllowances += actualVal;
+      } else if (code === 'HRA') {
+        dynamicHra = actualVal;
+        calculatedAllowances += actualVal;
       } else {
         calculatedAllowances += actualVal;
       }
     });
-
-    dynamicDa = foundDa;
-    dynamicConveyance = foundConv;
-    dynamicHra = foundHra;
   } else {
-    if (!dynamicDa) dynamicDa = Math.round(totalCtc * 0.20);
-    if (!dynamicConveyance) dynamicConveyance = Math.round(totalCtc * 0.05);
-    if (!dynamicHra) dynamicHra = Math.round(totalCtc * 0.35);
+    dynamicDa = toNum(employee.allowances?.da ?? employee.salaryDetails?.da);
+    dynamicConveyance = toNum(employee.allowances?.conveyance ?? employee.salaryDetails?.conveyance);
+    dynamicHra = toNum(employee.allowances?.hra ?? employee.salaryDetails?.hra);
     calculatedAllowances = dynamicDa + dynamicConveyance + dynamicHra;
+    if (basic > 0) earningsBreakdown.push({ name: 'Basic Salary', category: 'EARNING', amount: basic });
     if (dynamicDa > 0) earningsBreakdown.push({ name: 'Dearness Allowance (DA)', category: 'EARNING', amount: dynamicDa });
     if (dynamicConveyance > 0) earningsBreakdown.push({ name: 'Conveyance Allowance', category: 'EARNING', amount: dynamicConveyance });
     if (dynamicHra > 0) earningsBreakdown.push({ name: 'House Rent Allowance (HRA)', category: 'EARNING', amount: dynamicHra });
@@ -1056,18 +1209,43 @@ export const calculateEmployeePayroll = (
 
   const withPf = resolveEmployeeWithPf(employee);
 
-  // 5. Statutory Deductions
-  const statutoryDetails = evaluateStatutoryContributions(
-    payableBasic,
-    grossSalary,
-    payrollConfig,
-    withPf,
-    payableDa,
-    payableConveyance,
-    payableHra,
+  const payableComponentContext: Record<string, number> = {};
+  configuredEarnings.forEach(comp => {
+    const configuredAmount = configuredBreakdown.customComponents[comp.code] || 0;
+    const savedAmount = getSavedComponentAmount(comp.code);
+    payableComponentContext[comp.code] = prorateSalary(savedAmount !== undefined ? savedAmount : configuredAmount);
+  });
+
+  const deductionContext = buildPayrollFormulaContext({
+    basic: payableBasic,
+    da: payableDa,
+    conveyance: payableConveyance,
+    hra: payableHra,
+    gross: grossSalary,
+    ctc: totalCtc,
     attendanceBonus,
-    0
-  );
+    customContext: payableComponentContext
+  });
+  const configuredDeductionLines = calculateConfiguredDeductionLines(configuredDeductions, deductionContext, {
+    withPf,
+    esicSalaryLimit: payrollConfig?.esicPolicy?.grossSalaryLimit || 21000
+  });
+  const epfDeduction = configuredDeductionLines.find(d => d.statutoryKind === 'PF')?.amount || 0;
+  const esiDeduction = configuredDeductionLines.find(d => d.statutoryKind === 'ESIC')?.amount || 0;
+  const professionalTax = configuredDeductionLines.find(d => d.statutoryKind === 'PT')?.amount || 0;
+  const configuredDeductionTotal = configuredDeductionLines.reduce((sum, d) => sum + d.amount, 0);
+  const statutoryDetails: StatutoryDeductionsResult = {
+    epfDeduction,
+    esiDeduction,
+    professionalTax,
+    totalStatutory: epfDeduction + esiDeduction + professionalTax,
+    epfRule: configuredDeductionLines.find(d => d.statutoryKind === 'PF')?.description || '',
+    esiRule: configuredDeductionLines.find(d => d.statutoryKind === 'ESIC')?.description || '',
+    pfActive: configuredDeductionLines.some(d => d.statutoryKind === 'PF'),
+    esicActive: configuredDeductionLines.some(d => d.statutoryKind === 'ESIC'),
+    ptActive: configuredDeductionLines.some(d => d.statutoryKind === 'PT'),
+    isEsicExempt: configuredDeductionLines.some(d => d.statutoryKind === 'ESIC' && d.amount === 0)
+  };
 
   // 6. Advance Salary / Loan EMI deduction ("Others" deduction)
   let scheduledLoanDeduction = 0;
@@ -1093,22 +1271,20 @@ export const calculateEmployeePayroll = (
 
   // Low Salary Protection: Cap loan deduction to available net salary
   const leaveDeductionAmount = 0;
-  const preLoanDeductions = statutoryDetails.totalStatutory + lateDetails.deductionAmount + leaveDeductionAmount;
+  const preLoanDeductions = configuredDeductionTotal + lateDetails.deductionAmount + leaveDeductionAmount;
   const availableSalary = Math.max(0, grossSalary - preLoanDeductions);
   const advanceDeduction = Math.min(scheduledLoanDeduction, availableSalary);
 
   const totalDeductions = preLoanDeductions + advanceDeduction;
   const netSalary = Math.max(0, grossSalary - totalDeductions);
-  const deductionsBreakdown: { name: string; category: 'DEDUCTION'; amount: number; description?: string }[] = [];
-  if (statutoryDetails.epfDeduction > 0) {
-    deductionsBreakdown.push({ name: 'EPF Employee Contribution', category: 'DEDUCTION', amount: statutoryDetails.epfDeduction, description: statutoryDetails.epfRule });
-  }
-  if (statutoryDetails.esiDeduction > 0) {
-    deductionsBreakdown.push({ name: 'ESIC Employee Contribution', category: 'DEDUCTION', amount: statutoryDetails.esiDeduction, description: statutoryDetails.esiRule });
-  }
-  if (statutoryDetails.professionalTax > 0) {
-    deductionsBreakdown.push({ name: 'Professional Tax', category: 'DEDUCTION', amount: statutoryDetails.professionalTax });
-  }
+  const deductionsBreakdown: { name: string; category: 'DEDUCTION'; amount: number; description?: string }[] = configuredDeductionLines
+    .filter(line => line.amount > 0)
+    .map(line => ({
+      name: line.name,
+      category: 'DEDUCTION',
+      amount: line.amount,
+      description: line.description
+    }));
   if (lateDetails.deductionAmount > 0) {
     deductionsBreakdown.push({ name: 'Late Attendance Deduction', category: 'DEDUCTION', amount: lateDetails.deductionAmount, description: lateDetails.ruleApplied });
   }
@@ -1137,10 +1313,10 @@ export const calculateEmployeePayroll = (
     rewardEarnings: rewardDetails.totalRewardEarnings,
     grossSalary,
 
-    epfDeduction: statutoryDetails.epfDeduction,
-    esiDeduction: statutoryDetails.esiDeduction,
-    professionalTax: statutoryDetails.professionalTax,
-    statutoryDeductions: statutoryDetails.totalStatutory,
+    epfDeduction,
+    esiDeduction,
+    professionalTax,
+    statutoryDeductions: configuredDeductionTotal,
     advanceDeduction,
     lateAttendanceDeduction: lateDetails.deductionAmount,
     unpaidLeaveDeduction: leaveDeductionAmount,

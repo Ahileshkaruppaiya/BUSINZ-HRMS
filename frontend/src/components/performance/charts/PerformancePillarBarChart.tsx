@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, ChevronDown } from 'lucide-react';
+import { getMonthInfo } from '../../../utils/monthUtils';
 
 export interface MonthlyBarData {
   month: string;       // e.g. 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -30,17 +31,20 @@ const DEFAULT_MONTHS: MonthlyBarData[] = [
 
 export const PerformancePillarBarChart: React.FC<Props> = ({
   data = DEFAULT_MONTHS,
-  selectedMonth = 'September 2026',
+  selectedMonth,
   onSelectMonth,
   title = 'Performance Overview'
 }) => {
+  const currentMonth = selectedMonth || getMonthInfo().fullLabel;
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [timeFilter, setTimeFilter] = useState<'2026' | 'Last 6M' | 'This Month'>('2026');
 
-  // Active month is either currently hovered, or selected, or default to August / September (index 3 or 4)
-  const selectedIndex = data.findIndex(d => d.fullName.toLowerCase() === selectedMonth.toLowerCase());
-  const activeIndex = hoveredIndex !== null ? hoveredIndex : (selectedIndex !== -1 ? selectedIndex : 3);
-  const activeItem = data[activeIndex] || data[3];
+  // Active month is either currently hovered, or selected, or default to current month
+  const selectedIndex = data.findIndex(d => d.fullName.toLowerCase() === currentMonth.toLowerCase());
+  const fallbackIdx = data.findIndex(d => d.fullName.toLowerCase() === getMonthInfo().fullLabel.toLowerCase());
+  const defaultIdx = fallbackIdx !== -1 ? fallbackIdx : Math.max(0, data.length - 1);
+  const activeIndex = hoveredIndex !== null ? hoveredIndex : (selectedIndex !== -1 ? selectedIndex : defaultIdx);
+  const activeItem = data[activeIndex] || data[defaultIdx] || data[0];
 
   return (
     <div style={{

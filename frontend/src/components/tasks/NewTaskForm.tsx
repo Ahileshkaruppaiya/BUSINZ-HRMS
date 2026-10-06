@@ -456,7 +456,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
           <div>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Task Date *</label>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Task Date <span style={{ color: '#EF4444' }}>*</span></label>
             <input 
               type="date"
               value={taskDate}
@@ -482,7 +482,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
         </div>
 
         <div>
-          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Task Title *</label>
+          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Task Title <span style={{ color: '#EF4444' }}>*</span></label>
           <input 
             type="text"
             placeholder="e.g. Solar Tracker Mounting Structure Quality Inspection"
@@ -515,7 +515,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
           </div>
 
           <div>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Department *</label>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Department <span style={{ color: '#EF4444' }}>*</span></label>
             <select 
               value={department}
               onChange={e => handleDepartmentChange(e.target.value)}
@@ -531,7 +531,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Responsible Person *</label>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Responsible Person <span style={{ color: '#EF4444' }}>*</span></label>
               <span style={{ fontSize: '0.68rem', color: '#0E7490', fontWeight: 600 }}>From {department}</span>
             </div>
             <select 
@@ -564,7 +564,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '16px' }}>
           <div>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Priority *</label>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Priority <span style={{ color: '#EF4444' }}>*</span></label>
             <select 
               value={priority} 
               onChange={e => setPriority(e.target.value as any)}
@@ -591,7 +591,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
           </div>
 
           <div>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Due Date *</label>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Due Date <span style={{ color: '#EF4444' }}>*</span></label>
             <input 
               type="date"
               value={dueDate}
@@ -612,7 +612,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onTaskCreated, onCance
         </div>
 
         <div>
-          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Task Description *</label>
+          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Task Description <span style={{ color: '#EF4444' }}>*</span></label>
           <textarea 
             rows={4}
             placeholder="Provide operational requirements, fabrication specifications, site location details, or execution steps..."

@@ -372,14 +372,14 @@ export const LeaveManagement: React.FC<LeaveManagementProps> = ({ openApplyModal
       employeeName: l.employeeName,
       department: l.department,
       leaveType: l.leaveType,
-      startDate: l.startDate,
-      endDate: l.endDate,
+      startDate: formatDateDDMMYYYY(l.startDate),
+      endDate: formatDateDDMMYYYY(l.endDate),
       daysCount: l.daysCount,
       paidDaysCount: l.paidDaysCount ?? l.daysCount,
       unpaidDaysCount: l.unpaidDaysCount ?? 0,
       sandwichDays: l.sandwichDays ?? 0,
       status: l.status,
-      appliedDate: l.appliedDate || '-',
+      appliedDate: formatDateDDMMYYYY(l.appliedDate) || '-',
       approvedBy: l.approvedBy || '-',
       reason: l.reason || '-'
     }));

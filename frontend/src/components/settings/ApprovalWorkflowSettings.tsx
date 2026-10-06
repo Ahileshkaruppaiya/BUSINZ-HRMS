@@ -311,7 +311,7 @@ export const ApprovalWorkflowSettings: React.FC = () => {
             </div>
             <form onSubmit={handleAddStage} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Approver Role *</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Approver Role <span style={{ color: '#EF4444' }}>*</span></label>
                 <select
                   value={stageForm.role}
                   onChange={e => setStageForm({ ...stageForm, role: e.target.value })}
@@ -326,7 +326,7 @@ export const ApprovalWorkflowSettings: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Stage Title *</label>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '6px' }}>Stage Title <span style={{ color: '#EF4444' }}>*</span></label>
                 <input
                   type="text"
                   required
