@@ -23,7 +23,7 @@ import {
   Plus
 } from 'lucide-react';
 import { toNum } from '../../utils/numbers';
-import { formatDateDDMMYYYY, normalizeToYYYYMMDD } from '../../utils/dateUtils';
+import { formatDateDDMMYYYY, normalizeToYYYYMMDD, formatTimeDisplay } from '../../utils/dateUtils';
 import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
 import { downloadPagarBookMusterRollExcel } from '../../utils/pagarBookMusterRollExporter';
 import { ExportDropdown } from '../common/ExportDropdown';
@@ -319,11 +319,34 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
     return formatDateDDMMYYYY(isoStr);
   };
 
-  // Helper to parse time string like "09:00 AM", "14:30", "2:15 PM" to minutes from midnight
+  // Helper to parse time string like "09:00 AM", "14:30", "2:15 PM" or ISO strings to minutes from midnight
   const parseTimeToMinutes = (timeStr?: string | null): number => {
     if (!timeStr) return 0;
     const clean = String(timeStr).trim();
-    if (!clean || clean === '--:--') return 0;
+    if (!clean || clean === '--:--' || clean === '-' || clean === '—' || clean === 'N/A') return 0;
+
+    // Handle full ISO datetime string (e.g. 2026-10-06T12:48:30.277+00:00)
+    if (clean.includes('T') || clean.includes('Z') || (clean.includes('-') && clean.includes(':'))) {
+      let parsed: Date;
+      if (clean.endsWith('Z') || clean.includes('+') || /-[0-9]{2}:?[0-9]{2}$/.test(clean)) {
+        parsed = new Date(clean);
+      } else {
+        parsed = new Date(clean.includes('T') ? (clean.endsWith('Z') ? clean : clean + 'Z') : clean.replace(/\s+/, 'T') + 'Z');
+      }
+      if (!isNaN(parsed.getTime())) {
+        const istStr = parsed.toLocaleTimeString('en-US', {
+          timeZone: 'Asia/Kolkata',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        const parts = istStr.split(':').map(Number);
+        let h = parts[0];
+        if (h === 24) h = 0;
+        return h * 60 + parts[1];
+      }
+    }
+
     const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
     if (!match) return 0;
     let hours = parseInt(match[1], 10);
@@ -627,8 +650,8 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
           name: r.employeeName,
           dept: r.department,
           date: formatDateDisplay(r.date),
-          checkIn: r.checkIn || '--:--',
-          checkOut: r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? r.checkOut : 'In Progress',
+          checkIn: formatTimeDisplay(r.checkIn, '--:--'),
+          checkOut: r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? formatTimeDisplay(r.checkOut, '--:--') : 'In Progress',
           workingHours: dur.isPending ? 'In Progress' : dur.text,
           verification: isField ? 'Field Visit' : isWfo ? 'Work From Office (WFO)' : isLate ? 'Late Punch' : (r.method || 'Face Recognition')
         });
@@ -667,7 +690,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
           dept: r.department,
           date: formatDateDisplay(r.date),
           shiftTime: shift.startTime,
-          checkIn: r.checkIn || '--:--',
+          checkIn: formatTimeDisplay(r.checkIn, '--:--'),
           delay: diff > 0 ? (h > 0 ? `+${h}h ${m}m` : `+${m} mins`) : 'On Time',
           status: diff > shift.gracePeriodMins ? `Grace Exceeded (+${diff - shift.gracePeriodMins}m)` : (diff > 0 ? 'Within Grace' : 'On Time')
         });
@@ -706,8 +729,8 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
           dept: r.department,
           date: formatDateDisplay(r.date),
           shiftTiming: `${shift.startTime} - ${shift.endTime}`,
-          checkIn: r.checkIn || '--:--',
-          checkOut: r.checkOut,
+          checkIn: formatTimeDisplay(r.checkIn, '--:--'),
+          checkOut: formatTimeDisplay(r.checkOut, '--:--'),
           earlyBy: diff > 0 ? (h > 0 ? `${h}h ${m}m early` : `${m} mins early`) : 'Under Min Hours',
           workingHours: dur.text
         });
@@ -747,8 +770,8 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
           name: r.employeeName,
           dept: r.department,
           date: formatDateDisplay(r.date),
-          checkIn: r.checkIn || '--:--',
-          checkOut: r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? r.checkOut : 'In Progress',
+          checkIn: formatTimeDisplay(r.checkIn, '--:--'),
+          checkOut: r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? formatTimeDisplay(r.checkOut, '--:--') : 'In Progress',
           workingHours: dur.isPending ? 'In Progress' : dur.text,
           mode: isField ? 'Field Visit' : isWfo ? 'Work From Office (WFO)' : 'Work From Home'
         });
@@ -1336,10 +1359,10 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                         </td>
                         <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
                         <td style={{ padding: '10px 14px', color: isField ? '#0E7490' : isWfo ? '#4338CA' : isLate ? '#D97706' : '#15803d', fontWeight: 700 }}>
-                          {r.checkIn || '--:--'}
+                          {formatTimeDisplay(r.checkIn, '--:--')}
                         </td>
                         <td style={{ padding: '10px 14px', color: '#475569' }}>
-                          {r.checkOut && r.checkOut !== '--:--' ? r.checkOut : 'In Progress'}
+                          {r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? formatTimeDisplay(r.checkOut, '--:--') : 'In Progress'}
                         </td>
                         <td style={{ padding: '10px 14px', fontWeight: 700, color: dur.isPending ? '#0284c7' : '#0f172a' }}>
                           {dur.isPending ? 'In Progress' : dur.text}
@@ -1426,7 +1449,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                         </td>
                         <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
                         <td style={{ padding: '10px 14px', color: '#64748b' }}>{shift.startTime}</td>
-                        <td style={{ padding: '10px 14px', color: '#d97706', fontWeight: 700 }}>{r.checkIn || '--:--'}</td>
+                        <td style={{ padding: '10px 14px', color: '#d97706', fontWeight: 700 }}>{formatTimeDisplay(r.checkIn, '--:--')}</td>
                         <td style={{ padding: '10px 14px', color: '#b45309', fontWeight: 700 }}>
                           {diff > 0 ? (h > 0 ? `+${h}h ${m}m` : `+${m} mins`) : 'On Time'}
                         </td>
@@ -1502,8 +1525,8 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                         </td>
                         <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
                         <td style={{ padding: '10px 14px', color: '#64748b' }}>{shift.startTime} - {shift.endTime}</td>
-                        <td style={{ padding: '10px 14px', color: '#0f172a', fontWeight: 600 }}>{r.checkIn || '--:--'}</td>
-                        <td style={{ padding: '10px 14px', color: '#0e7490', fontWeight: 700 }}>{r.checkOut}</td>
+                        <td style={{ padding: '10px 14px', color: '#0f172a', fontWeight: 600 }}>{formatTimeDisplay(r.checkIn, '--:--')}</td>
+                        <td style={{ padding: '10px 14px', color: '#0e7490', fontWeight: 700 }}>{formatTimeDisplay(r.checkOut, '--:--')}</td>
                         <td style={{ padding: '10px 14px', color: '#0891b2', fontWeight: 700 }}>
                           {diff > 0 ? (h > 0 ? `${h}h ${m}m early` : `${m} mins early`) : 'Under Min Hours'}
                         </td>
@@ -1571,10 +1594,10 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                         </td>
                         <td style={{ padding: '10px 14px', fontWeight: 600 }}>{formatDateDisplay(r.date)}</td>
                         <td style={{ padding: '10px 14px', color: isField ? '#0E7490' : isWfo ? '#4338CA' : '#6D28D9', fontWeight: 700 }}>
-                          {r.checkIn || '--:--'}
+                          {formatTimeDisplay(r.checkIn, '--:--')}
                         </td>
                         <td style={{ padding: '10px 14px', color: '#475569' }}>
-                          {r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? r.checkOut : 'In Progress'}
+                          {r.checkOut && r.checkOut !== '--:--' && !r.checkOut.toLowerCase().includes('progress') ? formatTimeDisplay(r.checkOut, '--:--') : 'In Progress'}
                         </td>
                         <td style={{ padding: '10px 14px', fontWeight: 700, color: dur.isPending ? '#0284c7' : '#0f172a' }}>
                           {dur.isPending ? 'In Progress' : dur.text}

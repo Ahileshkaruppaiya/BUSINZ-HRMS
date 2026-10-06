@@ -192,6 +192,7 @@ import {
   evaluateShiftAttendance,
   ShiftWindowEvaluation
 } from '../services/shiftAttendanceEngine';
+import { formatTimeDisplay, formatDateDDMMYYYY } from '../utils/dateUtils';
 
 export const calculateDistanceMeters = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
   const R = 6371e3; // metres
@@ -1131,48 +1132,12 @@ const HRMSContext = createContext<HRMSContextType | undefined>(undefined);
 
 /**
  * Attendance check_in / check_out are TIMESTAMPTZ columns. Supabase returns them in UTC
- * (e.g. "2026-10-06T04:00:00+00:00"). Convert to the user's local wall-clock "HH:MM"
- * instead of slicing the raw UTC string (which showed IST punches 5h30m behind).
+ * (e.g. "2026-10-06T12:48:30+00:00"). Convert strictly to Indian Standard Time (IST) 12-hour AM/PM format.
  */
 const dbTimestampToLocalHHMM = (value?: string | null): string | null => {
   if (!value) return null;
-  const raw = String(value).trim();
-  if (!raw || raw === '--:--') return null;
-
-  // Case 1: Already formatted 12-hour AM/PM string ("02:47 PM", "9:17 AM")
-  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
-  if (ampmMatch) {
-    const hh = ampmMatch[1].padStart(2, '0');
-    const mm = ampmMatch[2];
-    const mer = ampmMatch[3].toUpperCase();
-    return `${hh}:${mm} ${mer}`;
-  }
-
-  // Case 2: Full ISO timestamp or datetime string from PostgreSQL TIMESTAMPTZ (stored in UTC)
-  if (raw.includes('T') || raw.includes('Z') || /^\d{4}-\d{2}-\d{2}/.test(raw)) {
-    const parsed = new Date(raw.includes('T') ? raw : raw.replace(/\s+/, 'T'));
-    if (!isNaN(parsed.getTime())) {
-      return parsed.toLocaleTimeString('en-US', {
-        timeZone: 'Asia/Kolkata',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    }
-  }
-
-  // Case 3: 24-hour time string ("14:47" or "09:17" or "14:47:00")
-  const hhmmMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-  if (hhmmMatch) {
-    let hours = parseInt(hhmmMatch[1], 10);
-    const mins = hhmmMatch[2];
-    const mer = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    if (hours === 0) hours = 12;
-    return `${String(hours).padStart(2, '0')}:${mins} ${mer}`;
-  }
-
-  return raw;
+  const formatted = formatTimeDisplay(value, '');
+  return formatted && formatted !== '—' && formatted !== '--:--' ? formatted : null;
 };
 
 /** Convert a local date + wall-clock time ("HH:MM", "HH:MM:SS" or "hh:mm AM") into a UTC ISO instant for TIMESTAMPTZ storage in IST (+05:30). */

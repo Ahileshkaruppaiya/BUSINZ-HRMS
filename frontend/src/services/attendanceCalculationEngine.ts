@@ -17,15 +17,37 @@ import {
  */
 export function parseTimeToMinutes(timeStr?: string | null): number | null {
   if (!timeStr || typeof timeStr !== 'string') return null;
-  const clean = timeStr.trim().toUpperCase();
-  if (!clean || clean === '--:--' || clean === '-' || clean === 'N/A') return null;
+  const clean = timeStr.trim();
+  if (!clean || clean === '--:--' || clean === '-' || clean === 'N/A' || clean === '—') return null;
 
-  const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/);
+  // Handle full ISO datetime string (e.g. 2026-10-06T12:48:30.277+00:00)
+  if (clean.includes('T') || clean.includes('Z') || (clean.includes('-') && clean.includes(':'))) {
+    let parsed: Date;
+    if (clean.endsWith('Z') || clean.includes('+') || /-[0-9]{2}:?[0-9]{2}$/.test(clean)) {
+      parsed = new Date(clean);
+    } else {
+      parsed = new Date(clean.includes('T') ? (clean.endsWith('Z') ? clean : clean + 'Z') : clean.replace(/\s+/, 'T') + 'Z');
+    }
+    if (!isNaN(parsed.getTime())) {
+      const istStr = parsed.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      const parts = istStr.split(':').map(Number);
+      let h = parts[0];
+      if (h === 24) h = 0;
+      return h * 60 + parts[1];
+    }
+  }
+
+  const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
   if (!match) return null;
 
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
-  const meridian = match[3];
+  const meridian = match[3]?.toUpperCase();
 
   if (meridian) {
     if (meridian === 'PM' && hours < 12) hours += 12;

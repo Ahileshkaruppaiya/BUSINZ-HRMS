@@ -31,13 +31,23 @@ import {
 } from 'lucide-react';
 import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
 import { downloadPagarBookMusterRollExcel } from '../../utils/pagarBookMusterRollExporter';
-import { normalizeToYYYYMMDD, formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { normalizeToYYYYMMDD, formatDateDDMMYYYY, formatTimeDisplay } from '../../utils/dateUtils';
 import { toNum } from '../../utils/numbers';
 
 const parseTimeToMinutes = (timeStr?: string | null): number => {
   if (!timeStr) return 0;
   const clean = String(timeStr).trim();
-  if (!clean || clean === '--:--') return 0;
+  if (!clean || clean === '--:--' || clean === '-' || clean === '—') return 0;
+  if (clean.includes('T') || clean.includes('Z') || (clean.includes('-') && clean.includes(':'))) {
+    const d = new Date(clean.endsWith('Z') || clean.includes('+') ? clean : clean + 'Z');
+    if (!isNaN(d.getTime())) {
+      const istStr = d.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+      const parts = istStr.split(':').map(Number);
+      let h = parts[0];
+      if (h === 24) h = 0;
+      return h * 60 + parts[1];
+    }
+  }
   const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
   if (!match) return 0;
   let hours = parseInt(match[1], 10);
@@ -392,8 +402,8 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
 
       return {
         status: code,
-        checkIn: attRec.checkIn || '--:--',
-        checkOut: attRec.checkOut && attRec.checkOut !== '--:--' ? attRec.checkOut : (attRec.checkIn ? 'In Progress' : '--:--'),
+        checkIn: formatTimeDisplay(attRec.checkIn, '--:--'),
+        checkOut: attRec.checkOut && attRec.checkOut !== '--:--' ? formatTimeDisplay(attRec.checkOut, '--:--') : (attRec.checkIn ? 'In Progress' : '--:--'),
         workingHours: whDisplay,
         shift: employee.workShift || shifts[0]?.shiftName || 'Shift 1 (09:00 AM - 06:00 PM)',
         location: attRec.location?.address || employee.address || 'Main Campus',
@@ -1116,8 +1126,8 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
                               {cfg.code} - {cfg.label}
                             </span>
                           </td>
-                          <td style={{ padding: '10px 12px', color: '#334155' }}>{att.checkIn}</td>
-                          <td style={{ padding: '10px 12px', color: '#334155' }}>{att.checkOut}</td>
+                          <td style={{ padding: '10px 12px', color: '#334155' }}>{formatTimeDisplay(att.checkIn, '--:--')}</td>
+                          <td style={{ padding: '10px 12px', color: '#334155' }}>{formatTimeDisplay(att.checkOut, '--:--')}</td>
                           <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A' }}>{att.workingHours}</td>
                           <td style={{ padding: '10px 12px', color: '#64748B' }}>{att.remarks}</td>
                         </tr>

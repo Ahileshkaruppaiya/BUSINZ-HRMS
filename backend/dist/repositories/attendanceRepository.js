@@ -3,6 +3,39 @@ import { employeeRepository } from './employeeRepository.js';
 import { shiftRepository } from './shiftRepository.js';
 import { evaluateBackendShiftAttendance } from '../services/shiftAttendanceEngine.js';
 const todayIso = new Date().toISOString().split('T')[0];
+const formatIsoToIst12Hour = (value) => {
+    if (!value)
+        return undefined;
+    const raw = String(value).trim();
+    if (!raw || raw === '--:--' || raw === '—' || raw === '-')
+        return undefined;
+    if (raw.includes('T') || raw.includes('Z') || (raw.includes('-') && raw.includes(':'))) {
+        const d = new Date(raw.endsWith('Z') || raw.includes('+') ? raw : raw + 'Z');
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleTimeString('en-US', {
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+    }
+    const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+    if (ampmMatch) {
+        return `${ampmMatch[1].padStart(2, '0')}:${ampmMatch[2]} ${ampmMatch[3].toUpperCase()}`;
+    }
+    const hhmm = raw.match(/^(\d{1,2}):(\d{2})/);
+    if (hhmm) {
+        let h = parseInt(hhmm[1], 10);
+        const m = hhmm[2];
+        const mer = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        if (h === 0)
+            h = 12;
+        return `${String(h).padStart(2, '0')}:${m} ${mer}`;
+    }
+    return raw;
+};
 export class AttendanceRepository {
     async getAttendanceLogs(filters) {
         if (!isRealSupabaseConfigured()) {
@@ -27,8 +60,8 @@ export class AttendanceRepository {
                     date: d.date,
                     shiftId: d.shift_id,
                     shiftDate: d.shift_date || d.date,
-                    checkIn: d.check_in,
-                    checkOut: d.check_out,
+                    checkIn: formatIsoToIst12Hour(d.check_in),
+                    checkOut: formatIsoToIst12Hour(d.check_out),
                     workingHours: Number(d.working_hours) || 0,
                     status: d.status || 'Present',
                     lateStatus: d.late_status || 'On Time',
@@ -55,8 +88,8 @@ export class AttendanceRepository {
                         shiftId: d.shiftId || d.shift_id,
                         shiftDate: d.shiftDate || d.date || todayIso,
                         shiftName: d.shiftName || d.shift_name,
-                        checkIn: d.checkIn || d.check_in,
-                        checkOut: d.checkOut || d.check_out,
+                        checkIn: formatIsoToIst12Hour(d.checkIn || d.check_in),
+                        checkOut: formatIsoToIst12Hour(d.checkOut || d.check_out),
                         workingHours: Number(d.workingHours || d.working_hours) || 0,
                         status: d.status || 'Present',
                         lateStatus: d.lateStatus || d.late_status || 'On Time',
@@ -119,7 +152,12 @@ export class AttendanceRepository {
     }
     async recordPunch(punch) {
         const punchNow = punch.timestamp ? new Date(punch.timestamp) : new Date();
-        const timeStr = punchNow.toTimeString().slice(0, 5);
+        const timeStr = punchNow.toLocaleTimeString('en-US', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
         const evalResult = await this.getShiftAttendanceStatus(punch.employeeId, punchNow);
         if (punch.type === 'IN') {
             if (!evalResult.canCheckIn) {

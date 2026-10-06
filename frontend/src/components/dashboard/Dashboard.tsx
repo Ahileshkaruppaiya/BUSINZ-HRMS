@@ -6,7 +6,7 @@ import { AttendanceCategoryModal, AttendanceCategoryType } from './AttendanceCat
 import { TodayAttendanceCard } from './TodayAttendanceCard';
 import { EmployeeMonthlyAttendanceCard } from './EmployeeMonthlyAttendanceCard';
 import { Employee, LeaveRequest, TaskItem, HolidayItem } from '../../types/hrms';
-import { formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { formatDateDDMMYYYY, formatTimeDisplay } from '../../utils/dateUtils';
 import { getMonthInfo, getLocalDateStr, isDateInMonth, countLeaveDaysInMonth } from '../../utils/monthUtils';
 import { isAttendanceExemptEmployee } from '../../data/hrmsInitialData';
 import { 
@@ -120,7 +120,7 @@ export const Dashboard: React.FC = () => {
     const cleanShiftName = rawShiftName.includes('(') ? rawShiftName.split('(')[0].trim() : rawShiftName;
 
     // Today punch time (Real data only: '--:--' if not punched in)
-    const checkInTime = todayRecord?.checkIn || (todayFace ? todayFace.timestamp.split(' ')[1] : '--:--');
+    const checkInTime = formatTimeDisplay(todayRecord?.checkIn || todayFace?.timestamp, '--:--');
     const todayStatus = todayRecord?.status || (todayFace ? 'Present' : 'Not Marked');
 
     return {

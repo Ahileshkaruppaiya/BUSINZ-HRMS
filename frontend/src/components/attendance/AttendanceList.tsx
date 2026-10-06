@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { AttendanceRecord } from '../../types/hrms';
-import { formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { formatDateDDMMYYYY, formatTimeDisplay } from '../../utils/dateUtils';
 import { 
   CalendarCheck, 
   MapPin, 
@@ -760,8 +760,8 @@ export const AttendanceList: React.FC<AttendanceListProps> = ({ onBackToInsights
                         <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0F172A' }}>{rec.employeeName}</td>
                         <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>{formatDateDDMMYYYY(rec.date)}</td>
                         <td style={{ padding: '12px 16px' }}>{rec.shiftName || shifts[0]?.shiftName || 'Shift 1 (09:00 AM - 06:00 PM)'}</td>
-                        <td style={{ padding: '12px 16px', fontWeight: 700, color: rec.checkIn ? '#16A34A' : '#DC2626' }}>{rec.checkIn || 'Missing'}</td>
-                        <td style={{ padding: '12px 16px', fontWeight: 700, color: rec.checkOut ? '#16A34A' : '#DC2626' }}>{rec.checkOut || 'Missing'}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 700, color: rec.checkIn ? '#16A34A' : '#DC2626' }}>{formatTimeDisplay(rec.checkIn, 'Missing')}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 700, color: rec.checkOut ? '#16A34A' : '#DC2626' }}>{formatTimeDisplay(rec.checkOut, 'Missing')}</td>
                         <td style={{ padding: '12px 16px', fontWeight: 700 }}>{rec.workingHours || 0} hrs</td>
                         <td style={{ padding: '12px 16px' }}>{rec.otHours ? `+${rec.otHours}h` : '-'}</td>
                         <td style={{ padding: '12px 16px' }}>

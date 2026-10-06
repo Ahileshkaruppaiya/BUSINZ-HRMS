@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { useHRMS } from '../../context/HRMSContext';
 import { AttendanceRecord, AttendanceAuditLog } from '../../types/hrms';
-import { formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { formatDateDDMMYYYY, formatTimeDisplay } from '../../utils/dateUtils';
 import { AttendanceDetailsDrawer } from './AttendanceDetailsDrawer';
 import { AttendanceCorrectionModal } from './AttendanceCorrectionModal';
 import { AttendanceCalendarView } from './AttendanceCalendarView';
@@ -257,10 +257,10 @@ export const AttendanceManagementModule: React.FC = () => {
       employeeId: r.employeeId,
       employeeName: r.employeeName,
       department: r.department || '',
-      date: r.date,
+      date: formatDateDDMMYYYY(r.date),
       status: r.status,
-      checkIn: r.checkIn || '-',
-      checkOut: r.checkOut || '-',
+      checkIn: formatTimeDisplay(r.checkIn, '-'),
+      checkOut: formatTimeDisplay(r.checkOut, '-'),
       workingHours: r.workingHours || '-',
       otHours: r.approvedOtHours || r.otHours || 0
     }));
@@ -790,7 +790,7 @@ export const AttendanceManagementModule: React.FC = () => {
                             <td>
                               {rec.checkIn ? (
                                 <div>
-                                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F172A' }}>{rec.checkIn}</span>
+                                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F172A' }}>{formatTimeDisplay(rec.checkIn)}</span>
                                   {rec.lateStatus && rec.lateStatus !== 'On Time' && (
                                     <span style={{ display: 'block', fontSize: '10.5px', color: '#D97706', fontWeight: 600 }}>
                                       {rec.lateStatus}
@@ -810,7 +810,7 @@ export const AttendanceManagementModule: React.FC = () => {
                             {/* Check Out */}
                             <td>
                               {rec.checkOut ? (
-                                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F172A' }}>{rec.checkOut}</span>
+                                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F172A' }}>{formatTimeDisplay(rec.checkOut)}</span>
                               ) : rec.status === 'Present' ? (
                                 <span style={{ color: '#D97706', fontWeight: 600, fontSize: '12px' }}>In Progress</span>
                               ) : (

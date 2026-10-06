@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Employee, AttendanceRecord } from '../../types/hrms';
 import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
+import { formatTimeDisplay, formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { ExportDropdown } from '../common/ExportDropdown';
 import { isAttendanceExemptEmployee } from '../../data/hrmsInitialData';
 import { 
@@ -146,8 +147,8 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
     return {
       employee: emp,
       attendance: att,
-      checkIn: att?.checkIn || '—',
-      checkOut: att?.checkOut || '—',
+      checkIn: formatTimeDisplay(att?.checkIn, '—'),
+      checkOut: formatTimeDisplay(att?.checkOut, '—'),
       hours: att?.workingHours ? `${att.workingHours} hrs` : '0 hrs',
       statusLabel,
       statusType,
@@ -511,12 +512,12 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
 
                       {/* Check-In */}
                       <td style={{ padding: '12px 14px', fontWeight: 600, color: item.checkIn !== '—' ? '#0f172a' : '#94a3b8' }}>
-                        {item.checkIn}
+                        {formatTimeDisplay(item.checkIn, '—')}
                       </td>
 
                       {/* Check-Out */}
                       <td style={{ padding: '12px 14px', fontWeight: 600, color: item.checkOut !== '—' ? '#0f172a' : '#94a3b8' }}>
-                        {item.checkOut}
+                        {formatTimeDisplay(item.checkOut, '—')}
                       </td>
 
                       {/* Hours */}
