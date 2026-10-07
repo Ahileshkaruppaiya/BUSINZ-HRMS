@@ -410,12 +410,7 @@ export const EmployeeDetailPerformanceView: React.FC<Props> = ({
       {/* ======================================================== */}
       {/* TWO-COLUMN ANALYTICS GRID (Matching Reference Layout)     */}
       {/* ======================================================== */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1.15fr)',
-        gap: '20px',
-        alignItems: 'stretch'
-      }}>
+      <div className="performance-analytics-grid">
         {/* Left Column: Monthly Trend Pillar Bar Chart */}
         <div style={{ minHeight: '340px' }}>
           <PerformancePillarBarChart
@@ -466,7 +461,7 @@ export const EmployeeDetailPerformanceView: React.FC<Props> = ({
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
       }}>
         {/* Tabs Header */}
-        <div style={{
+        <div className="tab-bar-scrollable" style={{
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
@@ -544,7 +539,7 @@ export const EmployeeDetailPerformanceView: React.FC<Props> = ({
         {/* TAB 1: MY KPIS */}
         {activeTab === 'kpi' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
               <div>
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                   Assigned KPIs &amp; Performance Objectives

@@ -42,7 +42,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
   const [isMobile, setIsMobile] = useState<boolean>(() => 
     typeof window !== 'undefined' ? window.innerWidth <= 1024 : false
   );
-  const { activeModule, setActiveModule, hasPermission, currentUser } = useHRMS();
+  const { activeModule, setActiveModule, hasPermission, currentUser, switchRole } = useHRMS();
 
   // AI Assistant restricted strictly to HR / CEO roles, and ONLY rendered on the CEO/HR Dashboard page
   const isHrOrCeo = isCeoOrHrUser(currentUser);
@@ -50,6 +50,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ onLogout }) => {
 
   // Quick Add modal states
   const [quickAddModal, setQuickAddModal] = useState<'employee' | 'leave' | 'wfh' | 'task' | 'expense' | 'overtime' | 'shift' | 'advance_salary' | null>(null);
+
+  useEffect(() => {
+    (window as any).__setModule = (mod: string) => setActiveModule(mod as any);
+    (window as any).__switchRole = (role: string) => switchRole(role as any);
+  }, [setActiveModule, switchRole]);
 
   // Monitor viewport resize for responsive mobile detection
   useEffect(() => {

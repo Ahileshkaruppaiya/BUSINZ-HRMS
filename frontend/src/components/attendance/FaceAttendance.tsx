@@ -717,16 +717,15 @@ export const FaceAttendance: React.FC = () => {
       )}
 
       {/* Main 2-Column Layout Matching Screenshot */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '24px', alignItems: 'start' }}>
+      <div className="face-attendance-grid">
         
         {/* LEFT COLUMN: ATTENDANCE SCANNER CARD */}
-        <div style={{
+        <div className="face-attendance-scanner-card" style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
           border: '1px solid #e2e8f0',
           borderTop: '4px solid #0e7490',
           boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
-          padding: '36px 24px 28px',
           textAlign: 'center'
         }}>
           {/* CAMERA VIEWFINDER WITH 4 TEAL CORNER BRACKETS */}
@@ -1002,13 +1001,11 @@ export const FaceAttendance: React.FC = () => {
         </div>
 
         {/* RIGHT COLUMN: TODAY'S ACTIVITY CARD MATCHING SCREENSHOT */}
-        <div style={{
+        <div className="face-attendance-activity-card" style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
           border: '1px solid #e2e8f0',
           boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
-          padding: '24px',
-          minHeight: '480px',
           display: 'flex',
           flexDirection: 'column'
         }}>
