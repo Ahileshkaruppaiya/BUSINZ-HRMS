@@ -161,6 +161,16 @@ export const PayrollSettings: React.FC = () => {
   const earnings = payrollSettingsConfig.components.filter(c => c.type === 'EARNING');
   const deductions = payrollSettingsConfig.components.filter(c => c.type === 'DEDUCTION');
 
+  const getCalculationDetails = (comp: SalaryComponentConfig) => {
+    if (comp.calculationMethod === 'FIXED_AMOUNT') {
+      return formatCurrency(comp.defaultValue);
+    }
+    if (comp.calculationMethod === 'PERCENTAGE') {
+      return `${comp.defaultValue}% of ${comp.percentageBase || (comp.type === 'EARNING' ? 'CTC' : 'Gross')}`;
+    }
+    return `Formula: ${comp.formula || '-'}`;
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Integrated Navigation & Actions Bar */}
@@ -267,9 +277,7 @@ export const PayrollSettings: React.FC = () => {
                       <td><code>{comp.code}</code></td>
                       <td><span className="status-pill eta">{comp.calculationMethod.replace(/_/g, ' ')}</span></td>
                       <td>
-                        {comp.calculationMethod === 'FIXED_AMOUNT' && formatCurrency(comp.defaultValue)}
-                        {comp.calculationMethod === 'PERCENTAGE' && `${comp.defaultValue}% of ${comp.percentageBase || 'CTC'}`}
-                        {comp.calculationMethod === 'FORMULA' && `Formula: ${comp.formula}`}
+                        {getCalculationDetails(comp)}
                       </td>
                       <td>
                         <span className={`status-pill ${comp.active ? 'approved' : 'overdue'}`}>
@@ -349,9 +357,9 @@ export const PayrollSettings: React.FC = () => {
                       <td><code>{comp.code}</code></td>
                       <td><span className="status-pill eta">{comp.calculationMethod.replace(/_/g, ' ')}</span></td>
                       <td>
-                        {comp.code === 'EPF' ? (
+                        {comp.code === 'EPF' && comp.calculationMethod !== 'FORMULA' ? (
                           <span style={{ fontWeight: 600, color: '#0F172A' }}>12% of Base (Basic + DA + Conveyance)</span>
-                        ) : comp.code === 'ESIC' ? (
+                        ) : comp.code === 'ESIC' && comp.calculationMethod !== 'FORMULA' ? (
                           <span style={{ fontWeight: 600, color: '#0F172A' }}>0.75% of Gross (wage ceiling ₹21,000.00)</span>
                         ) : (
                           <>

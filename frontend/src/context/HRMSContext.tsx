@@ -5468,7 +5468,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const approveLeave = (id: string, approvedBy: string) => {
-    const updatedLeaves = leaveRequests.map(l => {
+    setLeaveRequests(prevLeaves => {
+      const updatedLeaves = prevLeaves.map(l => {
       if (l.id === id) {
         const isWfh = l.leaveType === 'Work From Home' || 
           (l.leaveType && l.leaveType.toLowerCase().includes('work from home')) ||
@@ -5554,16 +5555,17 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { ...l, status: 'Approved' as const, approvedBy };
       }
       return l;
+      });
+
+      try {
+        localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(updatedLeaves));
+      } catch {}
+      supabaseDirect.saveCompanySetting('leave_requests_data', updatedLeaves).catch(() => {});
+      return updatedLeaves;
     });
 
-    setLeaveRequests(updatedLeaves);
-    try {
-      localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(updatedLeaves));
-    } catch {}
-    supabaseDirect.saveCompanySetting('leave_requests_data', updatedLeaves).catch(() => {});
-
     if (id.length === 36) {
-      supabaseDirect.updateLeaveRequestStatus(id, 'Approved');
+      supabaseDirect.updateLeaveRequestStatus(id, 'Approved', approvedBy);
     }
 
     addNotification({
@@ -5575,7 +5577,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const rejectLeave = (id: string, approvedBy: string, comment?: string) => {
-    const updatedLeaves = leaveRequests.map(l => {
+    setLeaveRequests(prevLeaves => {
+      const updatedLeaves = prevLeaves.map(l => {
       if (l.id === id) {
         const isWfh = l.leaveType === 'Work From Home' || 
           (l.leaveType && l.leaveType.toLowerCase().includes('work from home')) ||
@@ -5590,16 +5593,17 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { ...l, status: 'Rejected' as const, approvedBy, comment };
       }
       return l;
+      });
+
+      try {
+        localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(updatedLeaves));
+      } catch {}
+      supabaseDirect.saveCompanySetting('leave_requests_data', updatedLeaves).catch(() => {});
+      return updatedLeaves;
     });
 
-    setLeaveRequests(updatedLeaves);
-    try {
-      localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(updatedLeaves));
-    } catch {}
-    supabaseDirect.saveCompanySetting('leave_requests_data', updatedLeaves).catch(() => {});
-
     if (id.length === 36) {
-      supabaseDirect.updateLeaveRequestStatus(id, 'Rejected');
+      supabaseDirect.updateLeaveRequestStatus(id, 'Rejected', approvedBy);
     }
 
     addNotification({
@@ -8256,15 +8260,39 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         l.leaveType,
         l.startDate,
         l.endDate,
-        l.reason || '',
-        l.status || 'Pending'
+        l.reason || ''
       ].join('|').toLowerCase();
+      const leaveStatusRank = (status?: LeaveRequest['status']) => {
+        if (status === 'Approved') return 2;
+        if (status === 'Rejected') return 2;
+        return 1;
+      };
+      const mergeLeaveRecord = (dbLeave: LeaveRequest, savedLeave?: LeaveRequest): LeaveRequest => {
+        if (!savedLeave) return dbLeave;
+        const savedIsNewerDecision = leaveStatusRank(savedLeave.status) > leaveStatusRank(dbLeave.status);
+        if (savedIsNewerDecision) {
+          if (dbLeave.id && dbLeave.id.length === 36 && savedLeave.status !== 'Pending') {
+            supabaseDirect.updateLeaveRequestStatus(dbLeave.id, savedLeave.status, savedLeave.approvedBy).catch(() => {});
+          }
+          return {
+            ...dbLeave,
+            ...savedLeave,
+            id: dbLeave.id || savedLeave.id
+          };
+        }
+        return {
+          ...savedLeave,
+          ...dbLeave,
+          approvedBy: dbLeave.approvedBy || savedLeave.approvedBy,
+          comment: dbLeave.comment || savedLeave.comment
+        };
+      };
 
       if (Array.isArray(rawLeaves) && rawLeaves.length > 0) {
         const mappedLeaves = rawLeaves.map((l: any) => {
           const emp = employees.find(e => e.id === l.employee_id || e.employeeId === l.employee?.employee_id || e.employeeId === l.employee_id);
           const fullName = l.employee ? `${l.employee.first_name || ''} ${l.employee.last_name || ''}`.trim() : (emp ? `${emp.firstName} ${emp.lastName}` : 'Staff');
-          return {
+          const mappedLeave: LeaveRequest = {
             id: l.id,
             employeeId: l.employee?.employee_id || emp?.employeeId || l.employee_id,
             employeeName: fullName || 'Staff',
@@ -8279,6 +8307,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             approvedBy: l.approved_by,
             comment: l.comment
           };
+          const savedMatch = savedLeaveRequests.find((saved: LeaveRequest) => (
+            String(saved.id) === String(mappedLeave.id) || leaveKey(saved) === leaveKey(mappedLeave)
+          ));
+          return mergeLeaveRecord(mappedLeave, savedMatch);
         });
         const savedOnlyLeaves = savedLeaveRequests.filter((l: LeaveRequest) => (
           l?.id &&

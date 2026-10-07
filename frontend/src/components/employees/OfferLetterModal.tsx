@@ -6,6 +6,7 @@ import { useHRMS } from '../../context/HRMSContext';
 import { downloadElementAsPDF } from '../../utils/exportUtils';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { formatCurrency, toNum } from '../../utils/numbers';
+import { calculateSalaryBreakdown } from '../../services/policyEngine';
 import {
   AuthorizedSignatory,
   CompanyFooter,
@@ -67,7 +68,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
   onClose,
   initialEmployee
 }) => {
-  const { employees, updateEmployee, currentUser, businessSettings, companyInfo, companyBranches } = useHRMS();
+  const { employees, updateEmployee, currentUser, businessSettings, companyInfo, companyBranches, payrollSettingsConfig } = useHRMS();
   const documentProfile = useMemo(
     () => buildCompanyDocumentProfile(companyInfo, businessSettings, companyBranches),
     [companyInfo, businessSettings, companyBranches]
@@ -113,12 +114,31 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
   const currentEmployee = employees.find(e => e.id === selectedEmpId) || initialEmployee || employees[0];
   const currentTemplate = templates.find(t => t.id === selectedTemplateId) || templates[0];
 
-  const basicPay = toNum(currentEmployee?.basicSalary);
-  const allowanceRows = Object.entries(currentEmployee?.allowances || {})
-    .map(([key, value]) => ({ label: formatComponentLabel(key), amount: toNum(value) }))
+  const activeEarnings = useMemo(() => {
+    return (payrollSettingsConfig?.components || []).filter(c => c.active && c.type === 'EARNING');
+  }, [payrollSettingsConfig]);
+  const savedBasicPay = toNum(currentEmployee?.salaryDetails?.basicSalary ?? currentEmployee?.basicSalary);
+  const savedAllowanceRows = Object.entries(currentEmployee?.allowances || {})
+    .map(([key, value]) => ({ label: formatComponentLabel(key), amount: toNum(value), code: key }))
     .filter(row => row.amount > 0);
-  const monthlyGross = basicPay + allowanceRows.reduce((sum, row) => sum + row.amount, 0);
-  const monthlyCtc = toNum(currentEmployee?.salaryDetails?.monthlyCtc, monthlyGross);
+  const savedMonthlyGross = savedBasicPay + savedAllowanceRows.reduce((sum, row) => sum + row.amount, 0);
+  const monthlyCtc = toNum(currentEmployee?.salaryDetails?.monthlyCtc, savedMonthlyGross);
+  const configuredBreakdown = useMemo(() => {
+    return calculateSalaryBreakdown(monthlyCtc, activeEarnings);
+  }, [monthlyCtc, activeEarnings]);
+  const compensationRows = activeEarnings.length > 0
+    ? activeEarnings
+        .map(comp => ({
+          label: comp.name,
+          amount: configuredBreakdown.customComponents[comp.code] || 0
+        }))
+        .filter(row => row.amount > 0)
+    : [
+        { label: 'Basic Salary', amount: savedBasicPay },
+        ...savedAllowanceRows.map(row => ({ label: row.label, amount: row.amount }))
+      ].filter(row => row.amount > 0);
+  const basicPay = activeEarnings.length > 0 ? configuredBreakdown.basicSalary : savedBasicPay;
+  const monthlyGross = activeEarnings.length > 0 ? configuredBreakdown.grossSalary : savedMonthlyGross;
   const annualCtc = monthlyCtc * 12;
 
   // Replace placeholders helper
@@ -474,8 +494,7 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
                   </thead>
                   <tbody>
                     {[
-                      { label: 'Basic Salary', amount: basicPay },
-                      ...allowanceRows
+                      ...compensationRows
                     ].filter(row => row.amount > 0).map(row => (
                       <tr key={row.label} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '7px 12px' }}>{row.label}</td>

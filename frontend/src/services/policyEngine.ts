@@ -674,7 +674,7 @@ export const calculateConfiguredDeductionLines = (
       if ((statutoryKind === 'PF' || statutoryKind === 'ESIC') && !withPf) {
         amount = 0;
         description = 'Exempt Scheme';
-      } else if (statutoryKind === 'ESIC' && esicLimit > 0 && gross > esicLimit) {
+      } else if (statutoryKind === 'ESIC' && component.calculationMethod !== 'FORMULA' && esicLimit > 0 && gross > esicLimit) {
         amount = 0;
         description = `Exempt: Gross ${formatCurrency(gross)} exceeds ${formatCurrency(esicLimit)}`;
       }

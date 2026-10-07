@@ -597,21 +597,42 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     });
   };
 
+  const configuredSalaryBreakdown = useMemo(() => {
+    return calculateSalaryBreakdown(formData.monthlyCtc || 0, activeEarnings);
+  }, [formData.monthlyCtc, activeEarnings]);
+
+  const salaryComponentValues = useMemo(() => {
+    if (activeEarnings.length === 0) {
+      return {
+        basicSalary: formData.basicSalary || 0,
+        da: formData.da || 0,
+        conveyance: formData.conveyance || 0,
+        hra: formData.hra || 0,
+        customComponents: formData.customComponents || {},
+        grossSalary: formData.monthlyCtc || 0
+      };
+    }
+
+    return {
+      basicSalary: configuredSalaryBreakdown.basicSalary,
+      da: configuredSalaryBreakdown.da,
+      conveyance: configuredSalaryBreakdown.conveyance,
+      hra: configuredSalaryBreakdown.hra,
+      customComponents: configuredSalaryBreakdown.customComponents,
+      grossSalary: configuredSalaryBreakdown.grossSalary
+    };
+  }, [activeEarnings.length, configuredSalaryBreakdown, formData]);
+
   // Dynamic statutory and configured deduction calculations (from Settings)
   const statutoryCalc = useMemo(() => {
-    const basic = formData.basicSalary || 0;
-    const da = formData.da || 0;
-    const conv = formData.conveyance || 0;
-    const hra = formData.hra || 0;
+    const basic = salaryComponentValues.basicSalary || 0;
+    const da = salaryComponentValues.da || 0;
+    const conv = salaryComponentValues.conveyance || 0;
+    const hra = salaryComponentValues.hra || 0;
     const ctc = formData.monthlyCtc || 0;
 
     const gross = activeEarnings.length > 0
-      ? activeEarnings.reduce((sum, c) => sum + (formData.customComponents?.[c.code] ?? (
-          c.code === 'BASIC' ? basic :
-          c.code === 'DA' ? da :
-          (c.code === 'CONV' || c.code === 'CONVEYANCE') ? conv :
-          c.code === 'HRA' ? hra : 0
-        )), 0)
+      ? salaryComponentValues.grossSalary
       : ctc;
 
     const formulaContext = buildPayrollFormulaContext({
@@ -621,7 +642,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
       hra,
       gross,
       ctc,
-      customContext: formData.customComponents || {}
+      customContext: salaryComponentValues.customComponents || {}
     });
     const deductionLines = calculateConfiguredDeductionLines(activeDeductions, formulaContext, {
       withPf: formData.salaryScheme === 'WITH_PF',
@@ -656,7 +677,32 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
       totalDeductions,
       netTakeHome
     };
-  }, [formData, payrollSettingsConfig, activeEarnings, activeDeductions]);
+  }, [formData.monthlyCtc, formData.salaryScheme, payrollSettingsConfig, activeEarnings, activeDeductions, salaryComponentValues]);
+
+  const isSalaryExemptRole =
+    formData.role === 'CEO' ||
+    formData.department === 'CEO' ||
+    formData.designation === 'CEO' ||
+    currentEmp.role === 'CEO' ||
+    currentEmp.department === 'CEO';
+  const esicLimit = payrollSettingsConfig?.esicPolicy?.grossSalaryLimit || 21000;
+  const schemePillLabel = isSalaryExemptRole
+    ? 'OWNER / SALARY EXEMPT'
+    : formData.salaryScheme === 'WITH_PF'
+      ? statutoryCalc.isEsicExempt
+        ? `PF ENROLLED / ESIC EXEMPT (> ${formatCurrency(esicLimit)})`
+        : 'PF & ESIC ENROLLED'
+      : 'WITHOUT PF & ESIC';
+  const schemeDisplayLabel = formData.salaryScheme === 'WITH_PF'
+    ? statutoryCalc.isEsicExempt
+      ? `Statutory PF Active / ESIC Exempt (Gross > ${formatCurrency(esicLimit)})`
+      : 'Statutory PF & ESIC Scheme (Active)'
+    : 'Without PF & ESIC (Exempt Scheme)';
+  const deductionsSchemeLabel = formData.salaryScheme === 'WITH_PF'
+    ? statutoryCalc.isEsicExempt
+      ? 'PF Enrolled / ESIC Exempt'
+      : 'PF & ESIC Enrolled'
+    : 'Exempt Scheme';
 
   // Avatar upload
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1010,29 +1056,29 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
         specialization: formData.specialization
       },
 
-      basicSalary: Number(formData.basicSalary),
+      basicSalary: Number(salaryComponentValues.basicSalary),
       withPf: formData.withPf,
       allowances: {
-        hra: Number(formData.hra),
-        da: Number(formData.da),
-        conveyance: Number(formData.conveyance),
+        hra: Number(salaryComponentValues.hra),
+        da: Number(salaryComponentValues.da),
+        conveyance: Number(salaryComponentValues.conveyance),
         transport: Number(formData.transport || 0),
         medical: Number(formData.medical || 0),
         special: Number(formData.special || 0),
-        ...(formData.customComponents || {})
+        ...(salaryComponentValues.customComponents || {})
       },
       salaryDetails: {
         salaryStructure: formData.salaryStructure,
         salaryScheme: formData.salaryScheme,
         withPf: formData.withPf,
         monthlyCtc: Number(formData.monthlyCtc),
-        basicSalary: Number(formData.basicSalary),
-        da: Number(formData.da),
-        conveyance: Number(formData.conveyance),
-        hra: Number(formData.hra),
+        basicSalary: Number(salaryComponentValues.basicSalary),
+        da: Number(salaryComponentValues.da),
+        conveyance: Number(salaryComponentValues.conveyance),
+        hra: Number(salaryComponentValues.hra),
         panNumber: formData.panNumber,
         uanNumber: formData.uanNumber,
-        ...(formData.customComponents || {})
+        ...(salaryComponentValues.customComponents || {})
       },
       bankDetails: {
         bankName: formData.bankName,
@@ -2514,20 +2560,20 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: (formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') ? '#ECFEFF' : (formData.salaryScheme === 'WITH_PF' ? '#DCFCE7' : '#FEF3C7'),
-            color: (formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') ? '#0E7490' : (formData.salaryScheme === 'WITH_PF' ? '#15803D' : '#B45309'),
-            border: `1px solid ${(formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') ? '#0E7490' : (formData.salaryScheme === 'WITH_PF' ? '#BBF7D0' : '#FDE68A')}`,
+            backgroundColor: isSalaryExemptRole ? '#ECFEFF' : (formData.salaryScheme === 'WITH_PF' ? '#DCFCE7' : '#FEF3C7'),
+            color: isSalaryExemptRole ? '#0E7490' : (formData.salaryScheme === 'WITH_PF' ? '#15803D' : '#B45309'),
+            border: `1px solid ${isSalaryExemptRole ? '#0E7490' : (formData.salaryScheme === 'WITH_PF' ? '#BBF7D0' : '#FDE68A')}`,
             padding: '4px 12px',
             borderRadius: '9999px',
             fontSize: '0.78rem',
             fontWeight: 800
           }}>
-            {(formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') ? '👑 OWNER / SALARY EXEMPT' : (formData.salaryScheme === 'WITH_PF' ? 'PF & ESI ENROLLED' : 'WITHOUT PF SCHEME')}
+            {schemePillLabel}
           </span>
         </div>
       </div>
 
-      {(formData.role === 'CEO' || formData.department === 'CEO' || formData.designation === 'CEO' || currentEmp.role === 'CEO' || currentEmp.department === 'CEO') && (
+      {isSalaryExemptRole && (
         <div style={{
           backgroundColor: '#ECFEFF',
           border: '1.5px solid #0E7490',
@@ -2632,7 +2678,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             </select>
           ) : (
             <div style={{ fontSize: '0.94rem', fontWeight: 700, color: '#0F172A', marginTop: '6px' }}>
-              {formData.salaryScheme === 'WITH_PF' ? 'Statutory PF Scheme (Active)' : 'Without PF (Exempt Scheme)'}
+              {schemeDisplayLabel}
             </div>
           )}
         </div>
@@ -2645,13 +2691,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         {activeEarnings.length > 0 ? (
           activeEarnings.map(comp => {
-            const compVal = formData.customComponents?.[comp.code] ?? (
-              comp.code === 'BASIC' ? formData.basicSalary :
-              comp.code === 'DA' ? formData.da :
-              (comp.code === 'CONV' || comp.code === 'CONVEYANCE') ? formData.conveyance :
-              comp.code === 'HRA' ? formData.hra :
-              ((currentEmp.allowances as any)?.[comp.code.toLowerCase()] ?? (currentEmp.allowances as any)?.[comp.code] ?? 0)
-            );
+            const compVal = salaryComponentValues.customComponents?.[comp.code] ?? 0;
             const badge = comp.calculationMethod === 'PERCENTAGE'
               ? `(${comp.defaultValue}% of ${comp.percentageBase || 'CTC'})`
               : comp.calculationMethod === 'FIXED_AMOUNT'
@@ -2665,29 +2705,9 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                   <input 
                     type="number" 
                     value={salaryInputValue(`component:${comp.code}`, compVal)} 
-                    onChange={(e) => {
-                      setSalaryDraft(`component:${comp.code}`, e.target.value);
-                      const val = Math.max(0, e.target.value === '' ? 0 : Number(e.target.value));
-                      setFormData(prev => {
-                        const customVals = { ...(prev.customComponents || {}), [comp.code]: val };
-                        const code = comp.code.toUpperCase();
-                        let basic = code === 'BASIC' ? val : prev.basicSalary;
-                        let da = code === 'DA' ? val : prev.da;
-                        let conveyance = (code === 'CONV' || code === 'CONVEYANCE') ? val : prev.conveyance;
-                        let hra = code === 'HRA' ? val : prev.hra;
-                        const total = activeEarnings.reduce((s, c) => s + (customVals[c.code] ?? 0), 0);
-                        return {
-                          ...prev,
-                          basicSalary: basic,
-                          da,
-                          conveyance,
-                          hra,
-                          customComponents: customVals,
-                          monthlyCtc: total
-                        };
-                      });
-                    }} 
-                    style={inputStyle} 
+                    readOnly
+                    title="Calculated from Payroll Settings. Change Monthly CTC or Payroll Settings to update this component."
+                    style={{ ...inputStyle, backgroundColor: '#F1F5F9', cursor: 'not-allowed' }} 
                   />
                 ) : (
                   <div style={viewValueStyle}>{formatCurrency(compVal)}</div>
@@ -2733,7 +2753,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             Statutory & Configured Deductions (Dynamic from Settings)
           </h4>
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: formData.salaryScheme === 'WITH_PF' ? '#0E7490' : '#D97706' }}>
-            {formData.salaryScheme === 'WITH_PF' ? 'Enrolled Scheme' : 'Exempt Scheme'}
+            {deductionsSchemeLabel}
           </span>
         </div>
 

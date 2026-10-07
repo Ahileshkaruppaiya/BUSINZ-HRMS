@@ -1237,6 +1237,18 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     };
   }, [formData, payrollSettingsConfig, activeEarnings, activeDeductions]);
 
+  const esicLimit = payrollSettingsConfig?.esicPolicy?.grossSalaryLimit || 21000;
+  const salarySchemePreviewLabel = formData.salaryScheme === 'WITH_PF'
+    ? statutoryCalc.isEsicExempt
+      ? `Scheme: PF Enrolled / ESIC Exempt (> ${formatCurrency(esicLimit)})`
+      : 'Scheme: With PF & ESIC Enrolled'
+    : 'Scheme: Without PF & ESIC';
+  const salarySchemeReviewLabel = formData.salaryScheme === 'WITH_PF'
+    ? statutoryCalc.isEsicExempt
+      ? `With PF / ESIC Exempt (> ${formatCurrency(esicLimit)})`
+      : 'With PF & ESIC'
+    : 'Without PF & ESIC (< 6 Months)';
+
   if (!isOpen) return null;
 
   const triggerUploadForCategory = (category: string) => {
@@ -3193,7 +3205,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                     Statutory & Configured Deductions (Dynamic from Settings)
                   </span>
                   <span style={{ fontSize: '0.72rem', color: '#0E7490', fontWeight: 700 }}>
-                    Scheme: With PF & ESIC Enrolled
+                    {salarySchemePreviewLabel}
                   </span>
                 </div>
 
@@ -3905,7 +3917,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                   <div className="review-field-box">
                     <div className="review-field-label">Salary Scheme (PF / ESIC)</div>
                     <div className="review-field-val" style={{ fontWeight: 700, color: formData.salaryScheme === 'WITH_PF' ? '#0E7490' : '#D97706' }}>
-                      {formData.salaryScheme === 'WITH_PF' ? 'With PF & ESIC' : 'Without PF & ESIC (< 6 Months)'}
+                      {salarySchemeReviewLabel}
                     </div>
                   </div>
                   <div className="review-field-box" style={{ gridColumn: 'span 2' }}>

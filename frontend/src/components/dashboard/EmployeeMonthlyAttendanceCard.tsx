@@ -19,24 +19,23 @@ export const EmployeeMonthlyAttendanceCard: React.FC<EmployeeMonthlyAttendanceCa
     const month = getMonthInfo();
     const userEmpId = (currentUser.employeeId || currentUser.id || '').trim().toLowerCase();
     const userName = (currentUser.name || '').trim().toLowerCase();
+    const matchesCurrentUser = (employeeId?: string, employeeName?: string) => {
+      const recId = (employeeId || '').trim().toLowerCase();
+      if (userEmpId && recId && userEmpId === recId) return true;
+
+      const recName = (employeeName || '').trim().toLowerCase();
+      return !!userName && !!recName && recName === userName;
+    };
 
     // Filter attendance records for current user in the current month
     const userRecords = attendanceRecords.filter(a => {
       if (!isDateInMonth(a.shiftDate || a.date, month)) return false;
-      const recId = (a.employeeId || '').trim().toLowerCase();
-      const recName = (a.employeeName || '').trim().toLowerCase();
-      if (userEmpId && recId && userEmpId === recId) return true;
-      if (userName && recName && (recName === userName || recName.includes(userName) || userName.includes(recName))) return true;
-      return false;
+      return matchesCurrentUser(a.employeeId, a.employeeName);
     });
 
     // Check user's approved leaves
     const userLeaves = leaveRequests.filter(l => {
-      const lId = (l.employeeId || '').trim().toLowerCase();
-      const lName = (l.employeeName || '').trim().toLowerCase();
-      const matchesUser = (userEmpId && lId && userEmpId === lId) ||
-        (userName && lName && (lName === userName || lName.includes(userName) || userName.includes(lName)));
-      return matchesUser && l.status === 'Approved';
+      return matchesCurrentUser(l.employeeId, l.employeeName) && l.status === 'Approved';
     });
 
     // Month-to-date working days (Sundays = weekly off)

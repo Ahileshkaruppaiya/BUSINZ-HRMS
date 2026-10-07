@@ -5,7 +5,7 @@ import { EmployeeProfile } from '../employees/EmployeeProfile';
 import { AttendanceCategoryModal, AttendanceCategoryType } from './AttendanceCategoryModal';
 import { TodayAttendanceCard } from './TodayAttendanceCard';
 import { EmployeeMonthlyAttendanceCard } from './EmployeeMonthlyAttendanceCard';
-import { Employee, LeaveRequest, TaskItem, HolidayItem } from '../../types/hrms';
+import { Employee, AttendanceRecord, LeaveRequest, TaskItem, HolidayItem } from '../../types/hrms';
 import { formatDateDDMMYYYY, formatTimeDisplay } from '../../utils/dateUtils';
 import { getMonthInfo, getLocalDateStr, isDateInMonth, countLeaveDaysInMonth } from '../../utils/monthUtils';
 import { isAttendanceExemptEmployee } from '../../data/hrmsInitialData';
@@ -56,39 +56,69 @@ export const Dashboard: React.FC = () => {
   const isEmployee = currentUser.role === 'Employee' && !isCEO;
   const [profileModalEmployee, setProfileModalEmployee] = useState<Employee | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<AttendanceCategoryType | null>(null);
+  const todayStr = getLocalDateStr();
+
+  const normalizeKey = (value?: string | null) => (value || '').trim().toLowerCase();
+  const employeeFullName = (emp: Employee) => `${emp.firstName} ${emp.lastName}`.trim();
+  const attendanceRecordDate = (record: AttendanceRecord) => (record.shiftDate || record.date || '').slice(0, 10);
+  const isTodayAttendanceRecord = (record: AttendanceRecord) => attendanceRecordDate(record) === todayStr;
+  const doesAttendanceMatchEmployee = (record: AttendanceRecord, emp: Employee) => {
+    const recId = normalizeKey(record.employeeId);
+    const empId = normalizeKey(emp.employeeId);
+    if (recId && empId && recId === empId) return true;
+
+    const recName = normalizeKey(record.employeeName);
+    const fullName = normalizeKey(employeeFullName(emp));
+    return !!recName && !!fullName && recName === fullName;
+  };
+  const doesLeaveCoverToday = (leave: LeaveRequest) => {
+    const start = (leave.startDate || '').slice(0, 10);
+    const end = (leave.endDate || leave.startDate || '').slice(0, 10);
+    return leave.status === 'Approved' && !!start && start <= todayStr && todayStr <= end;
+  };
+  const doesLeaveMatchEmployee = (leave: LeaveRequest, emp: Employee) => {
+    const leaveId = normalizeKey(leave.employeeId);
+    const empId = normalizeKey(emp.employeeId);
+    if (leaveId && empId && leaveId === empId) return true;
+
+    const leaveName = normalizeKey(leave.employeeName);
+    const fullName = normalizeKey(employeeFullName(emp));
+    return !!leaveName && !!fullName && leaveName === fullName;
+  };
 
   // Current user's individual attendance metrics for Employee Dashboard
   const employeeAttendanceStats = useMemo(() => {
     const month = getMonthInfo();
-    const todayStr = getLocalDateStr();
     const userEmpId = (currentUser.employeeId || currentUser.id || '').trim().toLowerCase();
     const userName = (currentUser.name || '').trim().toLowerCase();
+
+    const matchesCurrentUser = (employeeId?: string, employeeName?: string) => {
+      const recId = (employeeId || '').trim().toLowerCase();
+      if (userEmpId && recId && userEmpId === recId) return true;
+
+      const recName = (employeeName || '').trim().toLowerCase();
+      return !!userName && !!recName && recName === userName;
+    };
 
     // Match today's attendance record (local today date or shiftDate)
     const todayRecord = attendanceRecords.find(a => {
       const recId = (a.employeeId || '').trim().toLowerCase();
       const recName = (a.employeeName || '').trim().toLowerCase();
-      const matchesUser = (userEmpId && recId && userEmpId === recId) ||
-        (userName && recName && (recName === userName || recName.includes(userName) || userName.includes(recName)));
-      return matchesUser && (a.date === todayStr || a.shiftDate === todayStr);
+      return matchesCurrentUser(recId, recName) && isTodayAttendanceRecord(a);
     });
 
     // Match today's biometric face scan
     const todayFace = (faceLogs || []).find(f => {
       const fId = (f.employeeId || '').trim().toLowerCase();
       const fName = (f.employeeName || '').trim().toLowerCase();
-      const matchesUser = (userEmpId && fId && userEmpId === fId) ||
-        (userName && fName && (fName === userName || fName.includes(userName) || userName.includes(fName)));
-      return matchesUser && f.timestamp.startsWith(todayStr);
+      return matchesCurrentUser(fId, fName) && f.timestamp.startsWith(todayStr);
     });
 
     // Match leaves
     const userLeaves = leaveRequests.filter(l => {
       const lId = (l.employeeId || '').trim().toLowerCase();
       const lName = (l.employeeName || '').trim().toLowerCase();
-      const matchesUser = (userEmpId && lId && userEmpId === lId) ||
-        (userName && lName && (lName === userName || lName.includes(userName) || userName.includes(lName)));
-      return matchesUser && l.status === 'Approved';
+      return matchesCurrentUser(lId, lName) && l.status === 'Approved';
     });
 
     // Current month attendance records only
@@ -96,9 +126,7 @@ export const Dashboard: React.FC = () => {
       if (!isDateInMonth(a.shiftDate || a.date, month)) return false;
       const recId = (a.employeeId || '').trim().toLowerCase();
       const recName = (a.employeeName || '').trim().toLowerCase();
-      if (userEmpId && recId && userEmpId === recId) return true;
-      if (userName && recName && (recName === userName || recName.includes(userName) || userName.includes(recName))) return true;
-      return false;
+      return matchesCurrentUser(recId, recName);
     });
 
     const totalWorkingDays = month.elapsedWorkingDays;
@@ -135,7 +163,7 @@ export const Dashboard: React.FC = () => {
       shiftTimes: userShift ? `${userShift.startTime} - ${userShift.endTime}` : '--:--',
       monthLabel: month.label
     };
-  }, [currentUser, attendanceRecords, leaveRequests, faceLogs, shifts]);
+  }, [currentUser, attendanceRecords, leaveRequests, faceLogs, shifts, todayStr]);
 
   // Dynamically calculate upcoming holidays from holiday policies (from today onwards)
   const upcomingHolidaysList = useMemo(() => {
@@ -314,17 +342,15 @@ export const Dashboard: React.FC = () => {
   const hasActiveFilters = activeFilterCount > 0;
 
   // Compute live stats from context data matching AttendanceCategoryModal logic
+  const todayAttendanceRecords = attendanceRecords.filter(isTodayAttendanceRecord);
   const filteredAttendance = hasActiveFilters
-    ? attendanceRecords.filter(a => filteredEmpIds.has(a.employeeId))
-    : attendanceRecords;
+    ? todayAttendanceRecords.filter(a => filteredEmpIds.has(a.employeeId))
+    : todayAttendanceRecords;
 
   const totalStaff = attendanceWorkforceEmployees.length;
 
   const presentEmployees = attendanceWorkforceEmployees.filter(emp => {
-    const att = filteredAttendance.find(a => 
-      a.employeeId === emp.employeeId || 
-      `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
-    );
+    const att = filteredAttendance.find(a => doesAttendanceMatchEmployee(a, emp));
     return att && (
       att.status === 'Present' || 
       att.status === 'Work From Home' || 
@@ -334,10 +360,7 @@ export const Dashboard: React.FC = () => {
   });
 
   const earlyEmployees = attendanceWorkforceEmployees.filter(emp => {
-    const att = filteredAttendance.find(a => 
-      a.employeeId === emp.employeeId || 
-      `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
-    );
+    const att = filteredAttendance.find(a => doesAttendanceMatchEmployee(a, emp));
     return att && att.checkOut && (
       (att.workingHours > 0 && att.workingHours < 7.5) || 
       att.status === 'Half Day'
@@ -345,25 +368,19 @@ export const Dashboard: React.FC = () => {
   });
 
   const missClockOutEmployees = attendanceWorkforceEmployees.filter(emp => {
-    const att = filteredAttendance.find(a => 
-      a.employeeId === emp.employeeId || 
-      `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
-    );
+    const att = filteredAttendance.find(a => doesAttendanceMatchEmployee(a, emp));
     return att && att.checkIn && !att.checkOut;
   });
 
   const absentEmployees = attendanceWorkforceEmployees.filter(emp => {
-    const att = filteredAttendance.find(a => 
-      a.employeeId === emp.employeeId || 
-      `${emp.firstName} ${emp.lastName}`.trim().toLowerCase() === (a.employeeName || '').trim().toLowerCase()
-    );
+    const att = filteredAttendance.find(a => doesAttendanceMatchEmployee(a, emp));
     const isPres = att && (
       att.status === 'Present' || 
       att.status === 'Work From Home' || 
       att.status === 'Late' ||
       !!att.checkIn
     );
-    const isLeave = att?.status === 'On Leave';
+    const isLeave = att?.status === 'On Leave' || leaveRequests.some(l => doesLeaveMatchEmployee(l, emp) && doesLeaveCoverToday(l));
     return !isPres && !isLeave;
   });
 
@@ -400,7 +417,10 @@ export const Dashboard: React.FC = () => {
   // Metrics for Today's Attendance Donut Card
   const totalAttendanceCount = totalStaff;
   const donutPresent = presentToday;
-  const donutLeave = leaveRequests.filter(l => l.status === 'Approved' && filteredEmpIds.has(l.employeeId)).length;
+  const donutLeave = attendanceWorkforceEmployees.filter(emp =>
+    filteredAttendance.some(a => doesAttendanceMatchEmployee(a, emp) && a.status === 'On Leave') ||
+    leaveRequests.some(l => doesLeaveMatchEmployee(l, emp) && doesLeaveCoverToday(l))
+  ).length;
   const donutAbsent = Math.max(0, totalAttendanceCount - donutPresent - donutLeave);
 
   // Dynamic Celebrations derived from real employees
@@ -1250,6 +1270,7 @@ export const Dashboard: React.FC = () => {
           }}
           employees={filteredEmployees}
           attendanceRecords={filteredAttendance}
+          leaveRequests={leaveRequests}
         />
       )}
     </div>

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Employee, AttendanceRecord } from '../../types/hrms';
+import { Employee, AttendanceRecord, LeaveRequest } from '../../types/hrms';
 import { downloadCSV, downloadExcel, downloadPDF } from '../../utils/exportUtils';
 import { formatTimeDisplay, formatDateDDMMYYYY } from '../../utils/dateUtils';
+import { getLocalDateStr } from '../../utils/monthUtils';
 import { ExportDropdown } from '../common/ExportDropdown';
 import { isAttendanceExemptEmployee } from '../../data/hrmsInitialData';
 import { 
@@ -38,6 +39,7 @@ interface AttendanceCategoryModalProps {
   onSelectEmployee: (employee: Employee) => void;
   employees: Employee[];
   attendanceRecords: AttendanceRecord[];
+  leaveRequests?: LeaveRequest[];
 }
 
 export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = ({
@@ -45,7 +47,8 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
   onClose,
   onSelectEmployee,
   employees,
-  attendanceRecords
+  attendanceRecords,
+  leaveRequests = []
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedDept, setSelectedDept] = useState<string>('all');
@@ -105,6 +108,23 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
 
   // Resolve Category Items dynamically (exclude owners/system accounts from attendance workforce)
   const workforceEmployees = employees.filter(emp => !isAttendanceExemptEmployee(emp));
+  const todayStr = getLocalDateStr();
+  const normalizeKey = (value?: string | null) => (value || '').trim().toLowerCase();
+  const employeeFullName = (emp: Employee) => `${emp.firstName} ${emp.lastName}`.trim();
+  const doesLeaveMatchEmployee = (leave: LeaveRequest, emp: Employee) => {
+    const leaveId = normalizeKey(leave.employeeId);
+    const empId = normalizeKey(emp.employeeId);
+    if (leaveId && empId && leaveId === empId) return true;
+
+    const leaveName = normalizeKey(leave.employeeName);
+    const fullName = normalizeKey(employeeFullName(emp));
+    return !!leaveName && !!fullName && leaveName === fullName;
+  };
+  const doesLeaveCoverToday = (leave: LeaveRequest) => {
+    const start = (leave.startDate || '').slice(0, 10);
+    const end = (leave.endDate || leave.startDate || '').slice(0, 10);
+    return leave.status === 'Approved' && !!start && start <= todayStr && todayStr <= end;
+  };
 
   const categoryItems: CategoryItem[] = workforceEmployees.map(emp => {
     const att = attendanceRecords.find(a => 
@@ -117,6 +137,7 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
     const isEarly = isCheckedOut && ((att.workingHours > 0 && att.workingHours < 7.5) || att.status === 'Half Day');
     const isMissed = isCheckedIn && !isCheckedOut;
     const isPresent = isCheckedIn && (att.status === 'Present' || att.status === 'Work From Home' || att.status === 'Late');
+    const isOnApprovedLeave = leaveRequests.some(l => doesLeaveMatchEmployee(l, emp) && doesLeaveCoverToday(l));
 
     let statusLabel = 'Absent';
     let statusType: CategoryItem['statusType'] = 'danger';
@@ -134,7 +155,7 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
       statusLabel = att?.status || 'Present';
       statusType = 'success';
       note = att?.method || 'Face Recognition';
-    } else if (att?.status === 'On Leave') {
+    } else if (att?.status === 'On Leave' || isOnApprovedLeave) {
       statusLabel = 'On Leave';
       statusType = 'info';
       note = 'Sanctioned leave';
@@ -183,7 +204,7 @@ export const AttendanceCategoryModal: React.FC<AttendanceCategoryModalProps> = (
         item.attendance.status === 'Late' ||
         !!item.attendance.checkIn
       );
-      const isLeave = item.attendance?.status === 'On Leave';
+      const isLeave = item.attendance?.status === 'On Leave' || item.statusLabel === 'On Leave';
       return !isPres && !isLeave;
     }
     return true;
