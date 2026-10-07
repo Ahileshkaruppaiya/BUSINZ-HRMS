@@ -351,7 +351,8 @@ export const GPSGeofenceSettings: React.FC = () => {
       centerLat: numLat,
       centerLng: numLng,
       radiusMeters: radius,
-      enabled: Boolean(numLat !== 0 && numLng !== 0)
+      enabled: Boolean(numLat !== 0 && numLng !== 0),
+      enforceStrictly: Boolean(numLat !== 0 && numLng !== 0)
     });
 
     setSaveSuccessMsg(`Geofence "${finalName}" saved with ${radius}M perimeter boundary!`);

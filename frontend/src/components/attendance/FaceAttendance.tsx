@@ -20,6 +20,7 @@ import {
   Users
 } from 'lucide-react';
 import { formatDateDDMMYYYY, normalizeToYYYYMMDD, formatTimeDisplay } from '../../utils/dateUtils';
+import type { FaceLog } from '../../types/hrms';
 
 const getLocalDateString = (d = new Date()) => {
   const year = d.getFullYear();
@@ -168,6 +169,7 @@ export const FaceAttendance: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const punchInProgressRef = useRef(false);
 
   // Helper to set office pin directly to user's current GPS location for testing
   const handleSetOfficeToMyLocation = () => {
@@ -294,10 +296,13 @@ export const FaceAttendance: React.FC = () => {
     distance: number, 
     addressText: string
   ) => {
+    if (!punchInProgressRef.current) {
+      punchInProgressRef.current = true;
+    }
     const emp = employees.find(e => e.employeeId === selectedEmpId);
     const empName = emp ? `${emp.firstName} ${emp.lastName}` : 'Employee';
 
-    // Location tracking: determine if inside geofence boundary (permissive - never blocks attendance)
+    // Location tracking: shared attendance guard blocks punches outside the saved geofence.
     const isInsideGeofence = !geofenceConfig.enabled || distance <= geofenceConfig.radiusMeters;
 
     // Enforce Shift Window Validation
@@ -308,6 +313,7 @@ export const FaceAttendance: React.FC = () => {
         message: `🚫 Check-In Not Allowed: ${currentShiftState.message}`
       });
       setIsScanning(false);
+      punchInProgressRef.current = false;
       return;
     }
     if (type === 'Check-Out' && !currentShiftState.canCheckOut) {
@@ -316,6 +322,7 @@ export const FaceAttendance: React.FC = () => {
         message: `🚫 Check-Out Not Allowed: ${currentShiftState.message}`
       });
       setIsScanning(false);
+      punchInProgressRef.current = false;
       return;
     }
 
@@ -333,6 +340,7 @@ export const FaceAttendance: React.FC = () => {
         message: punchResult.message
       });
       setIsScanning(false);
+      punchInProgressRef.current = false;
       return;
     }
 
@@ -356,6 +364,7 @@ export const FaceAttendance: React.FC = () => {
     }
 
     setIsScanning(false);
+    punchInProgressRef.current = false;
 
     // Automatically stop camera hardware 3 seconds after successful scan for privacy
     setTimeout(() => {
@@ -364,11 +373,15 @@ export const FaceAttendance: React.FC = () => {
   };
 
   const triggerFaceScan = (type: 'Check-In' | 'Check-Out') => {
+    if (isScanning || punchInProgressRef.current) {
+      return;
+    }
     if (!isCameraActive) {
       setScanResult({ status: 'error', message: 'Please turn on the camera first before scanning face.' });
       return;
     }
 
+    punchInProgressRef.current = true;
     const capturedPhotoUrl = captureVideoFrame();
     setIsScanning(true);
     setScanResult({ status: null, message: 'Requesting GPS location permissions & verifying boundary...' });
@@ -380,6 +393,7 @@ export const FaceAttendance: React.FC = () => {
           message: '🚨 GPS Geolocation is not supported by your browser or device.'
         });
         setIsScanning(false);
+        punchInProgressRef.current = false;
         return;
       }
 
@@ -406,9 +420,16 @@ export const FaceAttendance: React.FC = () => {
           }
           setScanResult({ status: 'error', message: errorMsg });
           setIsScanning(false);
+          punchInProgressRef.current = false;
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
       );
+    } else {
+      const distance = locationMode === 'outside' ? geofenceConfig.radiusMeters + 250 : 28;
+      const userLat = geofenceConfig.centerLat + (locationMode === 'outside' ? 0.006 : 0.00018);
+      const userLng = geofenceConfig.centerLng + (locationMode === 'outside' ? 0.006 : 0.00015);
+      const address = `${geofenceConfig.officeName} ${locationMode === 'outside' ? 'Outside Boundary' : 'Gate 1'} (${distance}m away)`;
+      processAttendanceScan(type, capturedPhotoUrl, userLat, userLng, distance, address);
     }
   };
 
@@ -457,6 +478,10 @@ export const FaceAttendance: React.FC = () => {
   };
 
   const handleGpsPunch = (type: 'Check-In' | 'Check-Out') => {
+    if (gpsLoading || punchInProgressRef.current) {
+      return;
+    }
+    punchInProgressRef.current = true;
     const activeEmp = employees.find(e => e.employeeId === selectedEmpId || e.id === selectedEmpId) || {
       firstName: currentUser.name || 'Alex',
       lastName: '',
@@ -464,10 +489,19 @@ export const FaceAttendance: React.FC = () => {
       avatar: currentUser.avatar || ''
     };
 
-    const lat = gpsData?.lat || geofenceConfig.centerLat;
-    const lng = gpsData?.lng || geofenceConfig.centerLng;
-    const dist = gpsData?.distance ?? 28;
-    const isInside = gpsData?.isInside ?? true;
+    if (!gpsData) {
+      setScanResult({
+        status: 'error',
+        message: 'GPS location is required. Please tap Refresh, allow location permission, and try again.'
+      });
+      punchInProgressRef.current = false;
+      return;
+    }
+
+    const lat = gpsData.lat;
+    const lng = gpsData.lng;
+    const dist = gpsData.distance;
+    const isInside = gpsData.isInside;
     const addr = gpsData?.address || `${geofenceConfig.officeName} (GPS Clock-In)`;
 
     // Enforce Shift Window Validation
@@ -477,6 +511,7 @@ export const FaceAttendance: React.FC = () => {
         status: 'error',
         message: `🚫 Check-In Not Allowed: ${currentShiftState.message}`
       });
+      punchInProgressRef.current = false;
       return;
     }
     if (type === 'Check-Out' && !currentShiftState.canCheckOut) {
@@ -484,6 +519,7 @@ export const FaceAttendance: React.FC = () => {
         status: 'error',
         message: `🚫 Check-Out Not Allowed: ${currentShiftState.message}`
       });
+      punchInProgressRef.current = false;
       return;
     }
 
@@ -499,6 +535,7 @@ export const FaceAttendance: React.FC = () => {
         status: 'error',
         message: punchResult.message
       });
+      punchInProgressRef.current = false;
       return;
     }
 
@@ -522,6 +559,7 @@ export const FaceAttendance: React.FC = () => {
     }
 
     setShowGpsModal(false);
+    punchInProgressRef.current = false;
   };
 
   const isEmployee = currentUser.role === 'Employee' || currentUser.role === 'Assignee';
@@ -590,10 +628,16 @@ export const FaceAttendance: React.FC = () => {
 
   // 2. My Face / GPS logs for TODAY strictly (timestamp matches todayStr)
   const myTodayFaceLogs = useMemo(() => {
-    return (faceLogs || []).filter(log => {
+    const latestByType = new Map<string, FaceLog>();
+    (faceLogs || []).forEach(log => {
       const d = normalizeToYYYYMMDD(log.timestamp);
-      return d === todayStr && isLogForCurrentUser(log);
-    }).sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+      if (d !== todayStr || !isLogForCurrentUser(log)) return;
+      const existing = latestByType.get(log.type);
+      if (!existing || String(log.timestamp).localeCompare(String(existing.timestamp)) > 0) {
+        latestByType.set(log.type, log);
+      }
+    });
+    return Array.from(latestByType.values()).sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
   }, [faceLogs, todayStr, isLogForCurrentUser]);
 
   // 3. Extract My Check-In & Check-Out Times for Today
@@ -681,10 +725,16 @@ export const FaceAttendance: React.FC = () => {
       if (isToday(log.timestamp)) {
         const key = String(log.employeeId || '').toLowerCase();
         if (key) {
-          if (log.type === 'Check-In' && !todayFaceInMap.has(key)) {
-            todayFaceInMap.set(key, log);
+          if (log.type === 'Check-In') {
+            const existing = todayFaceInMap.get(key);
+            if (!existing || String(log.timestamp).localeCompare(String(existing.timestamp)) > 0) {
+              todayFaceInMap.set(key, log);
+            }
           } else if (log.type === 'Check-Out') {
-            todayFaceOutMap.set(key, log);
+            const existing = todayFaceOutMap.get(key);
+            if (!existing || String(log.timestamp).localeCompare(String(existing.timestamp)) > 0) {
+              todayFaceOutMap.set(key, log);
+            }
           }
         }
       }

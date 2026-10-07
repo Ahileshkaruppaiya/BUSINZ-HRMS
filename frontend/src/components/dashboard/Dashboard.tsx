@@ -1251,13 +1251,16 @@ export const Dashboard: React.FC = () => {
       />
 
       {/* FULL-PAGE EMPLOYEE PROFILE FOCUSED ON LEAVE HISTORY */}
-      {profileModalEmployee && (
-        <EmployeeProfile
-          employee={profileModalEmployee}
-          onClose={() => setProfileModalEmployee(null)}
-          initialTab="leave"
-        />
-      )}
+      {profileModalEmployee && (() => {
+        const liveEmp = employees.find(e => (e.id && (e.id === profileModalEmployee.id || e.id === profileModalEmployee.employeeId)) || (e.employeeId && (e.employeeId === profileModalEmployee.employeeId || e.employeeId === profileModalEmployee.id))) || profileModalEmployee;
+        return (
+          <EmployeeProfile
+            employee={liveEmp}
+            onClose={() => setProfileModalEmployee(null)}
+            initialTab="leave"
+          />
+        );
+      })()}
 
       {/* ATTENDANCE CATEGORY FULL MODAL (TOTAL, ABSENT, PRESENT, EARLY, MISSED) */}
       {selectedCategory && (

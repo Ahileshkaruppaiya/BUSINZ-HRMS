@@ -175,6 +175,17 @@ export class AttendanceRepository {
         const empName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : punch.employeeId;
         const currentLogs = await this.getAttendanceLogs({ employeeId: punch.employeeId, date: targetShiftDate });
         let existing = currentLogs[0];
+        if (punch.type === 'OUT') {
+            if (!existing) {
+                throw new Error('Check-out is not allowed before check-in.');
+            }
+            if (existing.checkOut && existing.checkOut.trim() !== '' && existing.checkOut !== '--:--') {
+                throw new Error('Already checked out for this shift. Duplicate check-out is not allowed.');
+            }
+        }
+        if (punch.type === 'IN' && existing?.checkIn && existing.checkIn.trim() !== '' && existing.checkIn !== '--:--') {
+            throw new Error('Already checked in for this shift. Duplicate check-in is not allowed.');
+        }
         if (!existing) {
             existing = {
                 id: `ATT-${Date.now()}`,

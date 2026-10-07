@@ -253,6 +253,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   // Sync internal state if prop employee updates
   useEffect(() => {
     setCurrentEmp(employee);
+    setFormData(getInitialFormData(employee));
     const d = employee.educationalDetails?.degreeName;
     setIsCustomDegree(Boolean(d && !ALL_DEGREE_OPTIONS.includes(d)));
 
@@ -1120,6 +1121,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
 
     updateEmployee(currentEmp.id || currentEmp.employeeId, updatedData);
     setCurrentEmp(prev => ({ ...prev, ...updatedData }));
+    setFormData(prev => ({
+      ...prev,
+      firstName: cleanFname,
+      lastName: cleanLname,
+      personalEmail: cleanEmail,
+      phone: cleanPhone ? (profilePhoneCountryCode === '+91' ? cleanPhone : `${profilePhoneCountryCode} ${cleanPhone}`) : prev.phone
+    }));
     setIsEditing(false);
     setSalaryInputDrafts({});
     setSaveNotice('Employee onboarding details and salary updated successfully.');

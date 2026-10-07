@@ -381,8 +381,11 @@ export const supabaseDirect = {
   async updateEmployee(idOrEmpId: string, updates: Record<string, any>): Promise<{ success: boolean; data?: any; error?: any }> {
     try {
       if (!idOrEmpId) return { success: false, error: 'No employee ID provided' };
-      const cleanId = idOrEmpId.trim();
-      const filter = `or=(id.eq.${encodeURIComponent(cleanId)},employee_id.eq.${encodeURIComponent(cleanId)})`;
+      const cleanId = String(idOrEmpId).trim();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+      const filter = isUuid
+        ? `id=eq.${encodeURIComponent(cleanId)}`
+        : `or=(employee_id.ilike.${encodeURIComponent(cleanId)},email.ilike.${encodeURIComponent(cleanId)})`;
 
       const res = await fetch(`${SUPABASE_URL}/rest/v1/employees?${filter}`, {
         method: 'PATCH',

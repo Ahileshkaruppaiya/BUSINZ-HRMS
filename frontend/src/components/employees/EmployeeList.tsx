@@ -740,12 +740,15 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
       )}
 
       {/* Employee Connected Profile Modal */}
-      {activeProfileEmp && (
-        <EmployeeProfile 
-          employee={activeProfileEmp} 
-          onClose={() => setActiveProfileEmp(null)} 
-        />
-      )}
+      {activeProfileEmp && (() => {
+        const liveEmp = employees.find(e => (e.id && (e.id === activeProfileEmp.id || e.id === activeProfileEmp.employeeId)) || (e.employeeId && (e.employeeId === activeProfileEmp.employeeId || e.employeeId === activeProfileEmp.id))) || activeProfileEmp;
+        return (
+          <EmployeeProfile 
+            employee={liveEmp} 
+            onClose={() => setActiveProfileEmp(null)} 
+          />
+        );
+      })()}
 
       {/* Offer Letter Generator & Preview Modal */}
       {showOfferLetterModal && (

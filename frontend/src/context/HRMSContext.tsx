@@ -1356,7 +1356,9 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (emp.phone !== undefined) updates.phone = emp.phone;
     if (emp.designation !== undefined) updates.designation = emp.designation;
     if (emp.basicSalary !== undefined) updates.basic_salary = Number(emp.basicSalary) || 0;
-    if (emp.status !== undefined) updates.status = emp.status;
+    if (emp.status !== undefined && (emp.status === 'Active' || emp.status === 'On Leave' || emp.status === 'Terminated')) {
+      updates.status = emp.status;
+    }
     if (emp.mustChangePassword !== undefined) updates.must_change_password = emp.mustChangePassword;
     if (emp.accountStatus !== undefined) updates.account_status = emp.accountStatus;
     if (emp.attendanceMethod !== undefined) updates.attendance_method = emp.attendanceMethod;
@@ -5049,7 +5051,29 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (normalizedEmpData.personalEmail !== undefined) {
       normalizedEmpData.personalEmail = normalizedEmpData.personalEmail ? normalizedEmpData.personalEmail.trim().toLowerCase() : '';
     }
-    setEmployees(prev => prev.map(e => (e.id === id || e.employeeId === id) ? { ...e, ...normalizedEmpData } : e));
+    setEmployees(prev => prev.map(e => (
+      e.id === id || 
+      e.employeeId === id || 
+      (empData.employeeId && e.employeeId === empData.employeeId) || 
+      (empData.id && e.id === empData.id)
+    ) ? { ...e, ...normalizedEmpData } : e));
+
+    // Also update currentUser if editing self
+    if (
+      (currentUser.employeeId && (currentUser.employeeId === id || currentUser.employeeId === empData.employeeId)) ||
+      (currentUser.id && (currentUser.id === id || currentUser.id === empData.id))
+    ) {
+      const newFullName = `${normalizedEmpData.firstName !== undefined ? normalizedEmpData.firstName : ''} ${normalizedEmpData.lastName !== undefined ? normalizedEmpData.lastName : ''}`.trim();
+      if (newFullName) {
+        updateCurrentUser({
+          name: newFullName,
+          email: normalizedEmpData.email || currentUser.email,
+          department: normalizedEmpData.department || currentUser.department,
+          designation: normalizedEmpData.designation || currentUser.designation,
+        });
+      }
+    }
+
     const dbUpdates = employeeToDbUpdates(normalizedEmpData);
     if (Object.keys(dbUpdates).length > 0) {
       supabaseDirect.updateEmployee(id, dbUpdates).then(res => {
@@ -5217,6 +5241,48 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const wantsCheckIn = methodText.includes('check-in') || methodText.includes('checkin') || methodText.includes('in') || !wantsCheckOut;
     const punchType = wantsCheckOut ? 'Check-Out' : 'Check-In';
 
+    const isGpsOrFacePunch =
+      methodText.includes('gps') ||
+      methodText.includes('face') ||
+      methodText.includes('geofence') ||
+      methodText.includes('location');
+    const shouldEnforceGeofence = Boolean(
+      geofenceConfig.enabled &&
+      geofenceConfig.enforceStrictly &&
+      isGpsOrFacePunch
+    );
+
+    if (shouldEnforceGeofence) {
+      if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
+        const message = 'GPS location is required. Please allow location permission and try again.';
+        addNotification({
+          title: `${punchType} Blocked`,
+          message,
+          priority: 'Urgent',
+          category: 'Attendance'
+        });
+        return { success: false, message };
+      }
+
+      const actualDistance = calculateDistanceMeters(
+        location.lat,
+        location.lng,
+        geofenceConfig.centerLat,
+        geofenceConfig.centerLng
+      );
+
+      if (actualDistance > geofenceConfig.radiusMeters) {
+        const message = `You are outside the office geofence (${actualDistance}m away). Attendance is allowed only within ${geofenceConfig.radiusMeters}m of ${geofenceConfig.officeName || 'the office location'}.`;
+        addNotification({
+          title: `${punchType} Blocked`,
+          message,
+          priority: 'Urgent',
+          category: 'Attendance'
+        });
+        return { success: false, message };
+      }
+    }
+
     if ((wantsCheckIn && !evalResult.canCheckIn) || (wantsCheckOut && !evalResult.canCheckOut)) {
       console.warn(`[HRMS Attendance] Punch rejected for ${empId}: ${evalResult.message}`);
       addNotification({
@@ -5383,7 +5449,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addFaceLog = (log: Omit<FaceLog, 'id'>) => {
     const newLog: FaceLog = { ...log, id: `FL-${Date.now()}` };
     setFaceLogs(prev => {
-      const updated = [newLog, ...prev.filter(l => l.id !== newLog.id)].slice(0, 200);
+      const logDate = String(log.timestamp || '').slice(0, 10);
+      const logEmployee = String(log.employeeId || '').trim().toLowerCase();
+      const updated = [
+        newLog,
+        ...prev.filter(l => {
+          const sameEmployee = String(l.employeeId || '').trim().toLowerCase() === logEmployee;
+          const sameDate = String(l.timestamp || '').slice(0, 10) === logDate;
+          return !(sameEmployee && sameDate && l.type === log.type);
+        })
+      ].slice(0, 200);
       try {
         if (typeof window !== 'undefined') {
           localStorage.setItem('vrm_hrms_face_logs', JSON.stringify(updated));
