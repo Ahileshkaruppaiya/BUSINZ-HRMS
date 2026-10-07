@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useHRMS, calculateDistanceMeters } from '../../context/HRMSContext';
-import { ScanFace, Camera, CameraOff, CheckCircle2, RefreshCw, History, ShieldAlert, MapPin, XCircle, Navigation, X, Clock, AlertTriangle } from 'lucide-react';
+import { 
+  ScanFace, 
+  Camera, 
+  CameraOff, 
+  CheckCircle2, 
+  RefreshCw, 
+  History, 
+  ShieldAlert, 
+  MapPin, 
+  XCircle, 
+  Navigation, 
+  X, 
+  Clock, 
+  AlertTriangle,
+  LogIn,
+  LogOut,
+  User,
+  Users
+} from 'lucide-react';
+import { formatDateDDMMYYYY, normalizeToYYYYMMDD, formatTimeDisplay } from '../../utils/dateUtils';
 
 const getLocalDateString = (d = new Date()) => {
   const year = d.getFullYear();
@@ -81,7 +100,18 @@ export const FaceAttendance: React.FC = () => {
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanResult, setScanResult] = useState<{ status: 'success' | 'error' | null; message: string }>({ status: null, message: '' });
   const [punchType, setPunchType] = useState<'Check-In' | 'Check-Out'>('Check-In');
-  const todayStr = getLocalDateString();
+  const [todayStr, setTodayStr] = useState<string>(() => getLocalDateString());
+  const [activityViewTab, setActivityViewTab] = useState<'my' | 'all'>('my');
+
+  // Reactively track current date so at midnight the view automatically flips to tomorrow
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const cur = getLocalDateString();
+      setTodayStr(prev => prev !== cur ? cur : prev);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
   const selectedEmp = employees.find(e => e.employeeId === selectedEmpId || e.id === selectedEmpId);
 
   // Real-time ticker for shift window countdown
@@ -98,7 +128,7 @@ export const FaceAttendance: React.FC = () => {
 
   const todayAttendance = attendanceRecords.find(
     a => (a.employeeId === selectedEmpId || a.employeeId === selectedEmp?.employeeId || a.employeeId === selectedEmp?.id) && 
-         (a.shiftDate === shiftEval.shiftDate || a.date === shiftEval.shiftDate || a.date === todayStr)
+         (normalizeToYYYYMMDD(a.shiftDate) === todayStr || normalizeToYYYYMMDD(a.date) === todayStr)
   );
 
   const isCheckedIn = Boolean(todayAttendance?.checkIn);
@@ -496,21 +526,29 @@ export const FaceAttendance: React.FC = () => {
 
   const isEmployee = currentUser.role === 'Employee' || currentUser.role === 'Assignee';
 
+  const isHrOrAdmin = 
+    currentUser.role === 'Super Admin' ||
+    currentUser.role === 'HR Manager' ||
+    currentUser.role === 'HR Admin' ||
+    currentUser.role === 'Management' ||
+    currentUser.role === 'Admin';
+
   const currentUserEmp = useMemo(() => {
     return employees.find(e => 
-      (currentUser.employeeId && (e.employeeId === currentUser.employeeId || e.id === currentUser.employeeId)) ||
-      (currentUser.id && (e.id === currentUser.id || e.employeeId === currentUser.id)) ||
-      (currentUser.email && e.email?.toLowerCase() === currentUser.email?.toLowerCase())
+      (currentUser.employeeId && (e.employeeId?.toLowerCase() === currentUser.employeeId?.toLowerCase() || e.id?.toLowerCase() === currentUser.employeeId?.toLowerCase())) ||
+      (currentUser.id && (e.id?.toLowerCase() === currentUser.id?.toLowerCase() || e.employeeId?.toLowerCase() === currentUser.id?.toLowerCase())) ||
+      (currentUser.email && e.email?.toLowerCase() === currentUser.email?.toLowerCase()) ||
+      (currentUser.name && `${e.firstName} ${e.lastName}`.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
     );
   }, [employees, currentUser]);
 
   const validUserEmpIds = useMemo(() => {
     return new Set(
-      [currentUser.employeeId, currentUser.id, currentUserEmp?.employeeId, currentUserEmp?.id]
+      [currentUser.employeeId, currentUser.id, currentUserEmp?.employeeId, currentUserEmp?.id, selectedEmpId]
         .filter(Boolean)
         .map(s => String(s).trim().toLowerCase())
     );
-  }, [currentUser, currentUserEmp]);
+  }, [currentUser, currentUserEmp, selectedEmpId]);
 
   const validUserNames = useMemo(() => {
     const list = [currentUser.name];
@@ -521,97 +559,196 @@ export const FaceAttendance: React.FC = () => {
     return list.filter(Boolean).map(s => String(s).trim().toLowerCase());
   }, [currentUser, currentUserEmp]);
 
-  // Strict Scoping: Employee role strictly sees only their own punch & face scan activity
-  const isLogForCurrentUser = (log: any): boolean => {
-    const logEmpId = (log.employeeId || '').trim().toLowerCase();
-    const logEmpName = (log.employeeName || '').trim().toLowerCase();
+  // Strict Scoping: checks if a record belongs to the logged-in user
+  const isLogForCurrentUser = useMemo(() => {
+    return (item: any): boolean => {
+      if (!item) return false;
+      const logEmpId = String(item.employeeId || '').trim().toLowerCase();
+      const logEmpName = String(item.employeeName || (item.firstName ? `${item.firstName} ${item.lastName}` : '')).trim().toLowerCase();
 
-    // Direct Employee ID match
-    if (logEmpId && validUserEmpIds.has(logEmpId)) return true;
+      // Direct Employee ID match
+      if (logEmpId && validUserEmpIds.has(logEmpId)) return true;
 
-    // Direct Name match
-    if (logEmpName && validUserNames.some(name => logEmpName === name || logEmpName.includes(name) || name.includes(logEmpName))) {
-      return true;
-    }
-
-    return false;
-  };
-
-  // Construct today's activity logs combining faceLogs and authoritative attendanceRecords
-  const todayLogs = useMemo(() => {
-    // 1. Logs already in faceLogs for today
-    const rawTodayFaceLogs = faceLogs.filter(log => log.timestamp && String(log.timestamp).startsWith(todayStr));
-
-    // 2. Also incorporate authoritative attendanceRecords for today (persisted in DB so check in & check out records NEVER disappear on refresh)
-    const isTodayRecord = (a: any) => {
-      const d = a.date ? String(a.date).slice(0, 10) : '';
-      const sd = a.shiftDate ? String(a.shiftDate).slice(0, 10) : '';
-      return d === todayStr || sd === todayStr;
-    };
-    const todayAtts = attendanceRecords.filter(isTodayRecord);
-
-    const synthesized: typeof faceLogs = [];
-    todayAtts.forEach(att => {
-      const emp = employees.find(e => e.employeeId === att.employeeId || e.id === att.employeeId);
-      const empName = att.employeeName || (emp ? `${emp.firstName} ${emp.lastName}`.trim() : 'Employee');
-      const avatar = emp?.avatar || '';
-
-      const attEmpIds = new Set([att.employeeId, emp?.employeeId, emp?.id].filter(Boolean).map(s => String(s).toLowerCase()));
-      const matchesThisAtt = (logEmpId?: string, logEmpName?: string) => {
-        if (logEmpId && attEmpIds.has(logEmpId.toLowerCase())) return true;
-        if (logEmpName && empName && (logEmpName.toLowerCase() === empName.toLowerCase() || logEmpName.toLowerCase().includes(empName.toLowerCase()))) return true;
-        return false;
-      };
-
-      // Check-In record
-      if (att.checkIn && String(att.checkIn).trim() !== '' && att.checkIn !== '--:--') {
-        const hasCheckInLog = rawTodayFaceLogs.some(l => 
-          matchesThisAtt(l.employeeId, l.employeeName) && 
-          l.type === 'Check-In'
-        );
-        if (!hasCheckInLog) {
-          const fullTs = normalizeToFullTimestamp(att.checkIn, todayStr);
-          synthesized.push({
-            id: `att-in-${att.id || att.employeeId}`,
-            employeeId: att.employeeId,
-            employeeName: empName,
-            timestamp: fullTs,
-            type: 'Check-In',
-            status: 'Success',
-            confidenceScore: att.faceVerified ? 99 : 100,
-            photoUrl: avatar
-          });
-        }
+      // Direct Name match
+      if (logEmpName && validUserNames.some(name => logEmpName === name || logEmpName.includes(name) || name.includes(logEmpName))) {
+        return true;
       }
 
-      // Check-Out record
-      if (att.checkOut && String(att.checkOut).trim() !== '' && att.checkOut !== '--:--') {
-        const hasCheckOutLog = rawTodayFaceLogs.some(l => 
-          matchesThisAtt(l.employeeId, l.employeeName) && 
-          l.type === 'Check-Out'
-        );
-        if (!hasCheckOutLog) {
-          const fullTs = normalizeToFullTimestamp(att.checkOut, todayStr);
-          synthesized.push({
-            id: `att-out-${att.id || att.employeeId}`,
-            employeeId: att.employeeId,
-            employeeName: empName,
-            timestamp: fullTs,
-            type: 'Check-Out',
-            status: 'Success',
-            confidenceScore: 100,
-            photoUrl: avatar
-          });
+      return false;
+    };
+  }, [validUserEmpIds, validUserNames]);
+
+  // 1. My Attendance record for TODAY strictly (date matches todayStr)
+  const myTodayAttendance = useMemo(() => {
+    return attendanceRecords.find(a => {
+      const d = normalizeToYYYYMMDD(a.date);
+      const sd = normalizeToYYYYMMDD(a.shiftDate);
+      const matchesDate = d === todayStr || sd === todayStr;
+      return matchesDate && isLogForCurrentUser(a);
+    });
+  }, [attendanceRecords, todayStr, isLogForCurrentUser]);
+
+  // 2. My Face / GPS logs for TODAY strictly (timestamp matches todayStr)
+  const myTodayFaceLogs = useMemo(() => {
+    return (faceLogs || []).filter(log => {
+      const d = normalizeToYYYYMMDD(log.timestamp);
+      return d === todayStr && isLogForCurrentUser(log);
+    }).sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+  }, [faceLogs, todayStr, isLogForCurrentUser]);
+
+  // 3. Extract My Check-In & Check-Out Times for Today
+  const myCheckInTime = useMemo(() => {
+    const faceIn = myTodayFaceLogs.find(l => l.type === 'Check-In');
+    if (faceIn && faceIn.timestamp) {
+      return formatAttendanceTime(faceIn.timestamp);
+    }
+    if (myTodayAttendance?.checkIn && myTodayAttendance.checkIn !== '--:--' && myTodayAttendance.checkIn.trim() !== '') {
+      return formatAttendanceTime(myTodayAttendance.checkIn);
+    }
+    return null;
+  }, [myTodayFaceLogs, myTodayAttendance]);
+
+  const myCheckOutTime = useMemo(() => {
+    const faceOut = myTodayFaceLogs.find(l => l.type === 'Check-Out');
+    if (faceOut && faceOut.timestamp) {
+      return formatAttendanceTime(faceOut.timestamp);
+    }
+    if (myTodayAttendance?.checkOut && myTodayAttendance.checkOut !== '--:--' && myTodayAttendance.checkOut.trim() !== '') {
+      return formatAttendanceTime(myTodayAttendance.checkOut);
+    }
+    return null;
+  }, [myTodayFaceLogs, myTodayAttendance]);
+
+  const myTodayStatus: 'Completed' | 'Checked In' | 'Not Marked' = useMemo(() => {
+    if (myCheckInTime && myCheckOutTime) return 'Completed';
+    if (myCheckInTime) return 'Checked In';
+    return 'Not Marked';
+  }, [myCheckInTime, myCheckOutTime]);
+
+  // 4. Construct My Today's verified punch events list
+  const myTodayLogs = useMemo(() => {
+    const logs: typeof faceLogs = [...myTodayFaceLogs];
+
+    if (myCheckInTime && !logs.some(l => l.type === 'Check-In')) {
+      const fullTs = normalizeToFullTimestamp(myTodayAttendance?.checkIn || '', todayStr);
+      logs.push({
+        id: `my-att-in-${myTodayAttendance?.id || 'today'}`,
+        employeeId: currentUser.employeeId || 'EMP-001',
+        employeeName: currentUser.name || 'You',
+        timestamp: fullTs,
+        type: 'Check-In',
+        status: 'Success',
+        confidenceScore: myTodayAttendance?.faceVerified ? 100 : 99,
+        photoUrl: currentUser.avatar || currentUserEmp?.avatar || ''
+      });
+    }
+
+    if (myCheckOutTime && !logs.some(l => l.type === 'Check-Out')) {
+      const fullTs = normalizeToFullTimestamp(myTodayAttendance?.checkOut || '', todayStr);
+      logs.push({
+        id: `my-att-out-${myTodayAttendance?.id || 'today'}`,
+        employeeId: currentUser.employeeId || 'EMP-001',
+        employeeName: currentUser.name || 'You',
+        timestamp: fullTs,
+        type: 'Check-Out',
+        status: 'Success',
+        confidenceScore: 100,
+        photoUrl: currentUser.avatar || currentUserEmp?.avatar || ''
+      });
+    }
+
+    return logs.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+  }, [myTodayFaceLogs, myCheckInTime, myCheckOutTime, myTodayAttendance, todayStr, currentUser, currentUserEmp]);
+
+  // 5. Construct All Staff Today Attendance (each staff with checkIn and checkOut for TODAY only)
+  const allTodayStaffAttendance = useMemo(() => {
+    const isToday = (dateVal?: string | Date | null) => {
+      if (!dateVal) return false;
+      return normalizeToYYYYMMDD(dateVal) === todayStr;
+    };
+
+    const todayAttMap = new Map<string, any>();
+    attendanceRecords.forEach(att => {
+      if (isToday(att.date) || isToday(att.shiftDate)) {
+        const key = String(att.employeeId || '').toLowerCase();
+        if (key) todayAttMap.set(key, att);
+      }
+    });
+
+    const todayFaceInMap = new Map<string, any>();
+    const todayFaceOutMap = new Map<string, any>();
+    (faceLogs || []).forEach(log => {
+      if (isToday(log.timestamp)) {
+        const key = String(log.employeeId || '').toLowerCase();
+        if (key) {
+          if (log.type === 'Check-In' && !todayFaceInMap.has(key)) {
+            todayFaceInMap.set(key, log);
+          } else if (log.type === 'Check-Out') {
+            todayFaceOutMap.set(key, log);
+          }
         }
       }
     });
 
-    const combined = [...rawTodayFaceLogs, ...synthesized].sort((a, b) => 
-      String(b.timestamp).localeCompare(String(a.timestamp))
-    );
+    const allEmpKeys = new Set([
+      ...todayAttMap.keys(),
+      ...todayFaceInMap.keys(),
+      ...todayFaceOutMap.keys()
+    ]);
 
-    return isEmployee ? combined.filter(isLogForCurrentUser) : combined;
-  }, [faceLogs, attendanceRecords, todayStr, employees, isEmployee, currentUser, validUserEmpIds, validUserNames]);
+    const result: Array<{
+      employeeId: string;
+      employeeName: string;
+      avatar: string;
+      department: string;
+      checkInTime: string | null;
+      checkOutTime: string | null;
+      status: 'Completed' | 'Checked In' | 'Not Marked';
+    }> = [];
+
+    allEmpKeys.forEach(empKey => {
+      const att = todayAttMap.get(empKey);
+      const faceIn = todayFaceInMap.get(empKey);
+      const faceOut = todayFaceOutMap.get(empKey);
+      const emp = employees.find(e => 
+        String(e.employeeId || '').toLowerCase() === empKey || 
+        String(e.id || '').toLowerCase() === empKey
+      );
+
+      const empName = att?.employeeName || (emp ? `${emp.firstName} ${emp.lastName}`.trim() : (faceIn?.employeeName || faceOut?.employeeName || 'Staff'));
+      const avatar = emp?.avatar || faceIn?.photoUrl || faceOut?.photoUrl || '';
+      const department = emp?.department || 'General';
+
+      const inTimeRaw = faceIn?.timestamp || att?.checkIn;
+      const outTimeRaw = faceOut?.timestamp || att?.checkOut;
+
+      const checkInTime = inTimeRaw && inTimeRaw !== '--:--' && inTimeRaw.trim() !== '' ? formatAttendanceTime(inTimeRaw) : null;
+      const checkOutTime = outTimeRaw && outTimeRaw !== '--:--' && outTimeRaw.trim() !== '' ? formatAttendanceTime(outTimeRaw) : null;
+
+      let status: 'Completed' | 'Checked In' | 'Not Marked' = 'Not Marked';
+      if (checkInTime && checkOutTime) {
+        status = 'Completed';
+      } else if (checkInTime) {
+        status = 'Checked In';
+      }
+
+      result.push({
+        employeeId: emp?.employeeId || att?.employeeId || empKey.toUpperCase(),
+        employeeName: empName,
+        avatar,
+        department,
+        checkInTime,
+        checkOutTime,
+        status
+      });
+    });
+
+    return result.sort((a, b) => {
+      if (a.checkInTime && !b.checkInTime) return -1;
+      if (!a.checkInTime && b.checkInTime) return 1;
+      return a.employeeName.localeCompare(b.employeeName);
+    });
+  }, [attendanceRecords, faceLogs, todayStr, employees]);
 
   if (isCEO) {
     return (
@@ -1000,116 +1137,398 @@ export const FaceAttendance: React.FC = () => {
 
         </div>
 
-        {/* RIGHT COLUMN: TODAY'S ACTIVITY CARD MATCHING SCREENSHOT */}
+        {/* RIGHT COLUMN: TODAY'S ACTIVITY CARD (STRICTLY SCOPED TO TODAY ONLY) */}
         <div className="face-attendance-activity-card" style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
           border: '1px solid #e2e8f0',
           boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          gap: '16px'
         }}>
           {/* Header Strip */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-              {isEmployee ? "My Today's Activity" : "Today's Activity"}
-            </h2>
-            <span style={{
-              backgroundColor: '#ecfeff',
-              color: '#0e7490',
-              padding: '4px 10px',
-              borderRadius: '6px',
-              fontSize: '0.74rem',
-              fontWeight: 800,
-              letterSpacing: '0.04em'
-            }}>
-              {todayLogs.length} {todayLogs.length === 1 ? 'RECORD' : 'RECORDS'}
-            </span>
-          </div>
-
-          {/* Activity Body */}
-          {todayLogs.length === 0 ? (
-            /* Empty State Matching Screenshot */
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
-              <div style={{
-                width: '52px',
-                height: '52px',
-                borderRadius: '50%',
-                backgroundColor: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '14px'
-              }}>
-                <Clock size={24} color="#94a3b8" />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Clock size={18} color="#0e7490" />
+                <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Today's Activity
+                </h2>
               </div>
-              <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#0f172a', marginBottom: '4px' }}>
-                No activity yet
-              </div>
-              <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-                {isEmployee ? 'Your scans today will appear here' : 'Scans will appear here'}
+              <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '3px', fontWeight: 500 }}>
+                {formatDateDDMMYYYY(todayStr)} • Strictly Today's Punches
               </div>
             </div>
-          ) : (
-            /* List of Scans for Today */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '420px', overflowY: 'auto' }}>
-              {todayLogs.map(log => (
-                <div
-                  key={log.id}
+
+            {/* If HR / Admin: Toggle between My Activity and All Staff Today */}
+            {isHrOrAdmin ? (
+              <div style={{
+                display: 'inline-flex',
+                backgroundColor: '#f1f5f9',
+                padding: '3px',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setActivityViewTab('my')}
                   style={{
+                    padding: '5px 12px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    fontSize: '0.76rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '12px 14px',
-                    borderRadius: '12px',
-                    border: '1px solid #e2e8f0',
-                    backgroundColor: '#f8fafc'
+                    gap: '5px',
+                    backgroundColor: activityViewTab === 'my' ? '#ffffff' : 'transparent',
+                    color: activityViewTab === 'my' ? '#0e7490' : '#64748b',
+                    boxShadow: activityViewTab === 'my' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #0e7490, #0891b2)',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 800,
-                      fontSize: '0.75rem'
-                    }}>
-                      {log.employeeName?.substring(0, 2).toUpperCase() || 'EM'}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
-                        {log.employeeName}
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                        {formatAttendanceTime(log.timestamp)}
-                      </div>
-                    </div>
-                  </div>
+                  <User size={13} />
+                  <span>My Activity</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivityViewTab('all')}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    fontSize: '0.76rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    backgroundColor: activityViewTab === 'all' ? '#ffffff' : 'transparent',
+                    color: activityViewTab === 'all' ? '#0e7490' : '#64748b',
+                    boxShadow: activityViewTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Users size={13} />
+                  <span>All Staff Today ({allTodayStaffAttendance.length})</span>
+                </button>
+              </div>
+            ) : (
+              <span style={{
+                backgroundColor: '#ecfeff',
+                color: '#0e7490',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '0.74rem',
+                fontWeight: 800,
+                letterSpacing: '0.04em'
+              }}>
+                {myTodayLogs.length} {myTodayLogs.length === 1 ? 'RECORD' : 'RECORDS'}
+              </span>
+            )}
+          </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontSize: '0.7rem',
-                      fontWeight: 800,
-                      backgroundColor: log.type === 'Check-In' ? '#ecfdf5' : '#ecfeff',
-                      color: log.type === 'Check-In' ? '#059669' : '#0e7490'
-                    }}>
-                      {log.type}
-                    </span>
-                    <span className="status-pill present" style={{ fontSize: '0.65rem' }}>
-                      {log.confidenceScore}%
-                    </span>
+          {/* VIEW 1: MY ACTIVITY (STRICTLY LOGGED-IN USER'S OWN DATA) */}
+          {activityViewTab === 'my' ? (
+            <>
+              {/* User Identity Banner */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 14px',
+                backgroundColor: '#f8fafc',
+                borderRadius: '12px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #0e7490, #0891b2)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.8rem'
+                  }}>
+                    {currentUser.name ? currentUser.name.substring(0, 2).toUpperCase() : 'ME'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
+                      {currentUser.name || 'You'}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      {currentUser.employeeId || 'Staff'} • {currentUser.department || 'General'}
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Status Pill */}
+                <span style={{
+                  padding: '4px 10px',
+                  borderRadius: '9999px',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  backgroundColor: myTodayStatus === 'Completed' ? '#dcfce7' : myTodayStatus === 'Checked In' ? '#ecfeff' : '#f1f5f9',
+                  color: myTodayStatus === 'Completed' ? '#15803d' : myTodayStatus === 'Checked In' ? '#0e7490' : '#64748b',
+                  border: `1px solid ${myTodayStatus === 'Completed' ? '#bbf7d0' : myTodayStatus === 'Checked In' ? '#a5f3fc' : '#e2e8f0'}`
+                }}>
+                  {myTodayStatus === 'Completed' ? '✓ Completed' : myTodayStatus === 'Checked In' ? '● Checked In' : 'Not Punched'}
+                </span>
+              </div>
+
+              {/* 2 High-Contrast Dedicated Tiles: CHECK-IN TIME & CHECK-OUT TIME */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px'
+              }}>
+                {/* Check-In Tile */}
+                <div style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  backgroundColor: myCheckInTime ? '#f0fdf4' : '#f8fafc',
+                  border: `1.5px solid ${myCheckInTime ? '#86efac' : '#e2e8f0'}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 800, color: myCheckInTime ? '#15803d' : '#64748b', letterSpacing: '0.05em' }}>
+                      CHECK-IN TIME
+                    </span>
+                    <LogIn size={15} color={myCheckInTime ? '#16a34a' : '#94a3b8'} />
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: myCheckInTime ? '#0f172a' : '#94a3b8', letterSpacing: '-0.02em' }}>
+                    {myCheckInTime || '—'}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: myCheckInTime ? '#16a34a' : '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {myCheckInTime ? <CheckCircle2 size={12} /> : null}
+                    <span>{myCheckInTime ? 'Punch Verified' : 'Pending clock-in'}</span>
+                  </div>
+                </div>
+
+                {/* Check-Out Tile */}
+                <div style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  backgroundColor: myCheckOutTime ? '#ecfeff' : myCheckInTime ? '#fffbeb' : '#f8fafc',
+                  border: `1.5px solid ${myCheckOutTime ? '#67e8f9' : myCheckInTime ? '#fde68a' : '#e2e8f0'}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 800, color: myCheckOutTime ? '#0e7490' : myCheckInTime ? '#b45309' : '#64748b', letterSpacing: '0.05em' }}>
+                      CHECK-OUT TIME
+                    </span>
+                    <LogOut size={15} color={myCheckOutTime ? '#0e7490' : myCheckInTime ? '#d97706' : '#94a3b8'} />
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: myCheckOutTime ? '#0f172a' : myCheckInTime ? '#d97706' : '#94a3b8', letterSpacing: '-0.02em' }}>
+                    {myCheckOutTime || (myCheckInTime ? 'In Progress' : '—')}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: myCheckOutTime ? '#0e7490' : myCheckInTime ? '#b45309' : '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {myCheckOutTime ? <CheckCircle2 size={12} /> : null}
+                    <span>{myCheckOutTime ? 'Shift Completed' : myCheckInTime ? 'Working currently' : 'Pending punch-out'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Today's Scan Logs Audit Trail */}
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', marginBottom: '8px', letterSpacing: '0.04em' }}>
+                  TODAY'S VERIFIED PUNCH LOGS ({myTodayLogs.length})
+                </div>
+
+                {myTodayLogs.length === 0 ? (
+                  <div style={{
+                    padding: '30px 16px',
+                    textAlign: 'center',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '12px',
+                    border: '1px dashed #cbd5e1'
+                  }}>
+                    <Clock size={28} color="#94a3b8" style={{ margin: '0 auto 8px', display: 'block' }} />
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>
+                      No activity recorded for today
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                      Your check-in and check-out records for today will appear here as soon as you clock in.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
+                    {myTodayLogs.map(log => (
+                      <div
+                        key={log.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 12px',
+                          borderRadius: '10px',
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#f8fafc'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '50%',
+                            backgroundColor: log.type === 'Check-In' ? '#dcfce7' : '#ecfeff',
+                            color: log.type === 'Check-In' ? '#15803d' : '#0e7490',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            {log.type === 'Check-In' ? <LogIn size={14} /> : <LogOut size={14} />}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '0.82rem', color: '#0f172a' }}>
+                              {log.type}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                              {formatAttendanceTime(log.timestamp)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            backgroundColor: log.type === 'Check-In' ? '#dcfce7' : '#ecfeff',
+                            color: log.type === 'Check-In' ? '#15803d' : '#0e7490'
+                          }}>
+                            {log.type}
+                          </span>
+                          <span className="status-pill present" style={{ fontSize: '0.65rem' }}>
+                            {log.confidenceScore}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            /* VIEW 2: ALL STAFF TODAY (ACCESSIBLE TO HR/ADMIN WHEN TOGGLED) */
+            <>
+              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', letterSpacing: '0.04em' }}>
+                COMPANY ATTENDANCE FOR TODAY ({allTodayStaffAttendance.length} ACTIVE)
+              </div>
+
+              {allTodayStaffAttendance.length === 0 ? (
+                <div style={{
+                  padding: '40px 16px',
+                  textAlign: 'center',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '12px',
+                  border: '1px dashed #cbd5e1'
+                }}>
+                  <Users size={32} color="#94a3b8" style={{ margin: '0 auto 8px', display: 'block' }} />
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0f172a', marginBottom: '2px' }}>
+                    No staff activity today
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                    Staff check-ins and check-outs for today will appear here in real-time.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '380px', overflowY: 'auto' }}>
+                  {allTodayStaffAttendance.map(staff => (
+                    <div
+                      key={staff.employeeId}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '12px',
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#f8fafc',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                    >
+                      {/* Top: Name, Department & Status */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #0e7490, #0891b2)',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 800,
+                            fontSize: '0.72rem'
+                          }}>
+                            {staff.employeeName.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '0.86rem', color: '#0f172a' }}>
+                              {staff.employeeName}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                              {staff.employeeId} • {staff.department}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span style={{
+                          padding: '3px 8px',
+                          borderRadius: '9999px',
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          backgroundColor: staff.status === 'Completed' ? '#dcfce7' : staff.status === 'Checked In' ? '#ecfeff' : '#f1f5f9',
+                          color: staff.status === 'Completed' ? '#15803d' : staff.status === 'Checked In' ? '#0e7490' : '#64748b'
+                        }}>
+                          {staff.status}
+                        </span>
+                      </div>
+
+                      {/* Bottom: Side-by-side Check-In and Check-Out Times */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '8px',
+                        backgroundColor: '#ffffff',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#16a34a' }}>
+                            CHECK-IN
+                          </div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 800, color: staff.checkInTime ? '#0f172a' : '#94a3b8' }}>
+                            {staff.checkInTime || '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#0e7490' }}>
+                            CHECK-OUT
+                          </div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 800, color: staff.checkOutTime ? '#0f172a' : staff.checkInTime ? '#d97706' : '#94a3b8' }}>
+                            {staff.checkOutTime || (staff.checkInTime ? 'In Progress' : '—')}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
         </div>
