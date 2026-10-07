@@ -1154,7 +1154,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
           SELECT REPORT TYPE
         </label>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+        <div className="report-type-cards-grid">
           {reportCards.map(card => {
             const isSelected = selectedReportType === card.key;
             return (

@@ -320,7 +320,7 @@ export const RecruitmentPipeline: React.FC = () => {
 
       {/* TAB 1: KANBAN PIPELINE BOARD (HR & CEO) */}
       {activeTab === 'pipeline' && (
-        <div className="kanban-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px' }}>
+        <div className="kanban-grid">
           {stages.map(stage => {
             const stageCandidates = visibleCandidates.filter(c => c.stage === stage);
             return (

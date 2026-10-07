@@ -394,7 +394,7 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({
       {!isEmployee && (
         <div style={{ marginBottom: '28px' }}>
           {shifts.length > 0 ? (
-          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+          <div className="shift-cards-grid">
             {shifts.map(s => (
               <div 
                 key={s.id} 

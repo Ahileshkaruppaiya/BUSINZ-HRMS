@@ -306,7 +306,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ openAddModal, onClos
 
       {/* Unified Single-Line Filter Bar */}
       <div className="card" style={{ padding: '16px 20px', marginBottom: '20px' }}>
-        <div style={{
+        <div className="employee-filters-bar" style={{
           display: 'flex',
           alignItems: 'flex-end',
           gap: '12px',

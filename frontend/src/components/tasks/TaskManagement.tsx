@@ -333,7 +333,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ openAddModal, on
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <div className="task-module-tabs-bar">
               {[
                 { id: 'register', label: 'Task Register', icon: ListTodo },
                 { id: 'my_tasks', label: 'My Tasks', icon: UserCheck, badge: myTasksCount },

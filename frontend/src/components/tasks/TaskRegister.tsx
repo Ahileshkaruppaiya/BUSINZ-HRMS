@@ -320,7 +320,7 @@ export const TaskRegister: React.FC<TaskRegisterProps> = ({ onSelectTask, onOpen
         background: '#ffffff',
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)' 
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', width: '100%', overflowX: 'auto', paddingBottom: '2px' }}>
+        <div className="task-filters-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', width: '100%', overflowX: 'auto', paddingBottom: '2px' }}>
           {/* Global Search Input */}
           <div style={{ position: 'relative', flex: '0 1 200px', minWidth: '150px' }}>
             <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />

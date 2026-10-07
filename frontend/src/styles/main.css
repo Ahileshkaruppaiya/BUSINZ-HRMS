@@ -2215,10 +2215,13 @@ input:-webkit-autofill:active {
 
 /* Kanban Board UI */
 .kanban-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 20px;
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  gap: 16px;
   align-items: start;
+  padding-bottom: 12px;
+  width: 100%;
 }
 
 .kanban-col {
@@ -2226,6 +2229,8 @@ input:-webkit-autofill:active {
   border-radius: var(--radius-md);
   padding: 16px;
   min-height: 500px;
+  flex: 0 0 270px;
+  min-width: 270px;
 }
 
 .kanban-col-header {
@@ -4762,3 +4767,332 @@ input:-webkit-autofill:active {
     display: block !important;
   }
 }
+
+/* =========================================================================
+   10. COMPREHENSIVE ENTERPRISE MOBILE RESPONSIVENESS (< 768px & < 640px)
+   ========================================================================= */
+
+/* A. Settings Dashboard Grid */
+.settings-dashboard-grid {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .settings-dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+}
+
+/* B. Top Module Tab Bars (Swipeable horizontally on mobile) */
+.task-module-tabs-bar,
+.tab-bar-scrollable,
+.module-tabs-scrollable {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .task-module-tabs-bar,
+  .tab-bar-scrollable,
+  .module-tabs-scrollable {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 6px !important;
+    padding: 4px 2px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .task-module-tabs-bar::-webkit-scrollbar,
+  .tab-bar-scrollable::-webkit-scrollbar,
+  .module-tabs-scrollable::-webkit-scrollbar {
+    display: none !important;
+    height: 0 !important;
+  }
+  .task-module-tabs-bar > button,
+  .tab-bar-scrollable > button,
+  .module-tabs-scrollable > button {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    padding: 7px 14px !important;
+    font-size: 0.78rem !important;
+  }
+}
+
+/* C. Universal Filter Bars on Mobile */
+@media (max-width: 768px) {
+  .employee-filters-bar,
+  .filter-bar-responsive {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .employee-filters-bar > div:first-child,
+  .filter-bar-responsive > div:first-child {
+    grid-column: span 2 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .employee-filters-bar > div:last-child,
+  .filter-bar-responsive > div:last-child {
+    grid-column: span 2 !important;
+  }
+
+  .task-filters-row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+    overflow-x: visible !important;
+  }
+  .task-filters-row > div:first-child {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .task-filters-row > div:not(:first-child) {
+    flex: 1 1 calc(50% - 4px) !important;
+    width: calc(50% - 4px) !important;
+    min-width: 0 !important;
+  }
+}
+
+/* D. Attendance Report Types Grid */
+.report-type-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .report-type-cards-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .report-type-cards-grid > button {
+    padding: 10px 10px !important;
+    gap: 10px !important;
+  }
+  .report-type-cards-grid > button > div:first-child {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .report-type-cards-grid > button > div:first-child svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .report-type-cards-grid > button > div:last-child > div:first-child {
+    font-size: 0.8rem !important;
+  }
+  .report-type-cards-grid > button > div:last-child > div:last-child {
+    font-size: 0.68rem !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 480px) {
+  .report-type-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Shift Cards Grid */
+.shift-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .shift-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+}
+
+/* E. Add Employee Multi-Step Wizard Stepper */
+@media (max-width: 768px) {
+  .onboarding-stepper-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+  .onboarding-stepper-container::-webkit-scrollbar {
+    display: none !important;
+  }
+  .onboarding-stepper-bar {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    padding: 8px 12px !important;
+    width: max-content !important;
+    min-width: 100% !important;
+  }
+  .onboarding-stepper-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+  .onboarding-step-pill {
+    flex: 0 0 auto !important;
+    min-width: max-content !important;
+    padding: 6px 12px !important;
+    gap: 6px !important;
+  }
+  .onboarding-step-pill span {
+    display: inline-block !important;
+    font-size: 0.74rem !important;
+    white-space: nowrap !important;
+  }
+  .onboarding-header {
+    height: auto !important;
+    min-height: 56px !important;
+    padding: 10px 14px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    box-sizing: border-box !important;
+  }
+  .onboarding-header-title {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+  .onboarding-header-title h2 {
+    font-size: 0.95rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .onboarding-header-title p {
+    font-size: 0.72rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .onboarding-header-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+  .onboarding-emp-id-pill {
+    padding: 4px 8px !important;
+    font-size: 0.74rem !important;
+  }
+  .onboarding-emp-id-label {
+    display: none !important;
+  }
+  .onboarding-content-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 16px 12px !important;
+  }
+  .onboarding-footer {
+    padding: 12px 14px !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .onboarding-footer .btn {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+  }
+}
+
+/* F. Muster Roll Mobile Sticky Columns */
+@media (max-width: 640px) {
+  .muster-roll-table th:first-child,
+  .muster-roll-table td:first-child {
+    min-width: 75px !important;
+    width: 75px !important;
+    padding: 8px 6px !important;
+    font-size: 0.72rem !important;
+  }
+  .muster-roll-table th:nth-child(2),
+  .muster-roll-table td:nth-child(2) {
+    left: 75px !important;
+    min-width: 120px !important;
+    width: 120px !important;
+    padding: 8px 8px !important;
+    font-size: 0.74rem !important;
+  }
+  .muster-roll-scroll-container {
+    -webkit-overflow-scrolling: touch !important;
+  }
+}
+
+/* G. KPI Grid Odd-Card Balancing (e.g. 5 cards on mobile) */
+@media (max-width: 640px) {
+  .kpi-grid,
+  .kpi-grid.compact {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 14px !important;
+  }
+  .kpi-grid > :last-child:nth-child(odd),
+  .kpi-grid.compact > :last-child:nth-child(odd) {
+    grid-column: span 2 !important;
+  }
+}
+
+/* H. Universal Touch-Scrolling for Tables */
+.table-responsive,
+div[style*="overflowX: 'auto'"],
+div[style*="overflow-x: auto"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-x pan-y !important;
+}
+
+@media (max-width: 768px) {
+  .table-responsive {
+    box-shadow: inset -8px 0 6px -6px rgba(14, 116, 144, 0.15) !important;
+  }
+  .hrms-table th,
+  .hrms-table td {
+    padding: 8px 10px !important;
+    font-size: 0.78rem !important;
+  }
+  .hrms-table th {
+    font-size: 0.72rem !important;
+    letter-spacing: 0.02em !important;
+  }
+}
+
+/* I. Employee Profile Fullscreen Sheet on Mobile */
+@media (max-width: 768px) {
+  .profile-hero-banner {
+    padding: 16px 14px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  .profile-modal-body {
+    padding: 14px 12px 64px 12px !important;
+  }
+  .profile-section-card {
+    padding: 16px 12px !important;
+    border-radius: 12px !important;
+  }
+}
+

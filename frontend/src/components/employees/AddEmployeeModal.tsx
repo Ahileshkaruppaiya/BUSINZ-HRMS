@@ -1857,9 +1857,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: '#F1F5F9', borderRadius: '8px', fontSize: '0.82rem', color: '#475569', fontWeight: 600 }}>
-            <span>Employee ID:</span>
+        <div className="onboarding-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="onboarding-emp-id-pill" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: '#F1F5F9', borderRadius: '8px', fontSize: '0.82rem', color: '#475569', fontWeight: 600 }}>
+            <span className="onboarding-emp-id-label">Employee ID:</span>
             <span style={{ color: '#0E7490', fontWeight: 700, fontFamily: 'monospace' }}>{formData.employeeId}</span>
           </div>
           <button 

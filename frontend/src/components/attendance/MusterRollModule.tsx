@@ -731,8 +731,8 @@ export const MusterRollModule: React.FC<MusterRollModuleProps> = ({
             ))}
           </div>
           
-          <div style={{ overflowX: 'auto', maxHeight: '680px' }}>
-            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.8rem' }}>
+          <div className="muster-roll-scroll-container" style={{ overflowX: 'auto', maxHeight: '680px' }}>
+            <table className="muster-roll-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.8rem' }}>
               <thead>
                 <tr style={{ backgroundColor: '#F8FAFC' }}>
                   

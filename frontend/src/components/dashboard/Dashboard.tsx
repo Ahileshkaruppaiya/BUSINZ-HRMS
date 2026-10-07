@@ -474,7 +474,7 @@ export const Dashboard: React.FC = () => {
             Here is your workforce output overview, attendance progress & shift efficiency metrics for today.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="welcome-banner-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {!isEmployee && (
             <>
               <button 

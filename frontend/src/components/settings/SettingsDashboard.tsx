@@ -121,7 +121,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ onSelectSe
   });
 
   return (
-    <div style={{ maxWidth: '1120px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', alignItems: 'stretch' }}>
+    <div className="settings-dashboard-grid">
       {filteredSections.length === 0 ? (
         <div style={{
           padding: '36px',
