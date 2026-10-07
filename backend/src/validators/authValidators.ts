@@ -33,8 +33,8 @@ export const changePasswordSchema = z
   });
 
 export const updateAccountStatusSchema = z.object({
-  status: z.enum(['ACTIVE', 'LOCKED', 'DISABLED'], {
-    errorMap: () => ({ message: "Status must be 'ACTIVE', 'LOCKED', or 'DISABLED'" }),
+  status: z.enum(['ACTIVE', 'LOCKED', 'DISABLED', 'DEACTIVATED'], {
+    errorMap: () => ({ message: "Status must be 'ACTIVE', 'LOCKED', 'DISABLED', or 'DEACTIVATED'" }),
   }),
 });
 

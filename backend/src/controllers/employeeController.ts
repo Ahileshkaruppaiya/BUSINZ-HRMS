@@ -405,15 +405,15 @@ export const updateEmployeeLoginStatus = async (req: Request, res: Response, nex
     }
 
     emp.accountStatus = validated.status as AccountStatus;
-    if (validated.status === 'DISABLED') {
-      emp.status = 'Terminated';
-    } else if (validated.status === 'ACTIVE' && emp.status === 'Terminated') {
+    if (validated.status === 'DEACTIVATED' || validated.status === 'DISABLED') {
+      emp.status = 'Inactive';
+    } else if (validated.status === 'ACTIVE' && (emp.status === 'Inactive' || emp.status === 'Terminated')) {
       emp.status = 'Active';
     }
 
     res.status(200).json({
       success: true,
-      message: `Employee login access has been ${validated.status === 'ACTIVE' ? 'enabled' : 'disabled'}.`,
+      message: `Employee login access has been ${validated.status === 'ACTIVE' ? 'activated' : 'deactivated'}.`,
       data: {
         employeeId: emp.employeeId,
         accountStatus: validated.status,

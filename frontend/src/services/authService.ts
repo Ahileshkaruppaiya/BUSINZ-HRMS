@@ -208,7 +208,7 @@ export const authService = {
         console.warn(`[Auth] Backend login unavailable (HTTP ${response.status}); trying direct Supabase login.`);
       }
     } catch (err: any) {
-      if (err.message && !err.message.includes('Cannot connect') && err.message.includes('Invalid')) {
+      if (err.message && (err.message.includes('deactivated') || err.message.includes('disabled') || err.message.includes('Invalid'))) {
         throw err;
       }
       // If backend network error / unreachable, fallback to direct Supabase cloud authentication
@@ -236,6 +236,9 @@ export const authService = {
         return { user: empUser, accessToken: token };
       }
     } catch (e: any) {
+      if (e?.message?.includes('deactivated') || e?.message?.includes('disabled')) {
+        throw e;
+      }
       console.warn('Direct database verification notice:', e);
     }
 

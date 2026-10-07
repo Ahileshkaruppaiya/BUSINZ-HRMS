@@ -25,7 +25,7 @@ interface LoginPageProps {
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
-  const { switchRole, updateCurrentUser } = useHRMS();
+  const { switchRole, updateCurrentUser, employees } = useHRMS();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -87,8 +87,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
     const cleanIdentifier = identifier.trim().toLowerCase();
 
+    // Pre-check: If employee is deactivated in system state, block login immediately
+    const matchedLocalEmp = employees?.find(emp => 
+      emp.employeeId?.toLowerCase() === cleanIdentifier || 
+      emp.email?.toLowerCase() === cleanIdentifier || 
+      emp.id?.toLowerCase() === cleanIdentifier
+    );
+    if (matchedLocalEmp && (
+      matchedLocalEmp.accountStatus === 'DEACTIVATED' || 
+      matchedLocalEmp.accountStatus === 'DISABLED' || 
+      matchedLocalEmp.status === 'Inactive' || 
+      matchedLocalEmp.status === 'Terminated'
+    )) {
+      setIsLoading(false);
+      authService.clearSession();
+      setLoginError('Your account has been deactivated. Please contact HR or CEO for reactivation.');
+      return;
+    }
+
     try {
       const { user: userData } = await authService.login(cleanIdentifier, password);
+
+      if ((userData as any).accountStatus === 'DEACTIVATED' || (userData as any).accountStatus === 'DISABLED') {
+        setIsLoading(false);
+        authService.clearSession();
+        setLoginError('Your account has been deactivated. Please contact HR or CEO for reactivation.');
+        return;
+      }
 
       if (userData.mustChangePassword) {
         setIsLoading(false);

@@ -17,7 +17,7 @@ export type UserRole =
   | 'ERP Administrator'
   | string;
 
-export type AccountStatus = 'ACTIVE' | 'LOCKED' | 'DISABLED';
+export type AccountStatus = 'ACTIVE' | 'LOCKED' | 'DISABLED' | 'DEACTIVATED';
 export type CredentialEmailStatus = 'PENDING' | 'SENT' | 'FAILED';
 
 export type AuthAuditAction = 
@@ -27,6 +27,8 @@ export type AuthAuditAction =
   | 'TEMPORARY_LOGIN_RESET'
   | 'EMPLOYEE_LOGIN_DISABLED'
   | 'EMPLOYEE_LOGIN_ENABLED'
+  | 'EMPLOYEE_LOGIN_DEACTIVATED'
+  | 'EMPLOYEE_LOGIN_ACTIVATED'
   | 'PASSWORD_CHANGED'
   | 'LOGIN_SUCCESS'
   | 'LOGIN_FAILED'

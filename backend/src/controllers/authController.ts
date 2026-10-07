@@ -35,17 +35,17 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       return;
     }
 
-    // Check account active / disabled status
-    if (user.accountStatus === 'DISABLED' || !user.isActive) {
+    // Check account active / deactivated / disabled status
+    if (user.accountStatus === 'DEACTIVATED' || user.accountStatus === 'DISABLED' || !user.isActive) {
       await auditRepository.recordLog('LOGIN_FAILED', user.employeeId, user.email, {
-        reason: 'Account disabled',
+        reason: 'Account deactivated',
       });
 
       res.status(403).json({
         success: false,
         error: {
-          code: 'ACCOUNT_DISABLED',
-          message: 'Your login account is disabled. Please contact the HR Department.',
+          code: 'ACCOUNT_DEACTIVATED',
+          message: 'Your account has been deactivated. Please contact HR or CEO for reactivation.',
           details: [],
         },
       });
@@ -195,9 +195,9 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     const genericSuccessMessage = 'If this account exists, a verification code has been sent.';
 
     const user = await authRepository.findByIdentifier(identifier);
-    if (!user || user.accountStatus === 'DISABLED' || !user.isActive) {
+    if (!user || user.accountStatus === 'DEACTIVATED' || user.accountStatus === 'DISABLED' || !user.isActive) {
       await auditRepository.recordLog('FORGOT_PASSWORD_ATTEMPT', identifier, 'Anonymous', {
-        reason: 'User not found or disabled',
+        reason: 'User not found or deactivated',
         ip: req.ip,
       });
 

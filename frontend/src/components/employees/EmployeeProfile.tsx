@@ -199,7 +199,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   // System credentials management states
   const [showResetConfirmModal, setShowResetConfirmModal] = useState<boolean>(false);
   const [showStatusConfirmModal, setShowStatusConfirmModal] = useState<boolean>(false);
-  const [statusToSet, setStatusToSet] = useState<'ACTIVE' | 'DISABLED'>('DISABLED');
+  const [statusToSet, setStatusToSet] = useState<'ACTIVE' | 'DEACTIVATED' | 'DISABLED'>('DEACTIVATED');
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
   const [profilePhoneCountryCode, setProfilePhoneCountryCode] = useState('+91');
   const [profileEmergencyCountryCode, setProfileEmergencyCountryCode] = useState('+91');
@@ -208,13 +208,20 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  // Check if current user is CEO or authorized HR administrator
-  const isCEOorHR = Boolean(
+  // Permission strictly restricted to CEO and HR administrators only (no other roles allowed)
+  const canActivateOrDeactivate = Boolean(
     currentUser?.role === 'CEO' || 
     currentUser?.designation === 'CEO' ||
+    (currentUser?.designation && currentUser.designation.toLowerCase().includes('ceo')) ||
     currentUser?.role === 'Super Admin' || 
+    currentUser?.employeeId === 'EMP-000' ||
     currentUser?.role === 'HR Admin' || 
-    currentUser?.role === 'HR Manager' || 
+    currentUser?.role === 'HR Manager'
+  );
+
+  // Check if current user is CEO or authorized HR administrator
+  const isCEOorHR = Boolean(
+    canActivateOrDeactivate || 
     currentUser?.role === 'ERP Administrator' || 
     hasPermission('employees', 'edit')
   );
@@ -378,7 +385,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
       // 9. System Access & Security
       officialUsername: (emp as any).officialUsername || emp.employeeId || emp.id,
       role: (isEmpCEO ? 'CEO' : (emp.systemAccess?.role || emp.role || 'Employee')) as Role,
-      accountStatus: ((emp.accountStatus as any) || (emp.status === 'Terminated' ? 'DISABLED' : 'ACTIVE')) as 'ACTIVE' | 'DISABLED',
+      accountStatus: ((emp.accountStatus as any) || (emp.status === 'Terminated' || emp.status === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE')) as 'ACTIVE' | 'DEACTIVATED' | 'DISABLED',
       password: (emp as any).password || emp.password || 'Password@123',
       mustChangePassword: Boolean(emp.mustChangePassword ?? false),
       credentialEmailStatus: emp.credentialEmailStatus || 'SENT',
@@ -1172,21 +1179,28 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
     }
   };
 
-  // Toggle Login Account Status
+  // Toggle Login Account Status (Activate vs Deactivate)
   const handleConfirmStatusToggle = async () => {
     setIsProcessingAction(true);
     try {
-      const res = updateEmployeeLoginStatus(currentEmp.employeeId || currentEmp.id, statusToSet);
+      const isDeactivating = statusToSet === 'DEACTIVATED' || statusToSet === 'DISABLED';
+      const normStatus: 'ACTIVE' | 'DEACTIVATED' = isDeactivating ? 'DEACTIVATED' : 'ACTIVE';
+      const res = updateEmployeeLoginStatus(currentEmp.employeeId || currentEmp.id, normStatus);
       if (res && res.success) {
+        const nextStatus: Employee['status'] = isDeactivating ? 'Inactive' : 'Active';
         setFormData(prev => ({
           ...prev,
-          accountStatus: statusToSet
+          accountStatus: normStatus,
+          status: nextStatus
         }));
         setCurrentEmp(prev => ({
           ...prev,
-          accountStatus: statusToSet
+          accountStatus: normStatus,
+          status: nextStatus
         }));
-        setSaveNotice(`Employee portal login privileges successfully ${statusToSet === 'DISABLED' ? 'disabled' : 'enabled'}.`);
+        setSaveNotice(`Employee portal login access has been successfully ${isDeactivating ? 'deactivated' : 'activated'}.`);
+      } else if (res && !res.success) {
+        setSaveNotice(res.message || 'Failed to update account status.');
       }
     } catch (err) {
       console.error(err);
@@ -3348,28 +3362,31 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                 <KeyRound size={14} /> Reset & Dispatch Credentials
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusToSet(formData.accountStatus === 'ACTIVE' ? 'DISABLED' : 'ACTIVE');
-                  setShowStatusConfirmModal(true);
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  borderRadius: '9px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  backgroundColor: formData.accountStatus === 'ACTIVE' ? '#FEF2F2' : '#ECFDF5',
-                  color: formData.accountStatus === 'ACTIVE' ? '#DC2626' : '#059669',
-                  border: `1px solid ${formData.accountStatus === 'ACTIVE' ? '#FECACA' : '#A7F3D0'}`,
-                  cursor: 'pointer'
-                }}
-              >
-                <Power size={14} /> {formData.accountStatus === 'ACTIVE' ? 'Disable Account' : 'Enable Account'}
-              </button>
+              {canActivateOrDeactivate && (
+                <button
+                  type="button"
+                  id="btn-toggle-account-status"
+                  onClick={() => {
+                    setStatusToSet(formData.accountStatus === 'ACTIVE' ? 'DEACTIVATED' : 'ACTIVE');
+                    setShowStatusConfirmModal(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '9px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    backgroundColor: formData.accountStatus === 'ACTIVE' ? '#FEF2F2' : '#ECFDF5',
+                    color: formData.accountStatus === 'ACTIVE' ? '#DC2626' : '#059669',
+                    border: `1px solid ${formData.accountStatus === 'ACTIVE' ? '#FECACA' : '#A7F3D0'}`,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Power size={14} /> {formData.accountStatus === 'ACTIVE' ? 'Deactivate Account' : 'Activate Account'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -3411,7 +3428,7 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                 fontSize: '0.8rem',
                 fontWeight: 700
               }}>
-                {formData.accountStatus}
+                {formData.accountStatus === 'ACTIVE' ? 'ACTIVE' : 'DEACTIVATED'}
               </span>
             </div>
           </div>
@@ -4241,12 +4258,12 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
             border: '1px solid #E2E8F0'
           }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '1.05rem', fontWeight: 800, color: '#0F172A' }}>
-              {statusToSet === 'DISABLED' ? 'Disable Portal Login Access?' : 'Re-enable Portal Login Access?'}
+              {(statusToSet === 'DEACTIVATED' || statusToSet === 'DISABLED') ? 'Deactivate Portal Login Access?' : 'Activate Portal Login Access?'}
             </h4>
             <p style={{ margin: '0 0 20px 0', fontSize: '0.84rem', color: '#64748B', lineHeight: 1.5 }}>
-              {statusToSet === 'DISABLED'
-                ? `Are you sure you want to suspend portal login privileges for ${currentEmp.firstName} ${currentEmp.lastName}? They will be immediately locked out of mobile and web portals.`
-                : `Are you sure you want to restore portal login access for ${currentEmp.firstName} ${currentEmp.lastName}?`}
+              {(statusToSet === 'DEACTIVATED' || statusToSet === 'DISABLED')
+                ? `Are you sure you want to deactivate portal login privileges for ${currentEmp.firstName} ${currentEmp.lastName}? They will be immediately locked out of mobile and web portals.`
+                : `Are you sure you want to activate portal login access for ${currentEmp.firstName} ${currentEmp.lastName}?`}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
@@ -4275,13 +4292,13 @@ export const EmployeeProfile: React.FC<EmployeeProfileProps> = ({
                   borderRadius: '10px',
                   fontSize: '0.84rem',
                   fontWeight: 700,
-                  backgroundColor: statusToSet === 'DISABLED' ? '#DC2626' : '#059669',
+                  backgroundColor: (statusToSet === 'DEACTIVATED' || statusToSet === 'DISABLED') ? '#DC2626' : '#059669',
                   color: '#FFFFFF',
                   border: 'none',
                   cursor: 'pointer'
                 }}
               >
-                {isProcessingAction ? 'Processing...' : statusToSet === 'DISABLED' ? 'Disable Account' : 'Enable Account'}
+                {isProcessingAction ? 'Processing...' : (statusToSet === 'DEACTIVATED' || statusToSet === 'DISABLED') ? 'Deactivate Account' : 'Activate Account'}
               </button>
             </div>
           </div>

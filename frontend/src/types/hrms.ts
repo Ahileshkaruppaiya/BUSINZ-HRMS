@@ -91,7 +91,7 @@ export interface Employee {
   reportingManagerName: string;
   joiningDate: string;
   employmentType: string;
-  status: 'Active' | 'On Leave' | 'Terminated';
+  status: 'Active' | 'Inactive' | 'On Leave' | 'Terminated';
   avatar: string;
   basicSalary: number;
   allowances: {
@@ -135,7 +135,7 @@ export interface Employee {
   password?: string;
   authUserId?: string;
   mustChangePassword?: boolean;
-  accountStatus?: 'ACTIVE' | 'LOCKED' | 'DISABLED';
+  accountStatus?: 'ACTIVE' | 'LOCKED' | 'DISABLED' | 'DEACTIVATED';
   credentialEmailStatus?: 'PENDING' | 'SENT' | 'FAILED';
   credentialEmailSentAt?: string;
   lastLoginAt?: string;

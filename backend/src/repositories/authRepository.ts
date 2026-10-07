@@ -68,7 +68,7 @@ export class AuthRepository {
             else if (dLower.includes('finance') || dLower.includes('account')) userRole = 'Finance Manager';
           }
 
-          const accountStatus: AccountStatus = (data.account_status as AccountStatus) || (data.status === 'Active' ? 'ACTIVE' : 'DISABLED');
+          const accountStatus: AccountStatus = (data.account_status as AccountStatus) || (data.status === 'Active' ? 'ACTIVE' : 'DEACTIVATED');
           const rawDbPass = data.password || '';
           const passwordHash = rawDbPass.startsWith('$2') ? rawDbPass : (rawDbPass ? await bcrypt.hash(rawDbPass, 10) : '');
 
@@ -401,7 +401,7 @@ export class AuthRepository {
     user.accountStatus = status;
     user.isActive = status === 'ACTIVE';
 
-    const action = status === 'ACTIVE' ? 'EMPLOYEE_LOGIN_ENABLED' : 'EMPLOYEE_LOGIN_DISABLED';
+    const action = status === 'ACTIVE' ? 'EMPLOYEE_LOGIN_ACTIVATED' : 'EMPLOYEE_LOGIN_DEACTIVATED';
     await auditRepository.recordLog(action, user.employeeId, performedBy, {
       accountStatus: status,
       email: user.email,
@@ -414,7 +414,7 @@ export class AuthRepository {
           .from('employees')
           .update({
             account_status: status,
-            status: status === 'ACTIVE' ? 'Active' : 'Terminated',
+            status: status === 'ACTIVE' ? 'Active' : 'Inactive',
           })
           .ilike('employee_id', user.employeeId);
       } catch (err) {

@@ -198,6 +198,13 @@ export const supabaseDirect = {
 
       if (!isPasswordValid) return null;
 
+      // Deactivation check: Deactivated accounts are prohibited from logging in
+      const accStatus = (user.account_status || '').toUpperCase();
+      const empStatus = (user.status || '').toLowerCase();
+      if (accStatus === 'DEACTIVATED' || accStatus === 'DISABLED' || empStatus === 'inactive' || empStatus === 'terminated') {
+        throw new Error('Your account has been deactivated. Please contact HR or CEO for reactivation.');
+      }
+
       if (
         user.role_id === '42a8b0c3-22e5-40a0-bf78-2dd14475c6d6' ||
         user.designation === 'CEO' ||
@@ -208,7 +215,10 @@ export const supabaseDirect = {
       }
 
       return user;
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message?.includes('deactivated')) {
+        throw err;
+      }
       console.warn('[SupabaseDirect] verifyLogin notice:', err);
       return null;
     }

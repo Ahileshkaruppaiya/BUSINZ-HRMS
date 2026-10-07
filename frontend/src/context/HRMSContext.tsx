@@ -723,7 +723,7 @@ interface HRMSContextType {
   refreshSettings: () => Promise<void>;
   syncAllWithCloud: () => Promise<void>;
   resetEmployeeLogin: (employeeId: string) => { success: boolean; message: string; temporaryPassword?: string };
-  updateEmployeeLoginStatus: (employeeId: string, status: 'ACTIVE' | 'DISABLED') => { success: boolean; message: string };
+  updateEmployeeLoginStatus: (employeeId: string, status: 'ACTIVE' | 'DISABLED' | 'DEACTIVATED') => { success: boolean; message: string };
   changeEmployeePassword: (identifier: string, newPassword: string) => { success: boolean; message: string };
 
   attendanceRecords: AttendanceRecord[];
@@ -4960,28 +4960,61 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   };
 
-  const updateEmployeeLoginStatus = (employeeId: string, status: 'ACTIVE' | 'DISABLED'): { success: boolean; message: string } => {
+  const updateEmployeeLoginStatus = (employeeId: string, status: 'ACTIVE' | 'DISABLED' | 'DEACTIVATED'): { success: boolean; message: string } => {
+    // Permission check: STRICTLY CEO and HR only
+    const userRole = (currentUser.role || '').trim();
+    const userDesig = (currentUser.designation || '').trim().toLowerCase();
+    const userEmpId = (currentUser.employeeId || '').trim();
+
+    const isAuthorized = 
+      userRole === 'CEO' ||
+      userRole === 'Super Admin' ||
+      userDesig === 'ceo' ||
+      userDesig.includes('chief executive') ||
+      userDesig.includes('managing director') ||
+      userEmpId === 'EMP-000' ||
+      userRole === 'HR Manager' ||
+      userRole === 'HR Admin';
+
+    if (!isAuthorized) {
+      return {
+        success: false,
+        message: 'Access Denied: Only CEO and HR administrators are authorized to activate or deactivate employee accounts.'
+      };
+    }
+
+    const isActivating = status === 'ACTIVE';
+    const normStatus: 'ACTIVE' | 'DEACTIVATED' = isActivating ? 'ACTIVE' : 'DEACTIVATED';
+
     setEmployees(prev => prev.map(e => {
       if (e.id === employeeId || e.employeeId === employeeId) {
+        const nextStatus: Employee['status'] = isActivating 
+          ? (e.status === 'Inactive' || e.status === 'Terminated' ? 'Active' : e.status) 
+          : 'Inactive';
         return {
           ...e,
-          accountStatus: status,
-          status: status === 'DISABLED' ? 'Terminated' : (e.status === 'Terminated' ? 'Active' : e.status),
+          accountStatus: normStatus,
+          status: nextStatus,
         };
       }
       return e;
     }));
 
+    // Direct cloud sync to Supabase if connected
+    supabaseDirect.updateEmployee(employeeId, {
+      account_status: normStatus
+    }).catch(err => console.warn('[SupabaseDirect] updateEmployeeLoginStatus sync notice:', err));
+
     addNotification({
-      title: `Login ${status === 'ACTIVE' ? 'Enabled' : 'Disabled'}`,
-      message: `Employee login access has been ${status === 'ACTIVE' ? 'enabled' : 'disabled'} for ${employeeId}.`,
-      priority: status === 'DISABLED' ? 'Urgent' : 'Normal',
+      title: isActivating ? 'Account Activated' : 'Account Deactivated',
+      message: `Employee portal login access has been ${isActivating ? 'activated' : 'deactivated'} for ${employeeId}.`,
+      priority: isActivating ? 'Normal' : 'Urgent',
       category: 'Announcement'
     });
 
     return {
       success: true,
-      message: `Employee login has been ${status === 'ACTIVE' ? 'enabled' : 'disabled'}.`
+      message: `Employee portal login account has been successfully ${isActivating ? 'activated' : 'deactivated'}.`
     };
   };
 
