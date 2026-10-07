@@ -3201,7 +3201,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ]
     };
 
-    setLoanRecords(prev => [newRecord, ...prev]);
+    setLoanRecords(prev => {
+      const updated = [newRecord, ...prev];
+      supabaseDirect.saveCompanySetting('loan_records_data', updated).catch(() => {});
+      return updated;
+    });
     addNotification({
       title: 'New Advance / Loan Request',
       message: `${requestData.employeeName} submitted a request for ${formatCurrency(requestData.requestedAmount)}.`,
@@ -3226,7 +3230,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const approverName = `${currentUser.name} (${currentUser.role === 'Super Admin' ? 'CEO' : currentUser.role})`;
 
-    setLoanRecords(prev => prev.map(rec => {
+    setLoanRecords(prev => {
+      const updated = prev.map(rec => {
       if (rec.id !== id) return rec;
 
       if (options.action === 'Approve') {
@@ -3313,7 +3318,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
         return updatedRec;
       }
-    }));
+      });
+      supabaseDirect.saveCompanySetting('loan_records_data', updated).catch(() => {});
+      return updated;
+    });
   };
 
   const disburseLoan = (id: string, details: {
@@ -3325,7 +3333,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }) => {
     const officer = `${currentUser.name} (${currentUser.role})`;
 
-    setLoanRecords(prev => prev.map(rec => {
+    setLoanRecords(prev => {
+      const updated = prev.map(rec => {
       if (rec.id !== id) return rec;
 
       const amt = details.disbursedAmount || rec.approvedAmount || rec.requestedAmount;
@@ -3348,7 +3357,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       return {
         ...rec,
-        status: 'Active',
+        status: 'Active' as const,
         disbursedAmount: amt,
         outstandingBalance: amt,
         disbursementDetails: {
@@ -3373,7 +3382,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         ]
       };
-    }));
+      });
+      supabaseDirect.saveCompanySetting('loan_records_data', updated).catch(() => {});
+      return updated;
+    });
   };
 
   const recordManualRepayment = (id: string, repayment: {
@@ -3385,7 +3397,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }) => {
     const recorder = `${currentUser.name} (${currentUser.role})`;
 
-    setLoanRecords(prev => prev.map(rec => {
+    setLoanRecords(prev => {
+      const updated = prev.map(rec => {
       if (rec.id !== id) return rec;
 
       const newBalance = Math.max(0, toNum(rec.outstandingBalance) - repayment.amount);
@@ -3417,7 +3430,7 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return {
         ...rec,
         outstandingBalance: newBalance,
-        status: isClosed ? 'Closed' : rec.status,
+        status: isClosed ? 'Closed' as const : rec.status,
         manualRepayments: [...(rec.manualRepayments || []), manualEntry],
         repaymentSchedule: updatedSchedule,
         auditLogs: [
@@ -3434,7 +3447,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         ]
       };
-    }));
+      });
+      supabaseDirect.saveCompanySetting('loan_records_data', updated).catch(() => {});
+      return updated;
+    });
   };
 
   const updateCompanyInfo = (info: Partial<CompanyInfo>) => {
@@ -8339,23 +8355,37 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ));
         setLeaveRequests(prev => {
           const mergedCloudLeaves = [...savedOnlyLeaves, ...mappedLeaves];
-          const cloudIds = new Set(mergedCloudLeaves.map((l: LeaveRequest) => String(l.id)));
-          const cloudKeys = new Set(mergedCloudLeaves.map((l: LeaveRequest) => leaveKey(l)));
+          const reconciledCloudLeaves = mergedCloudLeaves.map((cloudLeave: LeaveRequest) => {
+            const localMatch = prev.find((localLeave: LeaveRequest) => (
+              String(localLeave.id) === String(cloudLeave.id) || leaveKey(localLeave) === leaveKey(cloudLeave)
+            ));
+            return mergeLeaveRecord(cloudLeave, localMatch);
+          });
+          const cloudIds = new Set(reconciledCloudLeaves.map((l: LeaveRequest) => String(l.id)));
+          const cloudKeys = new Set(reconciledCloudLeaves.map((l: LeaveRequest) => leaveKey(l)));
           const localOnlyLeaves = prev.filter((l: LeaveRequest) => (
             !cloudIds.has(String(l.id)) &&
             !cloudKeys.has(leaveKey(l))
           ));
-          const result = [...localOnlyLeaves, ...mergedCloudLeaves];
+          const result = [...localOnlyLeaves, ...reconciledCloudLeaves];
           try { localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(result)); } catch {}
+          supabaseDirect.saveCompanySetting('leave_requests_data', result).catch(() => {});
           return result;
         });
       } else if (savedLeaveRequests.length > 0) {
         setLeaveRequests(prev => {
-          const cloudIds = new Set(savedLeaveRequests.map((l: LeaveRequest) => String(l.id)));
-          const cloudKeys = new Set(savedLeaveRequests.map((l: LeaveRequest) => leaveKey(l)));
+          const reconciledSavedLeaves = savedLeaveRequests.map((savedLeave: LeaveRequest) => {
+            const localMatch = prev.find((localLeave: LeaveRequest) => (
+              String(localLeave.id) === String(savedLeave.id) || leaveKey(localLeave) === leaveKey(savedLeave)
+            ));
+            return mergeLeaveRecord(savedLeave, localMatch);
+          });
+          const cloudIds = new Set(reconciledSavedLeaves.map((l: LeaveRequest) => String(l.id)));
+          const cloudKeys = new Set(reconciledSavedLeaves.map((l: LeaveRequest) => leaveKey(l)));
           const localOnly = prev.filter(l => !cloudIds.has(String(l.id)) && !cloudKeys.has(leaveKey(l)));
-          const result = [...localOnly, ...savedLeaveRequests];
+          const result = [...localOnly, ...reconciledSavedLeaves];
           try { localStorage.setItem('vrm_hrms_leave_requests_persistent', JSON.stringify(result)); } catch {}
+          supabaseDirect.saveCompanySetting('leave_requests_data', result).catch(() => {});
           return result;
         });
       } else {
@@ -8713,7 +8743,36 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         // Loan Records
         if (Array.isArray(settings.loan_records_data)) {
-          setLoanRecords(settings.loan_records_data);
+          const loanStatusRank = (status?: LoanRecord['status']) => {
+            if (status === 'Closed') return 6;
+            if (status === 'Active' || status === 'Disbursed') return 5;
+            if (status === 'Approved' || status === 'Rejected') return 4;
+            if (status === 'Under Review') return 3;
+            if (status === 'Pending') return 2;
+            return 1;
+          };
+          setLoanRecords(prev => {
+            const byId = new Map<string, LoanRecord>();
+            settings.loan_records_data.forEach((record: LoanRecord) => {
+              if (record?.id) byId.set(String(record.id), record);
+            });
+            prev.forEach(local => {
+              if (!local?.id) return;
+              const cloud = byId.get(String(local.id));
+              if (!cloud || loanStatusRank(local.status) >= loanStatusRank(cloud.status)) {
+                byId.set(String(local.id), { ...cloud, ...local });
+              }
+            });
+            const merged = Array.from(byId.values());
+            const cloudNeedsRepair = merged.some(record => {
+              const cloud = settings.loan_records_data.find((r: LoanRecord) => String(r.id) === String(record.id));
+              return cloud && loanStatusRank(record.status) > loanStatusRank(cloud.status);
+            });
+            if (cloudNeedsRepair) {
+              supabaseDirect.saveCompanySetting('loan_records_data', merged).catch(() => {});
+            }
+            return merged;
+          });
         }
 
         // Geofence Config
