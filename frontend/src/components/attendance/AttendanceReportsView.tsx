@@ -714,8 +714,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
         { key: 'date', label: 'Date' },
         { key: 'shiftTime', label: 'Shift Time' },
         { key: 'checkIn', label: 'Actual Punch In' },
-        { key: 'delay', label: 'Delay Duration' },
-        { key: 'status', label: 'Policy Status' }
+        { key: 'delay', label: 'Delay Duration' }
       ];
       filteredAttendance.filter(r => {
         return isLateArrivalRecord(r);
@@ -733,8 +732,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
           date: formatDateDisplay(r.date),
           shiftTime: shift.startTime,
           checkIn: formatTimeDisplay(r.checkIn, '--:--'),
-          delay: diff > 0 ? (h > 0 ? `+${h}h ${m}m` : `+${m} mins`) : 'On Time',
-          status: diff > shift.gracePeriodMins ? `Grace Exceeded (+${diff - shift.gracePeriodMins}m)` : (diff > 0 ? 'Within Grace' : 'On Time')
+          delay: diff > 0 ? (h > 0 ? `+${h}h ${m}m` : `+${m} mins`) : 'On Time'
         });
       });
     } else if (selectedReportType === 'early') {
@@ -1466,7 +1464,6 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                   <th style={{ padding: '10px 14px', fontWeight: 700 }}>Shift Time</th>
                   <th style={{ padding: '10px 14px', fontWeight: 700 }}>Actual Punch In</th>
                   <th style={{ padding: '10px 14px', fontWeight: 700 }}>Delay Duration</th>
-                  <th style={{ padding: '10px 14px', fontWeight: 700 }}>Policy Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -1474,7 +1471,7 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                   return isLateArrivalRecord(r);
                 }).length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>
+                    <td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>
                       No latecomers recorded in this timeframe!
                     </td>
                   </tr>
@@ -1488,7 +1485,6 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                     const diff = Math.max(0, inM - startM);
                     const h = Math.floor(diff / 60);
                     const m = diff % 60;
-                    const isExceeded = diff > shift.gracePeriodMins;
                     return (
                       <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '10px 14px' }}>
@@ -1500,18 +1496,6 @@ export const AttendanceReportsView: React.FC<AttendanceReportsViewProps> = ({
                         <td style={{ padding: '10px 14px', color: '#d97706', fontWeight: 700 }}>{formatTimeDisplay(r.checkIn, '--:--')}</td>
                         <td style={{ padding: '10px 14px', color: '#b45309', fontWeight: 700 }}>
                           {diff > 0 ? (h > 0 ? `+${h}h ${m}m` : `+${m} mins`) : 'On Time'}
-                        </td>
-                        <td style={{ padding: '10px 14px' }}>
-                          <span style={{ 
-                            backgroundColor: isExceeded ? '#fef3c7' : '#ecfdf5', 
-                            color: isExceeded ? '#92400e' : '#047857', 
-                            padding: '3px 8px', 
-                            borderRadius: '6px', 
-                            fontSize: '0.75rem', 
-                            fontWeight: 700 
-                          }}>
-                            {isExceeded ? `Grace Exceeded (+${diff - shift.gracePeriodMins}m)` : (diff > 0 ? 'Within Grace' : 'On Time')}
-                          </span>
                         </td>
                       </tr>
                     );

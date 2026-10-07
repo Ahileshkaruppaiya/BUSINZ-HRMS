@@ -122,7 +122,18 @@ export const OfferLetterModal: React.FC<OfferLetterModalProps> = ({
     .map(([key, value]) => ({ label: formatComponentLabel(key), amount: toNum(value), code: key }))
     .filter(row => row.amount > 0);
   const savedMonthlyGross = savedBasicPay + savedAllowanceRows.reduce((sum, row) => sum + row.amount, 0);
-  const monthlyCtc = toNum(currentEmployee?.salaryDetails?.monthlyCtc, savedMonthlyGross);
+  const inferredMonthlyCtc = useMemo(() => {
+    const configuredBasic = activeEarnings.find(comp => comp.code.toUpperCase() === 'BASIC');
+    if (
+      configuredBasic?.calculationMethod === 'PERCENTAGE' &&
+      configuredBasic.defaultValue > 0 &&
+      savedBasicPay > 0
+    ) {
+      return Math.round((savedBasicPay * 100) / configuredBasic.defaultValue);
+    }
+    return savedMonthlyGross > 0 ? savedMonthlyGross : savedBasicPay;
+  }, [activeEarnings, savedBasicPay, savedMonthlyGross]);
+  const monthlyCtc = toNum(currentEmployee?.salaryDetails?.monthlyCtc) || inferredMonthlyCtc;
   const configuredBreakdown = useMemo(() => {
     return calculateSalaryBreakdown(monthlyCtc, activeEarnings);
   }, [monthlyCtc, activeEarnings]);

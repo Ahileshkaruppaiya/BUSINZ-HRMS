@@ -1305,6 +1305,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     },
     salaryDetails: {
       ...(d.salaryDetails || d.salary_details || {}),
+      monthlyCtc: d.salaryDetails?.monthlyCtc ?? d.salary_details?.monthlyCtc ?? d.salary_details?.monthly_ctc ?? d.monthlyCtc ?? d.monthly_ctc,
+      basicSalary: d.salaryDetails?.basicSalary ?? d.salary_details?.basicSalary ?? d.salary_details?.basic_salary ?? d.basicSalary ?? d.basic_salary,
+      hra: d.salaryDetails?.hra ?? d.salary_details?.hra ?? d.hra ?? d.allowances_hra,
+      da: d.salaryDetails?.da ?? d.salary_details?.da ?? d.da,
+      conveyance: d.salaryDetails?.conveyance ?? d.salary_details?.conveyance ?? d.conveyance,
       withPf: d.salaryDetails?.withPf ?? d.salary_details?.withPf ?? d.withPf,
       salaryScheme: d.salaryDetails?.salaryScheme ?? d.salary_details?.salaryScheme ?? d.salary_scheme
     },
