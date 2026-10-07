@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useHRMS } from '../../context/HRMSContext';
 import { 
   Briefcase, 
@@ -28,25 +28,20 @@ export const RecruitmentPipeline: React.FC = () => {
     reviewReferral, 
     addEmployee, 
     currentUser,
-    employees,
-    hasPermission 
+    employees
   } = useHRMS();
 
   // Strict Role Scoping: HR & CEO manage recruitment pipeline and post jobs
-  const isHrOrCeo = 
-    currentUser.role === 'Super Admin' || 
-    currentUser.role === 'Admin' || 
+  const isHrOrCeo =
+    currentUser.role === 'Super Admin' ||
     currentUser.role === 'CEO' || 
     currentUser.role === 'HR Admin' || 
     currentUser.role === 'HR Manager' || 
     currentUser.role === 'HR' || 
-    currentUser.role === 'Management' || 
-    currentUser.role === 'ERP Administrator' ||
     (currentUser.department && (currentUser.department.toLowerCase() === 'hr' || currentUser.department.toLowerCase() === 'human resources')) ||
     (currentUser.designation && currentUser.designation.toLowerCase().includes('hr')) ||
     currentUser.designation === 'CEO' ||
-    (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo')) ||
-    (typeof hasPermission === 'function' && (hasPermission('recruitment', 'create') || hasPermission('recruitment', 'view')));
+    (currentUser.designation && currentUser.designation.toLowerCase().includes('ceo'));
 
   const isEmployeeRole = (currentUser.role === 'Employee' || currentUser.role === 'Assignee') && !isHrOrCeo;
   const canReferCandidate = isEmployeeRole || isHrOrCeo;
@@ -57,6 +52,12 @@ export const RecruitmentPipeline: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pipeline' | 'jobs' | 'referral'>(() => {
     return isEmployeeRole ? 'referral' : 'pipeline';
   });
+
+  useEffect(() => {
+    if (isEmployeeRole && activeTab !== 'referral') {
+      setActiveTab('referral');
+    }
+  }, [activeTab, isEmployeeRole]);
   const [showAddJobModal, setShowAddJobModal] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
 
@@ -215,7 +216,19 @@ export const RecruitmentPipeline: React.FC = () => {
   const stages: Candidate['stage'][] = ['Applied', 'Screening', 'Interview', 'Selected', 'Hired', 'Rejected'];
 
   // Referral counts
-  const referralCandidates = candidates.filter(c => c.referrerName);
+  const normalizePerson = (value?: string) => (value || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
+  const currentEmployeeId = (currentUser.employeeId || '').trim().toLowerCase();
+  const currentUserName = normalizePerson(currentUser.name);
+  const isOwnReferral = (candidate: Candidate) => {
+    const referrerId = (candidate.referrerEmployeeId || '').trim().toLowerCase();
+    const referrerName = normalizePerson(candidate.referrerName);
+    return Boolean(
+      (currentEmployeeId && referrerId === currentEmployeeId) ||
+      (currentUserName && referrerName === currentUserName)
+    );
+  };
+  const visibleCandidates = isHrOrCeo ? candidates : candidates.filter(isOwnReferral);
+  const referralCandidates = visibleCandidates.filter(c => c.referrerName);
   const pendingReferralsCount = referralCandidates.filter(c => (c.referralStatus || 'Pending') === 'Pending').length;
   const acceptedReferralsCount = referralCandidates.filter(c => c.referralStatus === 'Accepted').length;
   const hiredReferralsCount = referralCandidates.filter(c => c.stage === 'Hired').length;
@@ -273,7 +286,7 @@ export const RecruitmentPipeline: React.FC = () => {
             className={`tab-btn ${activeTab === 'pipeline' ? 'active' : ''}`} 
             onClick={() => setActiveTab('pipeline')}
           >
-            Application Pipeline Board ({candidates.length})
+            Application Pipeline Board ({visibleCandidates.length})
           </button>
         )}
         <button 
@@ -295,19 +308,21 @@ export const RecruitmentPipeline: React.FC = () => {
             </span>
           )}
         </button>
-        <button 
-          className={`tab-btn ${activeTab === 'jobs' ? 'active' : ''}`} 
-          onClick={() => setActiveTab('jobs')}
-        >
-          Active Job Openings ({jobOpenings.length})
-        </button>
+        {!isEmployeeRole && (
+          <button 
+            className={`tab-btn ${activeTab === 'jobs' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('jobs')}
+          >
+            Active Job Openings ({jobOpenings.length})
+          </button>
+        )}
       </div>
 
       {/* TAB 1: KANBAN PIPELINE BOARD (HR & CEO) */}
       {activeTab === 'pipeline' && (
         <div className="kanban-grid" style={{ gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px' }}>
           {stages.map(stage => {
-            const stageCandidates = candidates.filter(c => c.stage === stage);
+            const stageCandidates = visibleCandidates.filter(c => c.stage === stage);
             return (
               <div key={stage} className="kanban-col" style={{ minHeight: '450px', padding: '10px' }}>
                 <div className="kanban-col-header" style={{ fontSize: '0.78rem' }}>

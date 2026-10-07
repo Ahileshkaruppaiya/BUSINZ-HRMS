@@ -6931,12 +6931,16 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateCandidateStage = (candidateId: string, newStage: Candidate['stage']) => {
-    setCandidates(prev => prev.map(c => {
+    setCandidates(prev => {
+      const updated = prev.map(c => {
       if (c.id === candidateId) {
         return { ...c, stage: newStage };
       }
       return c;
-    }));
+      });
+      supabaseDirect.saveCompanySetting('candidates_data', updated).catch(() => {});
+      return updated;
+    });
     if (candidateId.length === 36) {
       supabaseDirect.updateCandidateStage(candidateId, newStage);
     }
@@ -6951,7 +6955,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       referralStatus: 'Pending',
       appliedDate: new Date().toISOString().split('T')[0]
     };
-    setCandidates(prev => [newCand, ...prev]);
+    setCandidates(prev => {
+      const updated = [newCand, ...prev];
+      supabaseDirect.saveCompanySetting('candidates_data', updated).catch(() => {});
+      return updated;
+    });
     supabaseDirect.insertCandidate({
       name: cand.name,
       email: cand.email,
@@ -6963,7 +6971,11 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       notes: cand.notes,
     }).then(res => {
       if (res.data?.id) {
-        setCandidates(curr => curr.map(c => c.id === tempId ? { ...c, id: res.data.id } : c));
+        setCandidates(curr => {
+          const updated = curr.map(c => c.id === tempId ? { ...c, id: res.data.id } : c);
+          supabaseDirect.saveCompanySetting('candidates_data', updated).catch(() => {});
+          return updated;
+        });
       }
     });
 
@@ -6985,7 +6997,8 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ) => {
     let targetCand: Candidate | undefined;
     const finalStage = newStage || (status === 'Accepted' ? 'Interview' : 'Rejected');
-    setCandidates(prev => prev.map(c => {
+    setCandidates(prev => {
+      const updated = prev.map(c => {
       if (c.id === candidateId) {
         targetCand = c;
         return {
@@ -6998,7 +7011,10 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
       return c;
-    }));
+      });
+      supabaseDirect.saveCompanySetting('candidates_data', updated).catch(() => {});
+      return updated;
+    });
 
     if (candidateId.length === 36) {
       supabaseDirect.updateCandidateStage(candidateId, finalStage);
@@ -8429,21 +8445,47 @@ export const HRMSProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setJobOpenings([]);
       }
 
+      const savedCandidates = Array.isArray(settings.candidates_data) ? settings.candidates_data : [];
+      const candidateKey = (c: Candidate) => [
+        c.email || '',
+        c.phone || '',
+        c.name || '',
+        c.appliedDate || ''
+      ].join('|').toLowerCase();
+
       if (Array.isArray(rawCandidates) && rawCandidates.length > 0) {
-        setCandidates(rawCandidates.map((c: any) => ({
-          id: c.id,
-          jobId: c.job_id,
-          jobTitle: 'Applicant',
-          name: c.name,
-          email: c.email,
-          phone: c.phone || '',
-          stage: c.stage || 'Applied',
-          appliedDate: c.applied_date || c.created_at?.split('T')[0],
-          referrerName: c.referrer_name || '',
-          resumeUrl: c.resume_url || '',
-          rating: Number(c.rating) || 4.0,
-          notes: c.notes || ''
-        })));
+        const mappedCandidates: Candidate[] = rawCandidates.map((c: any) => {
+          const mapped: Candidate = {
+            id: c.id,
+            jobId: c.job_id,
+            jobTitle: 'Applicant',
+            name: c.name,
+            email: c.email,
+            phone: c.phone || '',
+            stage: c.stage || 'Applied',
+            appliedDate: c.applied_date || c.created_at?.split('T')[0],
+            referrerName: c.referrer_name || '',
+            resumeUrl: c.resume_url || '',
+            rating: Number(c.rating) || 4.0,
+            notes: c.notes || ''
+          };
+          const saved = savedCandidates.find((s: Candidate) => (
+            String(s.id) === String(mapped.id) || candidateKey(s) === candidateKey(mapped)
+          ));
+          return saved ? { ...mapped, ...saved, id: mapped.id || saved.id, stage: mapped.stage || saved.stage } : mapped;
+        });
+        const mappedIds = new Set(mappedCandidates.map(c => String(c.id)));
+        const mappedKeys = new Set(mappedCandidates.map(candidateKey));
+        const savedOnlyCandidates = savedCandidates.filter((c: Candidate) => (
+          c?.id &&
+          !mappedIds.has(String(c.id)) &&
+          !mappedKeys.has(candidateKey(c))
+        ));
+        const result = [...savedOnlyCandidates, ...mappedCandidates];
+        setCandidates(result);
+        supabaseDirect.saveCompanySetting('candidates_data', result).catch(() => {});
+      } else if (savedCandidates.length > 0) {
+        setCandidates(savedCandidates);
       } else {
         setCandidates([]);
       }
